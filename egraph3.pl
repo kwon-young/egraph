@@ -22,9 +22,17 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 Implementation predicates (internal)
-- merge_nodes/2: canonicalize to one Key-Id per Key; repeat to a fixpoint.
-- make_index/2: rbtree index Id -> [Keys] from a canonicalized ordset.
-- rebuild//1: apply equalities, schedule new nodes, then canonicalize.
+- lookup/2: read-only search in an ordset of Key-Id (preserves variable identity via (==)); O(N).
+- add/4: worker behind add//2; constructs Keys and appends nodes; no unification.
+- add_node/4, add_node/3: ensure Node has an Id; reuse if present; no unification.
+- merge_nodes//0, merge_nodes/2: canonicalize to one Key-Id per Key; repeat to a fixpoint.
+- merge_group/4: unify all Ids in a Key-group into the first; signals change to drive outer fixpoint.
+- make_index/2: build rbtree Id -> [Keys] from canonicalized ordset.
+- rules//3, rule//3: run DCG rules over a node with Index; pure producers (only emit items and A=B).
+- match/4: collect rule outputs over the worklist given an Index; no mutation.
+- push_back//1: append a list to the DCG output (scheduler).
+- rebuild//1: apply equalities (A=B), enqueue new nodes, then canonicalize.
+- unif/1: recognize and execute (=)/2 on class Ids (used only via exclude/3).
 
 Equality and identity
 - Key equality is determined after standard ordering and confirmed with (==), preserving variable identity.
