@@ -3,32 +3,33 @@
 /** <module> egraph
 Backtrackable e-graphs (equivalence graphs) with congruence closure for Prolog terms.
 
-Core ideas
-- Classes are represented by fresh logic variables (IDs). Union is (=)/2 on IDs; effects are logical and fully backtrackable.
-- The state is an ordset of Key-Id pairs in standard term order. Keys may contain variables; post-ordering identity uses (==), so variable identity matters.
-- Rules are DCGs that emit nodes (Key-Id) and equalities (A=B). Saturation applies rules to a fixpoint with canonicalization.
+What this is
+- Equivalence classes are represented by fresh logic variables (class IDs). Unifying two IDs merges classes; effects are logical, backtrackable, and may instantiate variables inside stored Keys.
+- The e-graph is an ordset of Key-Id pairs in standard term order. Membership uses ordering then (==), so variable identity matters; no variant-normalisation.
+- DCGs thread the e-graph as a difference list. The only “mutation” is ID unification.
 
 Representation
-- Nodes: ordset of Key-Id; canonicalization ensures at most one pair per distinct Key.
+- Nodes: ordset of Key-Id; at most one pair per distinct Key after canonicalization.
 - Index: rbtree Id -> [Keys], rebuilt after each canonicalization to reflect any ID aliasing.
 
 Execution model
-- DCGs thread the e-graph as a difference list (In/Out).
-- The only “mutation” is unifying class IDs; this may instantiate variables inside Keys. All effects are backtrackable and non-destructive.
+- add//2 constructs Keys by replacing subterms with their class IDs (congruence).
+- Rules (DCGs) emit new nodes and equalities (A=B). rebuild//1 applies equalities, enqueues nodes, then canonicalizes via merge_nodes/2.
+- All effects happen via ID unification and are fully backtrackable.
 
 Identity and variants
-- Membership uses standard term order; identity after ordering uses (==).
-- No variant-normalization: structurally equal Keys that differ only in variable identity are distinct.
+- Standard term order for the ordset; identity after ordering uses (==).
+- No variant-normalization: structurally equal Keys that differ only in variable identities remain distinct.
 
 Caveats
-- merge_nodes/2: sort by Key, group identical Keys, unify all Ids in a group into the first; repeat until a fixpoint. Unification can instantiate variables inside Keys; re-sorting may reveal new duplicates.
-- saturate//2: the fixpoint compares lengths before/after rebuild; pure aliasing with no net Key-Id change is invisible. Rules must eventually add/remove pairs to make progress.
-- IDs are logic variables (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys. No occurs-check is required: IDs unify only with IDs.
-- extract//0 validates invariants but may bind/alias IDs via member/2; use only on throwaway states or under backtracking (not on persisted graphs).
+- merge_nodes/2: sort by Key, group equal Keys, unify group IDs into the first; repeat until a fixpoint. Unification can bind variables inside Keys, which may reveal new duplicates after resorting.
+- saturate//2: the fixpoint compares lengths before/after rebuild; pure aliasing with no net Key-Id change is invisible. Rules must eventually add or remove pairs.
+- IDs are logic variables (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys. No occurs-check is needed because IDs unify only with IDs.
+- extract//0 validates invariants but may bind/alias IDs via member/2; use only for validation on throwaway states or under backtracking (not on persisted graphs).
 
 Notes on “mutable unique identifiers”
-- IDs are plain logic variables acting as mutable class representatives. Unifying two IDs aliases their classes and may instantiate variables in Keys; all effects are backtrackable.
-- The Id->Keys rbtree uses these variables as map keys; the index must be rebuilt after aliasing (this module does so each iteration).
+- IDs are plain logic variables acting as mutable class representatives. Unifying IDs aliases classes and may instantiate variables in Keys; all effects are backtrackable.
+- The Id->Keys index uses these variables as map keys; always rebuild after aliasing.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
