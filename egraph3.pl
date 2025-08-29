@@ -156,17 +156,19 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
    ).
 
 %! comm(+Node, +Index)// is nondet.
-%  Commutativity of (+): for (A+B)-AB emit B+A-BA and AB=BA.
-%  Models equality without destructive rewrites; both orders share the class.
+%  Commutativity of (+): from (A+B)-AB emit B+A-BA and AB=BA.
+%  Models equality without in-place rewrites; both orders share the class.
 %  Matches only +(A,B) nodes; emits at most one result per match.
-%  Determinism: nondet over the worklist; at most one emission per matching Node (prevents duplicate blow-up).
+%  Note: rules never unify class IDs; aliasing happens only in rebuild//1.
+%  Determinism: nondet over the worklist; at most one emission per matching node (prevents duplicate blow-up).
 comm((A+B)-AB, _Nodes) -->
    !,
    [B+A-BA, AB=BA].
 comm(_, _) --> [].
 %! assoc(+Node, +Index)// is nondet.
-%  Associativity of (+): for (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
-%  Candidate BCs are restricted to class(BC) via Index to avoid quadratic search over unrelated nodes.
+%  Associativity of (+): from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
+%  Restricts BC candidates to class(BC) via Index to avoid quadratic search over unrelated nodes.
+%  Note: rule only emits nodes/equalities; no ID unification here.
 assoc((A+BC)-ABC, Index) -->
    !,
    {rb_lookup(BC, Nodes, Index)},
@@ -184,9 +186,9 @@ assoc_([Node | Nodes], A, ABC) -->
    assoc_(Nodes, A, ABC).
 assoc_([], _, _) --> [].
 %! reduce(+Node, +Index)// is semidet.
-%  Neutral element of (+): if class(B) contains 0, emit A=AB.
+%  Neutral element of (+): if class(B) contains the integer 0, emit A=AB.
 %  Eliminates the unit; once/1 avoids duplicates.
-%  Note: tests for the integer 0 using (==); 0.0 does not qualify; only Keys already bound to 0 qualify.
+%  Note: uses (==) to match 0 exactly (not 0.0); only Keys already bound to 0 qualify. No ID unification here.
 reduce(A+B-AB, Index) -->
    {  rb_lookup(B, Nodes, Index),
       once((member(Node, Nodes), Node == 0))
@@ -197,6 +199,7 @@ reduce(_, _) --> [].
 %! constant_folding(+Node, +Index)// is nondet.
 %  Fold numeric additions (integers/floats) into a single constant.
 %  Shrinks the search space by canonicalizing ground arithmetic; preserves AB as the class Id via C=AB.
+%  Note: uses is/2 for evaluation; the rule only emits nodes/equalities and does not unify IDs.
 constant_folding((A+B)-AB, Index) -->
    !,
    { rb_lookup(A, ANodes, Index) },
@@ -229,17 +232,13 @@ constant_folding_b([VB | BNodes], VA, AB, Index) -->
 constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
-%  Apply all DCG rules to Node with access to Index.
-%  Rules is a list of DCG callables of the form Rule(Node, Index)//; backtracks over Rules.
-%  Notes:
-%    - Rules must be pure producers; unification/merging happens in rebuild//1.
-%    - IDs may be aliased only in rebuild//1; rules themselves must not unify IDs.
+%  Apply each DCG Rule(Node,Index)// to Node with access to Index; backtracks over Rules.
+%  Note: rules are pure producers (emit nodes and A=B); ID aliasing happens only in rebuild//1.
 %  Determinism: nondet over Rules; outputs are appended to the DCG stream.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
-%  Meta-call a single DCG rule on Node.
-%  Rule is a callable DCG of arity 3: Rule(Node, Index)//.
+%  Meta-call a single DCG rule Rule(Node,Index)// on Node.
 %  Determinism: follows the determinism of Rule/3.
 rule(Index, Node, Rule) -->
    call(Rule, Node, Index).
@@ -280,6 +279,7 @@ push_back(L), L --> [].
 %  Effects are logical and backtrackable (via ID aliasing).
 %  Notes:
 %    - Equalities are consumed; only Node-Id items flow forward.
+%    - This is the only step that unifies (aliases) class IDs; rules themselves must not unify IDs.
 %    - Alias-only steps are invisible to the length-based fixpoint in saturate//2 unless they add/remove pairs.
 %    - Unifying class IDs may instantiate variables inside Keys; merge_nodes//0 re-canonicalizes after aliasing.
 %  Determinism: det.
