@@ -132,14 +132,15 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG view of merge_nodes/2. In a DCG body, merge_nodes is translated to merge_nodes(+In,-Out).
-%  There is intentionally no merge_nodes//0 rule; calling it in a DCG canonicalizes the state.
+%  DCG view of merge_nodes/2. In a DCG body, writing merge_nodes is translated to merge_nodes(+In,-Out).
+%  There is intentionally no merge_nodes//0 clause; calling it in a DCG canonicalizes the state.
 %! merge_nodes(+In, -Out) is det.
 %  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat until a fixpoint.
-%  Complexity: O(N log N) per pass (sort + group); repeats until a fixpoint.
+%  Complexity: O(N log N) per pass (sort + group); may take multiple passes.
 %  Notes:
-%    - Unifying Ids can instantiate variables inside Keys; resorting can reveal new duplicates, hence multiple passes.
+%    - Unifying Ids can instantiate variables inside Keys; a subsequent sort can reveal new duplicates, hence multiple passes.
 %    - Leaves exactly one Key-Id pair per distinct Key at fixpoint.
+%    - Change detection uses a fold accumulator: the next pass runs only if at least one group had >1 Id.
 %  Determinism: det.
 %  Note:
 %    - The loop continues if any group had >1 Id or if resorting after unifications exposes new equal Keys.
@@ -342,6 +343,7 @@ extract(Nodes) :-
 %  DCG variant: validates minimal invariants after saturation.
 %  Invariant: for each Id, its class has at least one concrete Key.
 %  Note: uses member/2 in a way that can alias/bind Id variables; use only for validation on throwaway states or under backtracking, not on persisted graphs.
+%  Side-effects: may bind/alias Id variables; do not call on persisted graphs you intend to keep.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each ID-group has a concrete Key.
 %  Note: arguments are typically the same variable to avoid copying; do not rely on side effects.
