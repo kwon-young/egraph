@@ -27,10 +27,10 @@ Caveats
 - IDs are logic variables (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys. No occurs-check is needed because IDs unify only with IDs.
 - extract//0 validates invariants but may bind/alias IDs via member/2; use only for validation on throwaway states or under backtracking (not on persisted graphs).
 
-Notes on “mutable unique identifiers”
-- IDs are plain logic variables acting as mutable class representatives (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys; all effects are backtrackable.
+Notes on mutable unique identifiers (class IDs)
+- Class IDs are plain logic variables used as mutable representatives (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys; effects are logical and backtrackable.
 - The Id->Keys index uses these variables as map keys; always rebuild after aliasing.
-- Do not persist or print these IDs as stable identifiers; their identity and aliasing are purely runtime properties.
+- Never persist or print these IDs as stable identifiers; their identity and aliasing are runtime-only.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
@@ -45,12 +45,13 @@ See also
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only membership/lookup in an ordset of Key-Val pairs (standard term order).
+%  Read-only lookup in an ordset of Key-Val pairs (standard term order).
 %  - Pairs: strictly ordered ordset; Key must be nonvar.
 %  - Equality uses (==) after ordering; variable identity matters; never unifies.
 %  - Complexity: O(N) small-window linear scan (4/2/1 lookahead).
 %  - Errors: var Key triggers instantiation_error via compare/3.
 %  - Side-effects: none; does not bind Key or Pairs.
+%  - Failure: fails cleanly if Key is not present.
 %  Determinism: semidet.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -83,7 +84,7 @@ lookup(Item-V, [X1-V1]) :-
 %! add(+Term, -Id, +In, -Out) is det.
 %  Insert Term and return its class Id; reuse Id if Key already exists.
 %  - Compound: add subterms left-to-right; Key = F(ChildIDs) where ChildIDs are class IDs of subterms (congruence).
-%  - Atomic (incl. variables): Key = Term itself.
+%  - Atomic (including variables): Key = Term itself.
 %  Notes:
 %    - Id is a fresh logic variable used as the mutable class representative. Unifying Ids (via union or rules) may instantiate variables inside Keys; effects are logical and backtrackable.
 %    - No canonicalization here; duplicates may be introduced. Call merge_nodes//0 to collapse duplicates.
@@ -169,7 +170,7 @@ comm((A+B)-AB, _Nodes) -->
 comm(_, _) --> [].
 %! assoc(+Node, +Index)// is nondet.
 %  Associativity of (+): from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
-%  Restricts BC candidates to class(BC) via Index to avoid quadratic search over unrelated nodes.
+%  Restricts candidates to members of class(BC) via Index to avoid quadratic search over unrelated nodes.
 %  Note: AB and ABC_ are fresh class IDs; ABC=ABC_ is consumed by rebuild//1 to alias. The rule only emits nodes/equalities; no unification here.
 assoc((A+BC)-ABC, Index) -->
    !,
