@@ -3,29 +3,35 @@
 /** <module> egraph
 E-graphs with congruence closure for Prolog terms.
 
-- Representation: ordset of Key-Id pairs (standard order). Keys are atoms/vars or F(ChildIds). Variable identity is part of the Key (no alpha-normalization).
-- Class Ids: fresh logic variables used as mutable, backtrackable class identifiers; the only mutation is unifying Ids with (=)/2.
-- Canonicalization: merge_nodes/2 collapses duplicates so there is at most one Key-Id per Key; an Id→Keys index is rebuilt from the canonical set.
+Core model
+- Nodes: ordset of Key-Id pairs (standard order). A Key is an atom/var or a term F(ChildIds). Variable identity is part of the Key (no alpha/variant normalization).
+- Class Ids: fresh logic variables act as mutable, backtrackable class identifiers. The only mutation is aliasing classes by unifying Id variables with (=)/2.
+- Canonicalization: merge_nodes/2 collapses duplicates so there is at most one Key-Id per Key; after each canonicalization, an Id→Keys index is rebuilt.
 
 Execution
-- DCGs thread the graph as a difference list. Rules only emit Key-Id items and equalities A=B; they never perform unification themselves.
-- rebuild//1 applies equalities (unifies Ids), schedules new items, and then calls merge_nodes/2.
-- Unifying Ids may instantiate variables inside Keys; merge_nodes/2 repeats until no new merges arise.
+- DCGs thread the node set as a difference list. Rules only emit Key-Id items and equalities A=B; they never unify themselves.
+- rebuild//1 consumes equalities (unifies Ids), appends new items to the worklist, and calls merge_nodes/2.
+- Unifying Ids may instantiate variables inside Keys; merge_nodes/2 iterates until no further merges appear.
 
 Caveats
-- Fixpoint in saturate//2 is length-based; alias-only steps are invisible.
-- Never serialize Ids or depend on their printed names.
+- Fixpoint in saturate//2 is length-based; alias-only steps (A=B with no new pairs) are invisible to the stop condition.
+- Never serialize or compare Ids by print-name; treat them as opaque logic variables.
 - extract//0 uses member/2 and can alias Ids; prefer extract/1 in user code.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
-Related helpers
-- merge_nodes/2, make_index/2, rebuild//1.
+Implementation predicates (internal)
+- merge_nodes/2: canonicalize to one Key-Id per Key; repeat to a fixpoint.
+- make_index/2: rbtree index Id -> [Keys] from a canonicalized ordset.
+- rebuild//1: apply equalities, schedule new nodes, then canonicalize.
+
+Equality and identity
+- Key equality is determined after standard ordering and confirmed with (==), preserving variable identity.
+- All effects are logical and backtrackable. Only Id variables unify; no occurs-check is needed because Ids are fresh, acyclic logic variables.
 
 Notes
-- Key equality is tested with (==) after ordering; variable identity matters.
-- All effects are logical and backtrackable; only Ids unify (no occurs-check needed because Ids are fresh logic variables).
+- Using logic variables as class Ids is intentional: unification is the only mutating operation and is backtrackable. This can instantiate variables embedded inside Keys; always follow Id aliasing with merge_nodes/2.
 */
 
 
