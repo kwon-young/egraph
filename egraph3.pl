@@ -42,9 +42,10 @@ See also
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  Read-only membership/lookup in an ordset of Key-Val pairs (standard term order).
 %  - Pairs must be a strictly ordered ordset; Key must be nonvar.
-%  - Identity uses (==) after standard ordering; variable identity matters; no unification.
+%  - Equality uses (==) after standard ordering; variable identity matters; no unification is performed.
 %  - Complexity: O(N) small-window linear scan (4/2/1 lookahead).
-%  - Errors: if Key is var, compare/3 raises instantiation_error; lookup/2 never binds Key.
+%  - Errors: if Key is var, compare/3 raises instantiation_error.
+%  - Side-effects: none; never binds Key or Pairs.
 %  Determinism: semidet.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -74,13 +75,14 @@ lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
 
 %! add(+Term, -Id)// is det.
+%! add(+Term, -Id, +In, -Out) is det.
 %  Insert Term and return its class Id; reuse Id if Key already exists.
 %  - Compound: add subterms left-to-right; Key = F(ChildIDs) where ChildIDs are class IDs of subterms (congruence).
-%  - Atomic (incl. variables): Key = Term.
+%  - Atomic (incl. variables): Key = Term itself.
 %  Notes:
-%    - Id is a fresh Prolog variable used as a mutable class representative. Union/rules may alias Ids by unification, which can also instantiate variables inside Keys; all effects are backtrackable.
-%    - No canonicalization here; duplicates may be introduced. Use merge_nodes//0 to collapse duplicates.
-%    - DCG state threads an ordset of Key-Id pairs (standard term order).
+%    - Id is a fresh Prolog variable used as the mutable class representative. Unifying Ids (via union or rules) may instantiate variables inside Keys; all effects are logical and backtrackable.
+%    - No canonicalization here; duplicates may be introduced. Call merge_nodes//0 to collapse duplicates.
+%    - In/Out (or the DCG state) is an ordset of Key-Id pairs in standard term order. Identity after ordering uses (==); variable identity matters.
 %  Determinism: det.
 add(Term, Id, In, Out) :-
    (  compound(Term)
@@ -107,12 +109,12 @@ add_node(Node, Id, In, Out) :-
    ).
 
 %! union(+IdA, +IdB)// is det.
-%  Alias classes by unifying IdA with IdB, then canonicalize.
-%  Rationale: logic-variable unification provides a cheap, fully backtrackable union.
+%! union(+IdA, +IdB, +In, -Out) is det.
+%  Alias classes by unifying IdA with IdB, then canonicalize with merge_nodes//0.
+%  Rationale: logic-variable unification yields a cheap, fully backtrackable union.
 %  Notes:
 %    - IdA/IdB must be class IDs obtained from add//2 or add_node/4.
-%    - Unification may bind variables inside Keys; rules rely on this.
-%    - Immediately calls merge_nodes//0 to collapse duplicates introduced by aliasing.
+%    - Unifying IDs may bind variables occurring inside Keys; many rules rely on this.
 %    - Uses (=)/2 without occurs-check; safe because class IDs are fresh variables and never unified with compound terms.
 %  Determinism: det.
 union(A, B, In, Out) :-
@@ -207,8 +209,8 @@ constant_folding_a([VA | ANodes], B, AB, Index) -->
    constant_folding_a(ANodes, B, AB, Index).
 constant_folding_a([], _, _, _) --> [].
 %! constant_folding_b(+ClassB, +VA, -AB, +Index)// is nondet.
-%  Helper: for numeric VB in class(B) compute VC is VA+VB, then emit VC-C and C=AB.
-%  Builds the folded constant lazily while keeping AB as the class Id.
+%  Helper: for numeric VB in class(B) compute VC is VA+VB; emit VC-C and C=AB.
+%  Introduces C as the class Id for VC while preserving AB as the class Id for the sum via C=AB.
 %  Note: arithmetic uses is/2; evaluation follows Prolog's numeric tower and type promotion rules.
 %  Determinism: nondet over numeric members of class(B).
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
@@ -222,10 +224,10 @@ constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply all DCG rules to Node with access to Index.
-%  Rules is a list of DCG callables Rule(Node, Index)//; backtracks over Rules.
+%  Rules is a list of DCG callables of the form Rule(Node, Index)//; backtracks over Rules.
 %  Notes:
-%    - Rules should be pure producers; unification/merging happens in rebuild//1.
-%  Determinism: nondet over Rules; output items are appended to the DCG stream.
+%    - Rules must be pure producers; unification/merging happens in rebuild//1.
+%  Determinism: nondet over Rules; outputs are appended to the DCG stream.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
@@ -260,7 +262,7 @@ match(Rules, Worklist, Index, Matches) :-
 %! push_back(+List)// is det.
 %  DCG helper: append List at the end of the current output.
 %  Schedules newly discovered items after the current worklist (O(1) via difference lists).
-%  Note: purely structural; no deduplication is performed.
+%  Note: purely structural; no deduplication and no unification side effects.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
 %  Apply equalities (A=B) by unification, enqueue new nodes, then canonicalize.
@@ -268,11 +270,11 @@ push_back(L), L --> [].
 %    - exclude(unif, Matches, NewNodes): unify and drop (=)/2 items.
 %    - push_back(NewNodes): append Key-Id items to the DCG output.
 %    - merge_nodes//0: canonicalize.
-%  Effects are logical and backtrackable (via variable aliasing).
+%  Effects are logical and backtrackable (via ID aliasing).
 %  Notes:
-%    - Equalities are consumed (not re-enqueued); only Node-Id items flow forward.
+%    - Equalities are consumed; only Node-Id items flow forward.
 %    - Alias-only steps are invisible to the length-based fixpoint in saturate//2 unless they add/remove pairs.
-%    - Unifying class IDs may instantiate variables appearing inside Keys; merge_nodes//0 re-canonicalizes after such aliasing.
+%    - Unifying class IDs may instantiate variables inside Keys; merge_nodes//0 re-canonicalizes after such aliasing.
 %  Determinism: det.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
@@ -286,8 +288,8 @@ saturate(Rules) -->
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Saturate for at most MaxSteps iterations (non-negative integer or inf).
 %  Fixpoint compares lengths before/after rebuild/1 (after merge_nodes/2).
-%  Caveat: alias-only steps do not change the length; rules must eventually add/remove pairs.
-%  Determinism: det driver; nondeterminism comes only from rules.
+%  Caveat: alias-only steps do not change the length; rules must eventually add/remove pairs to make progress.
+%  Determinism: det as a driver; nondeterminism comes only from rules.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Underlying 4-ary predicate for saturate//2.
 %  Threads the e-graph difference list explicitly (In/Out).
