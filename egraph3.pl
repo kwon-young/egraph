@@ -81,13 +81,14 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id; reuse Id if Key already exists.
+%  Insert Term and return its class Id; reuse the existing Id if Key already exists.
 %  - Compound: add subterms left-to-right; Key = F(ChildIDs) where ChildIDs are class IDs of subterms (congruence).
-%  - Atomic or var: Key = Term itself. Variable identity becomes part of the Key; no variant-normalization.
+%  - Atomic or var: Key = Term itself. Variable identity is part of the Key; no α/variant‑normalization.
 %  Notes:
-%    - Id is a fresh logic variable used as the mutable class representative. Unifying Ids (via union or rules) may instantiate variables inside Keys; effects are logical and backtrackable.
-%    - No canonicalization here; duplicates may be introduced. Call merge_nodes//0 to collapse duplicates.
-%    - In/Out (or the DCG state) is an ordset of Key-Id pairs in standard term order. Identity after ordering uses (==); variable identity matters.
+%    - Id is a fresh Prolog variable used as the mutable, backtrackable class identifier. Unifying Ids (via union or rules) can instantiate variables inside Keys; effects are logical and backtrackable.
+%    - No canonicalization here; duplicates may be introduced. Call merge_nodes (DCG) to collapse duplicates.
+%    - In/Out (the DCG state) is an ordset of Key-Id pairs in standard term order. Equality after ordering uses (==); variable identity matters.
+%  Side-effects: none (apart from growing the DCG output); Id creation is by allocating a fresh variable.
 %  Determinism: det.
 %  Note:
 %    - Keys are kept exactly as constructed; do not assume α-equivalence collapses variants.
@@ -102,10 +103,11 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node has a class Id; reuse existing Id if present, otherwise insert Node-Id.
+%  Ensure Node has a class Id; reuse the existing Id if present, otherwise insert Node-Id.
 %  Notes:
 %    - In/Out are ordsets of Key-Id (standard order). Identity after ordering uses (==); no variant-normalization (variable identity matters).
 %    - Unifying Ids elsewhere may bind variables inside Keys. Always re-canonicalize with merge_nodes/2 (or //0) after aliasing.
+%  Side-effects: none (except possibly allocating a fresh Id variable when Node is new).
 %  Determinism: det.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -117,12 +119,13 @@ add_node(Node, Id, In, Out) :-
 
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
-%  Alias classes by unifying IdA with IdB, then canonicalize with merge_nodes//0.
-%  Rationale: logic-variable unification yields a cheap, fully backtrackable union.
+%  Alias classes by unifying IdA with IdB, then canonicalize with merge_nodes (DCG).
+%  Rationale: Prolog variable unification yields a cheap, fully backtrackable union of classes.
 %  Notes:
 %    - IdA/IdB must be class IDs obtained from add//2 or add_node/4.
 %    - Unifying IDs may instantiate variables occurring inside Keys; many rules rely on this.
 %    - Uses (=)/2 without occurs-check. Safe here: class IDs are only ever unified with class IDs (never with compound terms).
+%  Side-effects: aliases the two Id variables (logical, backtrackable); no other mutation.
 %  Determinism: det.
 union(A, B, In, Out) :-
    A = B,
