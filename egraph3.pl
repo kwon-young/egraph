@@ -1,7 +1,7 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for congruence closure over Prolog terms.
+E-graphs (equivalence graphs) for congruence closure over Prolog terms.
 
 Overview
 - Classes: each equivalence class is represented by a fresh logic variable (its class Id). Union is plain unification (A=B). All effects are logical and fully backtrackable.
@@ -260,7 +260,7 @@ make_index(In, Index) :-
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
 %  Run Rules over Worklist to produce new matches (nodes and equalities).
 %  Central collection phase before rebuilding the graph. Worklist is the current node set (ordset of Key-Id pairs).
-%  Determinism: det given Rules/Worklist/Index; output is a (possibly empty) list.
+%  Determinism: det given Rules/Worklist/Index; produces a (possibly empty) list; no mutation.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
 %! push_back(+List)// is det.
@@ -361,12 +361,12 @@ example1(G) :-
 
 
 %! add_expr(+N, -Expr) is det.
-%  Build right-associated sum 1+2+...+N (as a +(A,B) term chain).
+%  Build right-associated sum 1+2+...+N (as a +(A,B) term chain). N >= 1.
 add_expr(N, Add) :-
    numlist(1, N, L), L = [H|T], foldl([B, A, A+B]>>true, T, H, Add).
 
 %! example2(+N, -Expr) is det.
-%  Build an addition chain and saturate with comm/assoc; prints counts.
+%  Build an addition chain and saturate with comm/assoc; prints counts to current output.
 %  Sanity-check size growth vs. the closed form.
 example2(N, Expr) :-
    add_expr(N, Expr),
@@ -377,7 +377,7 @@ example2(N, Expr) :-
    print_term(N1-Num, []), nl.
 
 %! example3(+N, +Expr, -R) is nondet.
-%  Enumerate possible results R after saturating with all rules, then validate via extract//0.
+%  Enumerate possible results R after saturating with all rules, then validate via extract//0. Uses distinct/1 (SWI‑Prolog) to remove duplicates.
 %  Determinism: nondet over alternative extractions R.
 example3(N, Expr, R) :-
    distinct(R, phrase((
