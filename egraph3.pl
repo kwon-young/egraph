@@ -3,20 +3,19 @@
 /** <module> egraph
 E-graphs with congruence closure over Prolog terms.
 
-Core ideas
-- Class Ids are fresh logic variables used as mutable, backtrackable identifiers; aliasing is only via (=)/2.
-- State is an ordset of Key-Id pairs (standard order). Keys are atoms/vars or F(ChildIds); variable identity is part of the Key (no α-normalization).
-- Canonical form: after merge_nodes/2 there is at most one Key-Id per Key; the Id→Keys index is rebuilt from the canonical set.
+- Representation: an ordset of Key-Id pairs (standard order). Keys are atoms/vars or F(ChildIds). Variable identity is part of the Key (no α-normalization).
+- Class Ids: fresh logic variables used as mutable, backtrackable class identifiers. The only mutation is unification of Ids via (=)/2.
+- Canonicalization: merge_nodes/2 ensures at most one Key-Id per Key; an Id→Keys index is rebuilt from the canonical set.
 
-Execution model
-- DCGs thread the state as a difference list. Rules emit only Key-Id items and equalities (A=B); they never unify themselves.
-- rebuild//1 applies equalities (unifies Ids), schedules items, then calls merge_nodes/2.
-- Unifying Ids can instantiate variables inside Keys; merge_nodes/2 repeats until no new merges appear.
+Execution
+- DCGs thread the graph as a difference list. Rules produce only Key-Id items and equalities A=B; they never unify.
+- rebuild//1 applies equalities (unifies Ids), schedules new items, and calls merge_nodes/2.
+- Unifying Ids may instantiate variables in Keys; merge_nodes/2 repeats until no new merges occur.
 
 Caveats
-- Fixpoint in saturate//2 is length-based; alias-only steps do not count as progress.
-- Ids are logic variables; do not serialize them or rely on print names.
-- extract//0 validates using member/2 and can alias class Ids; prefer extract/1 in user code.
+- Fixpoint in saturate//2 is length-based; alias-only steps are invisible.
+- Never serialize Ids or rely on their print names.
+- extract//0 uses member/2 and can alias Ids; prefer extract/1 for user code.
 
 API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
@@ -25,8 +24,8 @@ Related
 - merge_nodes/2, make_index/2, rebuild//1.
 
 Notes
-- Key equality checks use (==) after ordering; variable identity matters.
-- The only mutation is unification of Id variables; effects are logical and fully backtrackable.
+- Key equality uses (==) after ordering; variable identity matters.
+- All effects are logical and fully backtrackable; only Ids unify.
 */
 
 
@@ -36,12 +35,11 @@ Notes
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  Read-only lookup in an ordset of Key-Val pairs (standard order).
-%  - Requires: Pairs is a strictly ordered ordset; Key is nonvar.
-%  - Compares by standard order; confirms equality with (==) to preserve variable identity in Keys.
-%  - Complexity: O(N) scan using a small unrolled window; creates no bindings; fails if absent.
-%  Notes:
-%    - Pure: never binds Keys or Ids; does not change Pairs.
-%    - This is intentionally O(N); we trade simplicity and locality for asymptotics.
+%  - Requires: Pairs is a strictly ordered ordset; Key nonvar.
+%  - Equality: search by standard order, then confirm with (==) to preserve variable identity in Keys.
+%  - Complexity: O(N) scan (small unrolled window). Pure; creates no bindings; fails if absent.
+%  Note:
+%    - Intentional O(N): prefers simplicity/locality over asymptotics.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
