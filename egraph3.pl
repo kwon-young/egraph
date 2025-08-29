@@ -3,40 +3,43 @@
 /** <module> egraph
 Backtrackable e-graphs (equivalence graphs) with congruence closure for Prolog terms.
 
-Overview
-- Equivalence classes are represented by fresh logic variables (class IDs). Unifying two IDs merges classes; effects are logical and backtrackable. This unification may instantiate variables occurring inside stored Keys.
-- The e-graph state is an ordset of Key-Id pairs in standard term order. After ordering, equality uses (==), so variable identity matters; no variant-normalisation.
-- A DCG threads the e-graph as a difference list. The only “mutation” is ID unification.
+What it is
+- An e-graph of Key-Id pairs (ordset, standard order), where Id are fresh logic variables (class IDs).
+- Unifying IDs merges classes; all effects are logical and fully backtrackable.
+- A DCG threads the graph as a difference list; the only “mutation” is ID unification.
 
 Representation
-- Nodes: ordset of Key-Id; after canonicalization there is at most one pair per distinct Key.
-- Index: rbtree Id -> [Keys]; rebuilt after each canonicalization to reflect any ID aliasing.
+- Nodes: ordset of Key-Id; after canonicalization there is at most one pair per distinct Key (by (==) after sorting).
+- Index: rbtree Id -> [Keys], rebuilt after canonicalization to reflect any ID aliasing.
 
-Execution
-- add//2 constructs Keys by replacing subterms with their class IDs (congruence).
-- Rules (DCGs) only emit new nodes and equalities (A=B). rebuild//1 first applies equalities (by unifying IDs), then enqueues nodes, and finally canonicalizes via merge_nodes/2.
-- All observable effects come from unifying class IDs; everything is backtrackable.
+Execution model
+- add//2 builds Keys by replacing subterms with their class IDs (congruence).
+- Rules (DCGs) only produce items: new nodes and equalities A=B. They do not unify.
+- rebuild//1 applies equalities (unifies IDs), enqueues new nodes, then canonicalizes via merge_nodes/2.
 
 Identity and variants
-- Ordset ordering is by standard term order; identity after ordering uses (==).
-- No variant-normalization: structurally equal Keys that differ only in variable identities are distinct.
+- Ordering uses standard term order; identity uses (==) after ordering, so variable identity matters.
+- No variant-normalization: structurally equal Keys with different variable identities are distinct.
 
 Caveats
-- merge_nodes/2: sort by Key, group equal Keys, unify all group IDs into the first; repeat until a fixpoint. Unification can bind variables inside Keys, which can reveal new duplicates after resorting.
-- saturate//2: the fixpoint compares lengths before/after rebuild; alias-only progress (no net Key-Id change) is invisible. Rules must eventually add or remove pairs.
-- IDs are logic variables (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys. No occurs-check is needed because IDs unify only with IDs (never with compound terms).
+- merge_nodes/2: sorts by Key, groups equal Keys, unifies all group IDs into the first; repeats until a fixpoint. Unification can instantiate variables in Keys, revealing new duplicates after resorting.
+- saturate//2 fixpoint: compares lengths before/after rebuild. Pure aliasing (no net Key-Id change) is invisible; rules must eventually add or remove pairs.
+- IDs are logic variables, not atoms. Unifying IDs may instantiate variables in Keys. Occurs-check is unnecessary here: IDs unify only with IDs (never with compound terms).
 - extract//0 validates invariants but may bind/alias IDs via member/2; use only on throwaway states or under backtracking, never on persisted graphs.
 
-Class IDs: mutable logic variables (notes)
-- Class IDs are plain logic variables used as mutable representatives. Unifying IDs aliases classes and may instantiate variables in Keys; effects are logical and backtrackable.
+Class IDs (mutable logic variables)
+- Class IDs are plain logic variables used as mutable representatives. Unifying IDs aliases classes; effects are logical and backtrackable.
 - The Id->Keys index uses these variables as map keys; always rebuild after aliasing.
-- Do not persist or print these IDs as stable identifiers; their identity and aliasing are runtime-only. If you need stable names, maintain your own mapping outside the e-graph.
+- Do not persist or print IDs as stable names; identity and aliasing are runtime-only. Maintain your own mapping if you need stable identifiers.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 See also
 - merge_nodes//0, make_index/2, rebuild//1.
+
+Notes
+- The implementation relies on using Prolog variables as unique, mutable class identifiers. This is intentional and safe within the constraints above but unusual if you expect atom-based IDs.
 */
 
 
@@ -84,12 +87,14 @@ lookup(Item-V, [X1-V1]) :-
 %! add(+Term, -Id, +In, -Out) is det.
 %  Insert Term and return its class Id; reuse Id if Key already exists.
 %  - Compound: add subterms left-to-right; Key = F(ChildIDs) where ChildIDs are class IDs of subterms (congruence).
-%  - Atomic (including variables): Key = Term itself.
+%  - Atomic or var: Key = Term itself. Variable identity becomes part of the Key; no variant-normalization.
 %  Notes:
 %    - Id is a fresh logic variable used as the mutable class representative. Unifying Ids (via union or rules) may instantiate variables inside Keys; effects are logical and backtrackable.
 %    - No canonicalization here; duplicates may be introduced. Call merge_nodes//0 to collapse duplicates.
 %    - In/Out (or the DCG state) is an ordset of Key-Id pairs in standard term order. Identity after ordering uses (==); variable identity matters.
 %  Determinism: det.
+%  Note:
+%    - Keys are kept exactly as constructed; do not assume α-equivalence collapses variants.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -121,7 +126,7 @@ add_node(Node, Id, In, Out) :-
 %  Notes:
 %    - IdA/IdB must be class IDs obtained from add//2 or add_node/4.
 %    - Unifying IDs may instantiate variables occurring inside Keys; many rules rely on this.
-%    - Uses (=)/2 without occurs-check; safe because class IDs are fresh variables and never unified with compound terms.
+%    - Uses (=)/2 without occurs-check. Safe here: class IDs are only ever unified with class IDs (never with compound terms).
 %  Determinism: det.
 union(A, B, In, Out) :-
    A = B,
@@ -132,12 +137,14 @@ union(A, B, In, Out) :-
 %  Implementation: used as a non-terminal in DCG bodies; SWI‑Prolog expands it to a call to merge_nodes/2 with the hidden state arguments.
 %  Note: no separate --> clause is defined.
 %! merge_nodes(+In, -Out) is det.
-%  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat while any group changed.
+%  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat until a fixpoint.
 %  Complexity: O(N log N) per pass (sort + group); repeats until a fixpoint.
 %  Notes:
 %    - Unifying Ids can instantiate variables inside Keys; resorting can reveal new duplicates, hence multiple passes.
 %    - Leaves exactly one Key-Id pair per distinct Key at fixpoint.
 %  Determinism: det.
+%  Note:
+%    - The loop continues if any group had >1 Id or if resorting after unifications exposes new equal Keys.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
