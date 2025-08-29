@@ -40,10 +40,10 @@ See also
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only lookup in an ordset of Key-Val pairs (standard term order).
+%  Read-only membership/lookup in an ordset of Key-Val pairs (standard term order).
 %  - Pairs must be a strictly ordered ordset; Key must be nonvar.
-%  - Identity is tested with (==) after standard ordering (variable identity matters).
-%  - Time: O(N) small-window linear scan (4/2/1 lookahead).
+%  - Identity uses (==) after standard ordering; variable identity matters; no unification.
+%  - Complexity: O(N) small-window linear scan (4/2/1 lookahead).
 %  - Errors: if Key is var, compare/3 raises instantiation_error; lookup/2 never binds Key.
 %  Determinism: semidet.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
@@ -74,12 +74,12 @@ lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
 
 %! add(+Term, -Id)// is det.
-%  Insert Term and return its class Id; reuse the Id if Key already exists.
-%  - Compound: add subterms first; Key = F(ChildIDs) where ChildIDs are class IDs of subterms (congruence).
+%  Insert Term and return its class Id; reuse Id if Key already exists.
+%  - Compound: add subterms left-to-right; Key = F(ChildIDs) where ChildIDs are class IDs of subterms (congruence).
 %  - Atomic (incl. variables): Key = Term.
 %  Notes:
-%    - Id is a fresh Prolog variable (mutable class rep). Unions/rules may alias classes by unification, which may also instantiate variables inside Keys; all effects are backtrackable.
-%    - No canonicalization here; call merge_nodes//0 to collapse duplicates.
+%    - Id is a fresh Prolog variable used as a mutable class representative. Union/rules may alias Ids by unification, which can also instantiate variables inside Keys; all effects are backtrackable.
+%    - No canonicalization here; duplicates may be introduced. Use merge_nodes//0 to collapse duplicates.
 %    - DCG state threads an ordset of Key-Id pairs (standard term order).
 %  Determinism: det.
 add(Term, Id, In, Out) :-
@@ -93,10 +93,10 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node has a class Id; reuse existing Id if present, else insert Node-Id.
+%  Ensure Node has a class Id; reuse existing Id if present, otherwise insert Node-Id.
 %  Notes:
 %    - In/Out are ordsets of Key-Id (standard order). Identity after ordering uses (==); no variant-normalization (variable identity matters).
-%    - Id unifications may bind variables inside Keys. Always re-canonicalize with merge_nodes/2 (or //0) after aliasing.
+%    - Unifying Ids elsewhere may bind variables inside Keys. Always re-canonicalize with merge_nodes/2 (or //0) after aliasing.
 %  Determinism: det.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -123,7 +123,7 @@ union(A, B, In, Out) :-
 %  DCG: canonicalize the threaded node set (In/Out).
 %! merge_nodes(+In, -Out) is det.
 %  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat while any group changed.
-%  Complexity: O(N log N) per pass; repeats to a fixpoint.
+%  Complexity: O(N log N) per pass (sort + group); repeats until a fixpoint.
 %  Notes:
 %    - Unifying Ids can bind variables inside Keys; resorting can reveal new duplicates, hence multiple passes.
 %    - Leaves exactly one Key-Id pair per distinct Key at fixpoint.
@@ -151,14 +151,14 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
 %  Commutativity of (+): for (A+B)-AB emit B+A-BA and AB=BA.
 %  Models equality without destructive rewrites; both orders share the class.
 %  Matches only +(A,B) nodes; emits at most one result per match.
-%  Determinism: nondet over the worklist; at most one emission per matching Node.
+%  Determinism: nondet over the worklist; at most one emission per matching Node (prevents duplicate blow‑up).
 comm((A+B)-AB, _Nodes) -->
    !,
    [B+A-BA, AB=BA].
 comm(_, _) --> [].
 %! assoc(+Node, +Index)// is nondet.
 %  Associativity of (+): for (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
-%  Limit candidates to the class of BC (via Index) to avoid quadratic search over unrelated nodes.
+%  Candidate BCs are restricted to class(BC) via Index to avoid quadratic search over unrelated nodes.
 assoc((A+BC)-ABC, Index) -->
    !,
    {rb_lookup(BC, Nodes, Index)},
@@ -240,7 +240,7 @@ rule(Index, Node, Rule) -->
 %  Enables fast per-class access during rule matching.
 %  Complexity: O(N log N) overall (grouping + tree build).
 %  Notes:
-%    - IDs reflect current aliasing after unions; IDs are Prolog variables used as map keys; always rebuild after aliasing.
+%    - IDs reflect current aliasing after unions; IDs are Prolog variables used as map keys. Always rebuild the index after aliasing.
 %    - Each value lists all concrete Keys for that class.
 %    - Assumes Nodes are canonicalized by merge_nodes/2 to avoid duplicates.
 %    - group_pairs_by_key/2 sorts internally; Nodes need not be pre-sorted by ID.
@@ -291,9 +291,10 @@ saturate(Rules) -->
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Underlying 4-ary predicate for saturate//2.
 %  Threads the e-graph difference list explicitly (In/Out).
-%  N must be inf or a non-negative integer.
+%  MaxSteps must be a non-negative integer; use saturate//1 or saturate//2 with inf if you want an unbounded DCG loop.
 %  Note: length-based fixpoint; pure ID aliasing with no net pair change is not detected as progress. Use a bounded MaxSteps if rules can cycle without adding/removing pairs.
 %  Implementation note: rebuilds the Id->Keys index on every iteration because ID variables may alias.
+%  Note: do not pass the atom inf to this 4-ary predicate; the guard uses arithmetic comparison.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -366,6 +367,7 @@ add_expr(N, Add) :-
 %! example2(+N, -Expr) is det.
 %  Build an addition chain and saturate with comm/assoc; prints counts to current output.
 %  Sanity-check size growth vs. the closed form.
+%  Note: if calling outside a DCG, use phrase/3 to run saturate//2.
 example2(N, Expr) :-
    add_expr(N, Expr),
    phrase(add(Expr, _), [], G),
