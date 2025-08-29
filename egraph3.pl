@@ -308,11 +308,10 @@ saturate(Rules, N, In, Out) :-
    ).
 
 %! unif(+Eq) is semidet.
-%  True for equalities A=B and performs the unification as a side effect.
-%  Use with exclude/3 to apply equalities and remove them from a worklist.
-%  Notes: intentionally mutates class Ids via unification; fails for non-(=)/2 items. Effects are logical and backtrackable.
+%  Recognize A=B and perform the unification as a side effect.
+%  Use with exclude/3 to apply equalities and drop them from a worklist.
+%  Effects: intentionally unifies class Id variables; fails for non-(=)/2 items. Effects are logical and backtrackable.
 %  Determinism: semidet; succeeds once on (=)/2, fails otherwise.
-%  Note: intentionally performs side-effect unification of class Id variables; use via exclude/3 to consume equalities.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is det.
