@@ -1,48 +1,41 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-Backtrackable e-graphs (equivalence graphs) with congruence closure for Prolog terms.
+E-graphs (equivalence graphs) with congruence closure for Prolog terms, fully backtrackable.
 
-Core idea
-- The graph is an ordset of Key-Id pairs (standard order).
-- Id are fresh Prolog variables used as mutable class identifiers. Unifying two Ids merges their classes.
-- A DCG threads the node set as a difference list; the only “mutation” is ID unification.
+Essentials
+- State is an ordset of Key-Id pairs (standard order).
+- Id are fresh logic variables acting as mutable, backtrackable class identifiers. Unifying two Ids merges classes.
+- A DCG threads the state as a difference list; the only mutation is Id unification.
 
 Representation
-- Nodes: ordset of Key-Id. After canonicalization there is at most one pair per distinct Key (equality by (==) after sort).
-- Index: rbtree Id -> [Keys], rebuilt after canonicalization to reflect current ID aliasing.
+- Node Key: either an atomic/var term or a compound whose arguments are child class Ids (congruence).
+- Canonical form: after merge_nodes/2 there is at most one Key-Id per distinct Key (equality after sort uses (==), so variable identity matters).
+- Index: rbtree Id -> [Keys], rebuilt after each canonicalization.
 
-Execution model
-- add//2 constructs congruent Keys by replacing subterms with their class IDs.
-- Rules (DCGs) only emit items: new nodes (Key-Id) and equalities A=B. Rules never unify.
-- rebuild//1 consumes equalities (unifies IDs), enqueues new nodes, and canonicalizes via merge_nodes/2.
+Execution
+- add//2 builds Keys left-to-right and inserts Key-Id pairs (may introduce duplicates).
+- Rules are DCGs that only produce: Key-Id items and equalities A=B. They never unify.
+- rebuild//1 applies A=B (unifies Ids), schedules new nodes, then calls merge_nodes/2.
 
 Identity and variants
-- Ordering uses standard term order; identity after ordering uses (==), so variable identity matters.
-- No α-normalization: structurally equal Keys with different variable identities are distinct.
+- No alpha-normalization: structurally equal Keys with different variable identities are distinct.
+- Sorting/identity use standard term order and (==); variable identity is observable.
 
 Caveats
-- merge_nodes/2: sorts by Key, groups equal Keys, unifies group IDs into the first; repeats until a fixpoint because unification can instantiate variables in Keys and reveal new duplicates.
-- saturate//2 fixpoint: compares lengths before/after rebuild. Pure aliasing (no net Key-Id change) is invisible; rules must eventually add or remove pairs.
-- IDs are logic variables, not atoms. Unifying IDs may instantiate variables in Keys. Occurs-check is not needed here because IDs unify only with IDs.
-- extract//0 validates invariants but may bind/alias IDs via member/2; use only on throwaway states or under backtracking, never on persisted graphs.
+- merge_nodes/2 may need multiple passes: unifying Ids can instantiate variables appearing in Keys and reveal new duplicates.
+- saturate//2 fixpoint is length-based; pure aliasing (no net Key-Id change) is invisible—rules must eventually add/remove pairs.
+- IDs are variables, not atoms; do not persist or print them as stable names. If needed, map them to your own stable identifiers.
+- extract//0 performs a validation pass that can alias IDs via member/2; use only on throwaway states or under backtracking.
 
-Class IDs (mutable Prolog variables)
-- Prolog variables serve as unique, backtrackable class representatives.
-- The Id->Keys index uses these variables as map keys; always rebuild after aliasing.
-- Do not persist or print IDs as stable names; identity and aliasing are runtime-only. Maintain your own mapping if you need stable identifiers.
-
-DCG integration
-- Calling merge_nodes inside a DCG expands to merge_nodes(+State,-State); no separate merge_nodes//0 clause is required.
+DCG note
+- In a DCG body, writing merge_nodes is translated to merge_nodes(+In,-Out); there is intentionally no merge_nodes//0 clause.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
-See also
+Related
 - merge_nodes/2, make_index/2, rebuild//1.
-
-Notes
-- Using Prolog variables as mutable identifiers is intentional and safe within these constraints, though unusual if you expect atom-based IDs.
 */
 
 
@@ -136,9 +129,8 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG view of merge_nodes/2. In a DCG body, merge_nodes expands to merge_nodes(+In,-Out)
-%  and canonicalizes the threaded node set. No explicit --> clause is needed; the DCG
-%  translator calls merge_nodes/2.
+%  DCG view of merge_nodes/2. In a DCG body, merge_nodes is translated to merge_nodes(+In,-Out).
+%  There is intentionally no merge_nodes//0 rule; calling it in a DCG canonicalizes the state.
 %! merge_nodes(+In, -Out) is det.
 %  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat until a fixpoint.
 %  Complexity: O(N log N) per pass (sort + group); repeats until a fixpoint.
@@ -344,10 +336,9 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG variant: validate graph invariants after saturation.
-%  Invariant: after grouping Id→Keys, each Id-group must have at least one concrete Key.
-%  Warning: uses member(Id, Keys), which can bind/alias class ID variables; use only for validation
-%  on throwaway states or under backtracking (not for persisted states).
+%  DCG variant: validates minimal invariants after saturation.
+%  Invariant: for each Id, its class has at least one concrete Key.
+%  Note: uses member/2 in a way that can alias/bind Id variables; use only for validation on throwaway states or under backtracking, not on persisted graphs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each ID-group has a concrete Key.
 %  Note: arguments are typically the same variable to avoid copying; do not rely on side effects.
