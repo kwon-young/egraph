@@ -1,11 +1,11 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for term equivalence. Class identifiers are plain logic variables unified to merge classes.
+E-graphs for term equivalence with logic variables as class identifiers.
 
 Summary
-- Classes: each class Id is a fresh logic variable; union is performed by unification (A=B), hence logical and backtrackable.
-- Graph: ordset of Key-Id pairs (standard term order). Key is a concrete term; Id is the class variable.
+- Classes: each class Id is a fresh logic variable; union is performed by unification (A=B). Effects are logical and fully backtrackable.
+- Graph: ordset of Key-Id pairs (standard term order). Key is a Prolog term (may contain variables); Id is the class variable.
 - Rules: DCGs that emit new nodes (Key-Id) and equalities (A=B). Saturation iterates rules to a fixpoint.
 
 Data
@@ -14,15 +14,15 @@ Data
 
 Execution model
 - All DCGs thread the graph as a difference list (In/Out).
-- “Mutation” happens only by unifying class Id variables; this can also bind variables inside Keys. Effects are logical and fully backtrackable.
+- “Mutation” is by unifying class Id variables; this may also bind variables occurring inside Keys. Effects are logical and backtrackable.
 
 Identity and variants
 - Ordering/membership use standard term order; exact identity checks use (==) only after ordering.
-- Keys that differ only by variable identity are intentionally distinct.
+- Keys that differ only by variable identity are intentionally distinct (no variant normalization).
 
 Notes
-- merge_nodes/2 sorts, groups by Key, unifies all Ids per group with the first, and repeats until no change.
-- Calling a nonterminal (e.g., merge_nodes//0) acts on the same threaded state.
+- merge_nodes/2: sort by Key, group, unify all Ids per group with the first; repeat while any group changed.
+- Nonterminals (e.g., merge_nodes//0) operate on the same threaded state.
 - Warning: class Ids are logic variables, not atoms/symbols; unification can alias classes and bind variables inside user terms.
 */
 
@@ -32,11 +32,11 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Lookup Val for Key in an ordset of Key-Val pairs.
-%  - Search: small-window linear scan (4/2/1 lookahead).
-%  - Requirements: Pairs is a strictly ordered ordset (standard term order); Key is nonvar.
-%  - Identity uses (==) only after ordering.
-%  - Complexity: O(N) worst case. Determinism: semidet (0 or 1 solution).
+%  Lookup Val for Key in an ordset of Key-Val pairs (standard term order).
+%  - Search: small-window linear scan with 4/2/1 lookahead.
+%  - Requires: Pairs is a strictly ordered ordset; Key is nonvar.
+%  - Equality: uses (==) only after ordering; succeeds at most once.
+%  - Complexity: O(N) worst case. Determinism: semidet.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -65,13 +65,13 @@ lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
 
 %! add(+Term, -Id)// is det.
-%  Insert Term and return its class Id; reuses the existing Id if Key already exists.
-%  - Compound: add subterms first; their class Ids become the arguments (congruence by construction).
+%  Insert Term and return its class Id; reuse the existing Id if Key already exists.
+%  - Compound: add subterms first; the inserted Key is F(ChildIds) where ChildIds are the class Ids of subterms (congruence by construction).
 %  - Atomic: Key = Term.
 %  Notes:
-%    - Id is a logic variable used as a mutable class identifier via unification; union//2 may alias classes.
-%    - Threads the e-graph ordset via DCGs. No canonicalization here; see merge_nodes//0.
-%    - Unifying Ids may bind variables occurring inside Keys.
+%    - Id is a logic variable used as a mutable class identifier; unions/rules may alias classes via unification.
+%    - Threads the e-graph ordset via DCGs. No canonicalization here; use merge_nodes//0.
+%    - Subsequent Id unifications can bind variables occurring inside Keys.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -98,12 +98,12 @@ add_node(Node, Id, In, Out) :-
    ).
 
 %! union(+IdA, +IdB)// is det.
-%  Unify two class Ids (alias classes) and canonicalize the e-graph.
+%  Unify two class Ids (alias classes), then canonicalize the e-graph.
 %  Rationale: logic-variable unification provides a cheap, fully backtrackable union.
 %  Notes:
 %    - IdA/IdB must be class Ids obtained from add//2 or add_node/4.
 %    - Unifying Ids may bind variables inside Keys; rules rely on this.
-%    - Calls merge_nodes//0 to collapse duplicate Key-Id pairs introduced by aliasing.
+%    - Immediately calls merge_nodes//0 to collapse duplicate Key-Id pairs introduced by aliasing.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -111,7 +111,7 @@ union(A, B, In, Out) :-
 %! merge_nodes//0 is det.
 %  DCG: canonicalize the threaded node set (In/Out).
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize Nodes after Id unifications: sort, group by Key, unify all Ids per group with the first; repeat until no group changes.
+%  Canonicalize Nodes after Id unifications: sort, group by Key, unify all Ids per group with the first; repeat while any group changed.
 %  Complexity: O(N log N) per pass; repeats to a fixpoint.
 %  Notes:
 %    - The pass sets a change flag; recursion continues while true.
@@ -304,7 +304,7 @@ extract(Nodes) :-
 %  DCG variant: validate graph invariants after saturation.
 %  Invariant: after grouping Id→Keys, each Id-group must have at least one concrete Key.
 %  Warning: uses member(Id, Keys), which can bind class Id variables; use only for validation on throwaway states or under backtracking (not for persisted states).
-%  Note: this validation can alias Ids further if Keys contain those Ids.
+%  Note: this validation can alias Ids further if Keys contain those Ids; do not run on persisted graphs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each Id-group has a concrete Key.
 %  Note: arguments are typically the same variable to avoid copying; do not rely on side effects.
