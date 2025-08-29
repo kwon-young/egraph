@@ -1,22 +1,22 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs with congruence closure for Prolog terms.
+E-graphs with congruence closure over Prolog terms.
 
-Essentials
-- Class Ids are fresh logic variables acting as mutable, backtrackable identifiers; aliasing is only via (=)/2.
-- State is an ordset of Key-Id pairs (standard order). Keys are atomic/var or F(ChildIds); variable identity is observable (no alpha-normalization).
+Core ideas
+- Class Ids are fresh logic variables used as mutable, backtrackable identifiers; aliasing is only via (=)/2.
+- State is an ordset of Key-Id pairs (standard order). Keys are atoms/vars or F(ChildIds); variable identity is part of the Key (no α-normalization).
 - Canonical form: after merge_nodes/2 there is at most one Key-Id per Key; the Id→Keys index is rebuilt from the canonical set.
 
 Execution model
-- DCGs thread the state as a difference list; rules emit only Key-Id items and (=)/2 equalities (they never unify).
-- rebuild//1 applies equalities (unify Ids), schedules items, then calls merge_nodes/2.
-- Unifying Ids may instantiate variables inside Keys; merge_nodes/2 repeats until no new merges appear.
+- DCGs thread the state as a difference list. Rules emit only Key-Id items and equalities (A=B); they never unify themselves.
+- rebuild//1 applies equalities (unifies Ids), schedules items, then calls merge_nodes/2.
+- Unifying Ids can instantiate variables inside Keys; merge_nodes/2 repeats until no new merges appear.
 
 Caveats
 - Fixpoint in saturate//2 is length-based; alias-only steps do not count as progress.
-- Ids are variables; do not serialize or rely on print names.
-- extract//0 validates using member/2 and can alias Ids; prefer extract/1 in user code.
+- Ids are logic variables; do not serialize them or rely on print names.
+- extract//0 validates using member/2 and can alias class Ids; prefer extract/1 in user code.
 
 API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
@@ -26,7 +26,7 @@ Related
 
 Notes
 - Key equality checks use (==) after ordering; variable identity matters.
-- The only mutation is unification of Id variables; all effects are logical and backtrackable.
+- The only mutation is unification of Id variables; effects are logical and fully backtrackable.
 */
 
 
