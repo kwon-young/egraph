@@ -1,3 +1,5 @@
+:- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
+
 % this is an egraph implementation in swi-prolog
 % it uses prolog variables for class ids and ordset to store the list of nodes
 % note the custom predicate lookup to search nodes by key only
@@ -71,94 +73,10 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
    ;  Out = true
    ).
 
-compile_term(Var, Id), var(Var) ==>
-   { Var = Id }.
-compile_term(Term, Id) ==>
-   (  { compound(Term) }
-   -> {  Term =.. [F | Args],
-         pairs_keys_values(Pairs, Args, Ids),
-         Node =.. [F | Ids]
-      },
-      sequence(compile_pair, Pairs)
-   ;  { Node = Term }
-   ),
-   add_node_(Node, Id).
-
-add_node_(Node, Id, In, Out) :-
-   (  lookup(Node-Id, In)
-   -> Out = In
-   ;  Out = [Node-Id | In]
-   ).
-compile_pair(Term-Id) -->
-   compile_term(Term, Id).
-
-:- dynamic rule/2.
-
-lookup_([Node-Id | L], Node_-Id_) :-
-   (  Node == Node_
-   -> Id = Id_
-   ;  lookup_(L, Node_-Id_)
-   ).
-
-compile_rule(Left => Right, Key, Rule) :-
-   phrase(compile_term(Left, LeftId), [], LeftNodes),
-   LeftNodes = [Key_-_|_],
-   copy_term(Key_, Key),
-   phrase(compile_term(Right, RightId), [], RightNodes_),
-   exclude(lookup_(LeftNodes), RightNodes_, RightNodes),
-   reverse(RightNodes, RRightNodes),
-   Rule = (LeftId-LeftNodes => RightId-RRightNodes).
-compile_rule(Term) :-
-   compile_rule(Term, Key, Rule),
-   (  rule(Key, Rule)
-   -> true
-   ;  assertz(rule(Key, Rule))
-   ).
-
-node_rules(Index, Node) -->
-   {  Node = Key-_,
-      findall(Rule, rule(Key, Rule), Rules)
-   },
-   sequence(node_rule(Node, Index), Rules).
-
-node_rule(Node-Id, Index, LeftId-[Pat-Id | Left] => RightId-Right) -->
-   {  term_variables(Pat-Left-Right, Vars),
-      list_to_ord_set(Vars, Set1),
-      ord_del_element(Set1, RightId, Set2)
-   },
-   nodes_rule([Node], Pat, Left, Index, Right, Set2, LeftId=RightId).
-
-rule_node([Node-Id | Left], G-Index, Right, RuleVars, Unif) -->
-   { rb_lookup(Id, Nodes, Index) },
-   nodes_rule(Nodes, Node, Left, G-Index, Right, RuleVars, Unif).
-rule_node([], G-_Index, Right, _, Unif) -->
-   Right, [Unif].
-
-nodes_rule([Node | Nodes], Pat, Left, G-Index, Right, RuleVars, Unif) -->
-   {copy_term(RuleVars, Pat-Left-Right, CRuleVars, CPat-CLeft-CRight)},
-   (  {  Node = CPat,
-         term_variables(Node, NodeVars),
-         foldl([NodeVar, In, Out]>>exclude(==(NodeVar), In, Out), NodeVars, CRuleVars, C2RuleVars),
-         Node = A+B
-      },
-      rule_node(CLeft, G-Index, CRight, C2RuleVars, Unif)
-   -> []
-   ;  []
-   ),
-   nodes_rule(Nodes, Pat, Left, G-Index, Right, RuleVars, Unif),
-   [].
-nodes_rule([], _Node, _Left, _Index, _Right, _, _Unif) -->
-   [].
-
-% A+B => B+A
-% A+B-Id => B+A-Id
 comm((A+B)-AB, _Nodes) -->
    !,
    [B+A-BA, AB=BA].
 comm(_, _) --> [].
-
-% A+(B+C) => (A+B)+C
-% A+BC-ABC, B+C-BC => A+B-AB, AB+C-ABC
 assoc((A+BC)-ABC, Index) -->
    !,
    {rb_lookup(BC, Nodes, Index)},
@@ -171,49 +89,67 @@ assoc_([Node | Nodes], A, ABC) -->
    ),
    assoc_(Nodes, A, ABC).
 assoc_([], _, _) --> [].
+reduce(A+B-AB, Index) -->
+   {  rb_lookup(B, Nodes, Index),
+      once((member(Node, Nodes), Node == 0))
+   },
+   !,
+   [A=AB].
+reduce(_, _) --> [].
+constant_folding((A+B)-AB, Index) -->
+   !,
+   { rb_lookup(A, ANodes, Index) },
+   constant_folding_a(ANodes, B, AB, Index).
+constant_folding(_, _) --> [].
+constant_folding_a([VA | ANodes], B, AB, Index) -->
+   (  {number(VA)}
+   -> {rb_lookup(B, BNodes, Index)},
+      constant_folding_b(BNodes, VA, AB, Index)
+   ;  []
+   ),
+   constant_folding_a(ANodes, B, AB, Index).
+constant_folding_a([], _, _, _) --> [].
+constant_folding_b([VB | BNodes], VA, AB, Index) -->
+   (  {number(VB)}
+   -> {VC is VA + VB},
+      [VC-C, C=AB]
+   ;  []
+   ),
+   constant_folding_b(BNodes, VA, AB, Index).
+constant_folding_b([], _, _, _) --> [].
 
-rules(Index, Node) -->
-   comm(Node, Index),
-   assoc(Node, Index).
+rules(Rules, Index, Node) -->
+   sequence(rule(Index, Node), Rules).
+rule(Index, Node, Rule) -->
+   call(Rule, Node, Index).
 
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
    ord_list_to_rbtree(Groups, Index).
 
-match(Worklist, Index, Matches) :-
-   % foldl(rules(Index), Worklist, Matches, []).
-   phrase(sequence(node_rules(Index), Worklist), Matches, []).
+match(Rules, Worklist, Index, Matches) :-
+   foldl(rules(Rules, Index), Worklist, Matches, []).
 push_back(L), L --> [].
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
    merge_nodes.
-saturate(N, In, Out) :-
+saturate(Rules) -->
+   saturate(Rules, inf).
+saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
-      match(In, In-Index, Matches),
+      match(Rules, In, Index, Matches),
       rebuild(Matches, In, Tmp),
-      make_index(Tmp, Index_),
-      pairs_keys_values(Tmp, Nodes_, Ids_),
-      term_variables(Nodes_, Vars_),
-      forall(member(V_, Vars_),
-         (  rb_lookup(V_, _, Index_)
-         -> true
-         ;  gtrace
-         )
-      ),
       length(In, Len1),
       length(Tmp, Len2),
-      print_term([Len1-Len2], []), nl,
-      (  Len1 < Len2
+      (  Len1 \== Len2
       -> (  N == inf
          -> N1 = N
          ;  N1 is N - 1
          ),
-         saturate(N1, Tmp, Out)
-      ;  Len1 > Len2
-      -> Out = Tmp
+         saturate(Rules, N1, Tmp, Out)
       ;  Out = Tmp
       )
    ;  Out = In
@@ -221,69 +157,40 @@ saturate(N, In, Out) :-
 
 unif(A=B) :- A=B.
 
+extract(Nodes) :-
+   extract(Nodes, Nodes).
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
-   maplist([Id-L]>>member(Id, L), Groups).
+   extract_node(Groups).
+extract_node([Node-Nodes | Groups]) :-
+   member(Node, Nodes),
+   extract_node(Groups).
+extract_node([]).
 
-% main -->
-%    add(a, A),
-%    add(f(f(a)), FFA),
-%    union(A, FFA),
-%    add(f(f(f(f(a)))), _FFFFA).
+example1(G) :-
+   phrase((
+      add(a, A),
+      add(f(f(a)), FFA),
+      union(A, FFA),
+      add(f(f(f(f(a)))), _FFFFA)
+   ), [], G).
 
-
-
-main(N, Var, G) :-
-   retractall(rule(_, _)),
-   Rules = [
-      A+B => B+A,
-      (A+B)+C => A+(B+C)
-   ],
-   maplist(compile_rule, Rules),
-   N1 is N - 1,
-   numlist(0, N1, [H|T]),
-   foldl([B, A, A+B]>>true, T, H, Add),
-   time(phrase(example(N, Add, Var), [], G)),
-   length(G, Num1),
-   Num is 3**(N) - 2**(N+1) + 1 + N,
-   format("~p ~p~n", [Num, Num1]).
-example(N, Term, Var) -->
-   add(Term, Var),
-   saturate(inf),
-   % extract.
-   [].
 
 add_expr(N, Add) :-
    numlist(1, N, L), L = [H|T], foldl([B, A, A+B]>>true, T, H, Add).
 
-:- begin_tests(node_rule).
-
-test(sharing) :-
-   phrase((
-      add(b+c, BC),
-      add(c+b, CB),
-      union(BC, CB),
-      add(a+(b+c), ABC)
-   ), [], G),
-   compile_rule(X+(Y+Z) => (X+Y)+Z, Key, Rule),
-   last(G, Node),
-   make_index(G, Index1),
-   rb_visit(Index1, Pairs1),
-   % print_term([graph-G, index-Pairs1, rule-Rule], []), nl,
-   % extract(G, _),
-   make_index(G, Index),
-   phrase(node_rule(Node, G-Index, Rule), Match),
-   rb_visit(Index, Pairs),
-   % print_term([graph-G, index-Pairs, match-Match, rule-Rule, ABC], []), nl,
-   rebuild(Match, G, G1),
-   make_index(G, Index2),
-   rb_visit(Index2, Pairs2),
-   % extract(G1, _),
+example2(N, Expr) :-
+   add_expr(N, Expr),
+   phrase(add(Expr, _), [], G),
+   time(saturate([comm, assoc], G, G1)),
    length(G1, N1),
-   % print_term([graph-N1-G1, index-Pairs2, match-Match, ABC], []), nl,
-   fail.
+   Num is 3**(N) - 2**(N+1) + 1 + N,
+   print_term(N1-Num, []), nl.
 
-
-
-:- end_tests(node_rule).
+example3(N, Expr, R) :-
+   distinct(R, phrase((
+      add(Expr, R),
+      saturate([comm, assoc, reduce, constant_folding], N),
+      extract
+   ), [], _)).
