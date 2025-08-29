@@ -1,7 +1,8 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs (equivalence graphs) with congruence closure for Prolog terms, fully backtrackable.
+E-graphs (equivalence graphs) with congruence closure for Prolog terms. Fully backtrackable.
+IDs are Prolog logic variables acting as mutable, backtrackable class identifiers; unifying two IDs merges their classes.
 
 Essentials
 - State is an ordset of Key-Id pairs (standard order).
@@ -44,7 +45,7 @@ Related
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only lookup in an ordset of Key-Val pairs (standard term order).
+%  Pure read-only lookup in an ordset (list in standard term order) of Key-Val pairs; never binds.
 %  - Pairs: strictly ordered ordset; Key must be nonvar.
 %  - Equality uses (==) after ordering; variable identity matters; never unifies.
 %  - Complexity: O(N) small-window linear scan (4/2/1 lookahead).
@@ -294,7 +295,7 @@ push_back(L), L --> [].
 %    - exclude(unif, Matches, NewNodes): unifies A=B items and drops them.
 %    - push_back(NewNodes): appends Key-Id items to the DCG output.
 %    - merge_nodes: canonicalizes (calls merge_nodes/2 via DCG).
-%  Effects: only class-ID aliasing via (=)/2; logical and backtrackable. Equalities are consumed.
+%  Effects: only class-ID aliasing via (=)/2; logical and backtrackable. Equalities are consumed; no other mutation. Deduplication happens only in merge_nodes/2.
 %  Determinism: det.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
