@@ -47,6 +47,7 @@ See also
 %  - Equality: after ordering, uses (==) for exact identity; succeeds at most once.
 %  - Complexity: O(N) worst case; on success only unifies Val (no allocation).
 %  - Errors: var Key raises instantiation_error via compare/3; this predicate never binds Key.
+%  Determinism: semidet (succeeds once if found, fails otherwise).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -82,6 +83,7 @@ lookup(Item-V, [X1-V1]) :-
 %    - Id is a fresh logic variable acting as a mutable class representative; later unions/rules may alias classes by unification.
 %    - Threads the e-graph ordset via DCGs. No canonicalization here; use merge_nodes//0 afterwards to collapse duplicates.
 %    - Unifying Ids may bind variables inside Keys; this is intentional and backtrackable.
+%  Determinism: det.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -116,6 +118,7 @@ add_node(Node, Id, In, Out) :-
 %    - Unifying Ids may bind variables inside Keys; rules rely on this property.
 %    - Immediately calls merge_nodes//0 to collapse duplicates introduced by aliasing.
 %    - Uses (=)/2 without occurs-check; safe here because class Ids are fresh logic variables and never unified with compound terms.
+%  Determinism: det.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -129,6 +132,7 @@ union(A, B, In, Out) :-
 %    - The pass sets a change flag; recursion continues while true.
 %    - Id unifications may bind variables inside Keys; re-sorting can expose new duplicates hence multiple passes may be required.
 %    - Leaves exactly one Key-Id pair per distinct Key at fixpoint.
+%  Determinism: det.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -198,6 +202,7 @@ constant_folding(_, _) --> [].
 %! constant_folding_a(+ClassA, +B, -AB, +Index)// is nondet.
 %  Helper: pick numeric VA in class(A), then search class(B) for numeric VB.
 %  Staged search avoids building pairs eagerly.
+%  Determinism: nondet over numeric members of class(A) and class(B).
 constant_folding_a([VA | ANodes], B, AB, Index) -->
    (  {number(VA)}
    -> {rb_lookup(B, BNodes, Index)},
@@ -210,6 +215,7 @@ constant_folding_a([], _, _, _) --> [].
 %  Helper: for numeric VB in class(B) compute VC is VA+VB, then emit VC-C and C=AB.
 %  Builds the folded constant lazily while keeping AB as the class Id.
 %  Note: arithmetic uses is/2; evaluation follows Prolog's numeric tower and type promotion rules.
+%  Determinism: nondet over numeric members of class(B).
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
    (  {number(VB)}
    -> {VC is VA + VB},
@@ -230,6 +236,7 @@ rules(Rules, Index, Node) -->
 %! rule(+Index, +Node, :Rule)// is nondet.
 %  Meta-call a single DCG rule on Node.
 %  Rule is a callable DCG of arity 3: Rule(Node, Index)//.
+%  Determinism: follows the determinism of Rule/3.
 rule(Index, Node, Rule) -->
    call(Rule, Node, Index).
 
@@ -244,6 +251,7 @@ rule(Index, Node, Rule) -->
 %    - Assumes Nodes are canonicalized by merge_nodes/2 to avoid duplicates.
 %    - group_pairs_by_key/2 sorts internally; Nodes need not be pre-sorted by Id.
 %    - Uses transpose_pairs/2 (library(pairs)).
+%  Determinism: det.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -268,6 +276,7 @@ push_back(L), L --> [].
 %    - merge_nodes//0: canonicalize.
 %  Effects are logical and backtrackable (via variable aliasing).
 %  Note: equalities are consumed (not re-enqueued); only Node-Id items flow forward. Alias-only steps will not be observed by the length-based fixpoint in saturate//2 unless they lead to pair additions/removals.
+%  Determinism: det.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
@@ -316,6 +325,7 @@ unif(A=B) :- A=B.
 %  Return the current nodes as Nodes (no validation).
 %  Pairs with extract//0, which performs a validation pass.
 %  Recommendation: prefer this predicate in user code to avoid identifier mutation during validation.
+%  Determinism: det.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
