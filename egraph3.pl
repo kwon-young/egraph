@@ -42,7 +42,7 @@ See also
 %  - Precondition: Pairs is a strictly ordered ordset; Key must be nonvar.
 %  - Equality: after ordering, uses (==) for exact identity; succeeds at most once.
 %  - Complexity: O(N) worst case; on success only unifies Val (no allocation).
-%  - Errors: a var Key raises in compare/3; this predicate never binds Key.
+%  - Errors: var Key raises instantiation_error via compare/3; this predicate never binds Key.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -111,7 +111,7 @@ add_node(Node, Id, In, Out) :-
 %    - IdA/IdB must be class Ids obtained from add//2 or add_node/4.
 %    - Unifying Ids may bind variables inside Keys; rules rely on this property.
 %    - Immediately calls merge_nodes//0 to collapse duplicates introduced by aliasing.
-%    - Uses (=)/2 without occurs-check; safe here because class Ids are fresh logic variables.
+%    - Uses (=)/2 without occurs-check; safe here because class Ids are fresh logic variables and never unified with compound terms.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -235,6 +235,7 @@ rule(Index, Node, Rule) -->
 %  Complexity: O(N log N) overall (grouping + tree build).
 %  Notes:
 %    - Ids reflect current aliasing after unions; Ids are logic variables used as map keys.
+%    - Rebuild the Index after aliasing; this module constructs it per iteration.
 %    - Each value lists all concrete Keys for that class.
 %    - Assumes Nodes are canonicalized by merge_nodes/2 to avoid duplicates.
 %    - group_pairs_by_key/2 sorts internally; Nodes need not be pre-sorted by Id.
@@ -273,13 +274,14 @@ rebuild(Matches) -->
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
-%  Saturate for at most MaxSteps iterations (use inf for unbounded).
+%  Saturate for at most MaxSteps iterations (MaxSteps is a non-negative integer or inf for unbounded).
 %  Fixpoint uses lengths before/after rebuild/1 (after merge_nodes/2).
-%  Caveat: length-only checks ignore alias-only steps; rules must eventually add/remove pairs to make progress.
+%  Caveat: the length-only fixpoint ignores alias-only steps; rules must eventually add/remove pairs to make progress.
 %  Determinism: det driver; nondeterminism comes only from rules.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Underlying 4-ary form used by DCG expansion of saturate//2.
 %  Threads the e-graph difference list explicitly (In/Out).
+%  N must be inf or a non-negative integer.
 %  Note: length-based fixpoint; pure Id aliasing with no net pair change is not detected as progress. Use a bounded MaxSteps if rules can cycle without adding/removing pairs.
 saturate(Rules, N, In, Out) :-
    (  N > 0
