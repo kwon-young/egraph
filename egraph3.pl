@@ -1,30 +1,30 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs (equivalence graphs) with backtrackable congruence closure on Prolog terms.
+Backtrackable e-graphs (equivalence graphs) with congruence closure for Prolog terms.
 
-Essentials (short)
-- Class identifiers (IDs) are fresh logic variables. Union is (=)/2 on IDs. All effects are pure, logical, and fully backtrackable.
-- The graph is an ordset of Key-Id pairs (standard term order). Keys may contain variables; identity after ordering uses (==) so variable identity matters.
-- Rules are DCGs that produce nodes (Key-Id) and equalities (A=B). Saturation applies rules to a fixpoint via canonicalization.
+Core ideas
+- Classes are represented by fresh logic variables (IDs). Union is (=)/2 on IDs; effects are logical and fully backtrackable.
+- The state is an ordset of Key-Id pairs in standard term order. Keys may contain variables; post-ordering identity uses (==), so variable identity matters.
+- Rules are DCGs that emit nodes (Key-Id) and equalities (A=B). Saturation applies rules to a fixpoint with canonicalization.
 
-Model
-- Nodes: ordset of Key-Id; canonicalization leaves at most one pair per distinct Key.
-- Index: rbtree Id -> [Keys], rebuilt after each canonicalization to reflect ID aliasing.
+Representation
+- Nodes: ordset of Key-Id; canonicalization ensures at most one pair per distinct Key.
+- Index: rbtree Id -> [Keys], rebuilt after each canonicalization to reflect any ID aliasing.
 
-Execution
+Execution model
 - DCGs thread the e-graph as a difference list (In/Out).
-- The only “mutation” is unifying class ID variables. This can instantiate variables inside Keys; it is backtrackable and non-destructive.
+- The only “mutation” is unifying class IDs; this may instantiate variables inside Keys. All effects are backtrackable and non-destructive.
 
 Identity and variants
 - Membership uses standard term order; identity after ordering uses (==).
 - No variant-normalization: structurally equal Keys that differ only in variable identity are distinct.
 
-Caveats (concise)
-- merge_nodes/2: sort by Key, group identical Keys, unify all IDs in each group into the first; repeat until no change. Unification may instantiate variables inside Keys; re-sorting can reveal new duplicates.
-- saturate//2: fixpoint checks length before/after rebuild; pure aliasing with no net Key-Id change is invisible. Rules must eventually add or remove pairs to make progress.
-- IDs are logic variables (not atoms). Unifying IDs aliases classes and may instantiate variables occurring in Keys. No occurs-check is required: IDs unify only with IDs.
-- extract//0 validates but may bind/alias IDs via member/2; use only on throwaway states or under backtracking (not on persisted graphs).
+Caveats
+- merge_nodes/2: sort by Key, group identical Keys, unify all Ids in a group into the first; repeat until a fixpoint. Unification can instantiate variables inside Keys; re-sorting may reveal new duplicates.
+- saturate//2: the fixpoint compares lengths before/after rebuild; pure aliasing with no net Key-Id change is invisible. Rules must eventually add/remove pairs to make progress.
+- IDs are logic variables (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys. No occurs-check is required: IDs unify only with IDs.
+- extract//0 validates invariants but may bind/alias IDs via member/2; use only on throwaway states or under backtracking (not on persisted graphs).
 
 Notes on “mutable unique identifiers”
 - IDs are plain logic variables acting as mutable class representatives. Unifying two IDs aliases their classes and may instantiate variables in Keys; all effects are backtrackable.
@@ -125,9 +125,9 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG synonym for merge_nodes/2: canonicalize the threaded node set (In/Out).
-%  Rationale: in DCGs, calling merge_nodes//0 expands to merge_nodes/2 (explicit DCG form).
-%  Note: no separate //0 clause exists; this relies on the DCG translator mapping //0 to /2 in SWI‑Prolog.
+%  DCG view of merge_nodes/2: canonicalize the threaded node set (In/Out).
+%  Implementation: used as a non-terminal in DCG bodies; SWI‑Prolog expands it to a call to merge_nodes/2 with the hidden state arguments.
+%  Note: no separate --> clause is defined.
 %! merge_nodes(+In, -Out) is det.
 %  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat while any group changed.
 %  Complexity: O(N log N) per pass (sort + group); repeats until a fixpoint.
