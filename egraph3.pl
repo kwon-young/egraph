@@ -5,7 +5,7 @@ E-graphs with congruence closure for Prolog terms.
 
 Essentials
 - Class IDs are fresh logic variables that act as mutable, backtrackable identifiers; aliasing is only via (=)/2.
-- State is an ordset of Key-Id pairs (standard order). Keys are atom/var or F(ChildIds); variable identity is observable (no α-normalization).
+- State is an ordset of Key-Id pairs (standard order). Keys are atomic/var or F(ChildIds); variable identity is observable (no α-normalization).
 - Canonical form: after merge_nodes/2 there is at most one Key-Id per Key; the Id→Keys index is rebuilt from the canonical set.
 
 Execution model
@@ -106,7 +106,7 @@ add_node(Node, Id, In, Out) :-
 
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
-%  Alias classes by unifying IdA with IdB, then canonicalize with merge_nodes (DCG).
+%  Alias classes by unifying IdA with IdB, then canonicalize with merge_nodes/2.
 %  - IdA/IdB must be class Ids from this graph.
 %  - Unifying Ids may instantiate variables inside Keys; many rules rely on this.
 %  - Uses (=)/2 (no occurs-check); safe because only Id variables are unified.
@@ -128,6 +128,7 @@ union(A, B, In, Out) :-
 %    - Exactly one Key-Id per Key at fixpoint; preserves variable identity in Keys.
 %    - Another pass runs if any group had >1 Id or resorting reveals new duplicates.
 %    - Ids are logic variables; unification can ground/instantiate variables embedded in Keys, enabling new merges.
+%    - Terminates: each pass either unifies at least one pair of Ids or leaves the set unchanged; the set is finite.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
