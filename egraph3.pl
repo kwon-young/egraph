@@ -4,27 +4,31 @@
 E-graphs for congruence closure over Prolog terms.
 
 Overview
-- Classes: identified by fresh logic variables (class Ids). Union is unification (A=B). All effects are logical and fully backtrackable.
-- Graph: ordset of Key-Id pairs (standard term order). Key is any Prolog term (may contain variables); Id is the class variable.
+- Classes: represented by fresh logic variables (class Ids). Union is plain Prolog unification (A=B). All effects are logical and fully backtrackable.
+- Graph: ordset of Key-Id pairs ordered by standard term order. Key is any term (may contain variables). Id is the class representative (a logic variable).
 - Rules: DCGs that produce new nodes (Key-Id) and equalities (A=B). Saturation iterates rules to a fixpoint.
 
-Data
-- Nodes: ordset of Key-Id; canonicalization keeps at most one pair per Key.
-- Index: rbtree Id -> [Keys] for per-class access during rule matching.
+Data model
+- Nodes: ordset of Key-Id; canonicalization keeps at most one pair per distinct Key.
+- Index: rbtree Id -> [Keys] for per-class access during rule matching (built from canonicalized nodes).
 
-Execution
+Execution model
 - All DCGs thread the e-graph as a difference list (In/Out).
-- “Mutation” happens by unifying class Id variables; this can also bind variables inside Keys. Effects are logical and backtrackable.
+- “Mutation” happens by unifying class Id variables; this can also bind variables inside Keys. Effects are logical and backtrackable (no destructive updates).
 
-Identity/variants
+Identity and variants
 - Membership uses standard term order; exact identity checks use (==) after ordering.
-- Keys that differ only by variable identity are distinct on purpose (no variant normalization).
+- Keys that differ only by variable identity are intentionally distinct (no variant-normalization).
 
-Caveats
-- merge_nodes/2: sort by Key, group, unify Ids per group into the first; repeat while any group changed.
+Caveats and notes
+- merge_nodes/2: sort by Key, group, unify Ids per group into the first; repeat while any group changed (Id unification can bind variables inside Keys and create new duplicates upon resort).
 - DCG nonterminals (e.g., merge_nodes//0) operate on the same threaded state.
-- Length-based fixpoint in saturate//2 does not notice alias-only progress; rules must eventually add/remove Key-Id pairs.
-- Class Ids are logic variables (not atoms); unifications may alias classes and bind variables inside user terms.
+- The length-based fixpoint in saturate//2 does not notice alias-only progress; rules must eventually add/remove Key-Id pairs.
+- Class Ids are logic variables (not atoms); unifications may alias classes and bind variables inside user terms. No occurs-check is used, which is safe here because class Ids are fresh logic variables.
+- Validation with extract//0 can further alias Ids due to member/2; use it only for throwaway validation states.
+
+See also
+- add//2, union//2, merge_nodes//0, saturate//2, extract//0.
 */
 
 
@@ -69,11 +73,11 @@ lookup(Item-V, [X1-V1]) :-
 %! add(+Term, -Id)// is det.
 %  Insert Term and return its class Id; reuse the existing Id if Key already exists.
 %  - Compound: add subterms first; the inserted Key is F(ChildIds) where ChildIds are the class Ids of subterms (congruence by construction).
-%  - Atomic: Key = Term.
+%  - Atomic (incl. variables): Key = Term as-is.
 %  Notes:
-%    - Id is a fresh logic variable used as a mutable class identifier; unions/rules may later alias classes via unification.
-%    - Threads the e-graph ordset via DCGs. No canonicalization here; use merge_nodes//0.
-%    - Unifying Ids may bind variables that occur inside Keys.
+%    - Id is a fresh logic variable acting as a mutable class representative; later unions/rules may alias classes by unification.
+%    - Threads the e-graph ordset via DCGs. No canonicalization here; use merge_nodes//0 afterwards to collapse duplicates.
+%    - Unifying Ids may bind variables inside Keys; this is intentional and backtrackable.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -88,8 +92,8 @@ add(Term, Id, In, Out) :-
 %  Ensure Node has a class Id; reuse the existing Id if present, else insert Node-Id.
 %  Notes:
 %    - In/Out are ordsets of Key-Id (standard term order).
-%    - Identity uses (==) only after ordering; variants that differ only by variable identity are distinct Keys.
-%    - Later Id unifications may bind variables inside Keys; merge_nodes/2 re-canonicalizes.
+%    - Identity uses (==) only after ordering; no variant-normalization: Keys that differ only by variable identity remain distinct.
+%    - Later Id unifications may bind variables inside Keys; run merge_nodes/2 to re-canonicalize after aliasing.
 %    - Does not collapse duplicates introduced by Id aliasing; call merge_nodes/2 or merge_nodes//0 to canonicalize.
 %  Determinism: det (exactly one reuse or insert).
 add_node(Node-Id, In, Out) :-
@@ -105,9 +109,9 @@ add_node(Node, Id, In, Out) :-
 %  Rationale: logic-variable unification provides a cheap, fully backtrackable union.
 %  Notes:
 %    - IdA/IdB must be class Ids obtained from add//2 or add_node/4.
-%    - Unifying Ids may bind variables inside Keys; rules rely on this.
+%    - Unifying Ids may bind variables inside Keys; rules rely on this property.
 %    - Immediately calls merge_nodes//0 to collapse duplicates introduced by aliasing.
-%    - Uses (=)/2 (no occurs-check); with fresh class vars this is safe and backtrackable.
+%    - Uses (=)/2 without occurs-check; safe here because class Ids are fresh logic variables.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -119,8 +123,8 @@ union(A, B, In, Out) :-
 %  Complexity: O(N log N) per pass; repeats to a fixpoint.
 %  Notes:
 %    - The pass sets a change flag; recursion continues while true.
-%    - Id unifications may bind variables inside Keys; re-sorting can expose new duplicates.
-%    - Leaves exactly one Key-Id pair per distinct Key.
+%    - Id unifications may bind variables inside Keys; re-sorting can expose new duplicates hence multiple passes may be required.
+%    - Leaves exactly one Key-Id pair per distinct Key at fixpoint.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -171,7 +175,7 @@ assoc_([], _, _) --> [].
 %! reduce(+Node, +Index)// is semidet.
 %  Unit of (+): if class(B) contains 0, emit A=AB.
 %  Eliminates the neutral element; once/1 limits duplicates.
-%  Note: checks for the integer 0 using (==); only Keys already bound to 0 qualify.
+%  Note: checks for the integer 0 using (==); 0.0 does not qualify; only Keys already bound to 0 qualify.
 reduce(A+B-AB, Index) -->
    {  rb_lookup(B, Nodes, Index),
       once((member(Node, Nodes), Node == 0))
@@ -201,7 +205,7 @@ constant_folding_a([], _, _, _) --> [].
 %! constant_folding_b(+ClassB, +VA, -AB, +Index)// is nondet.
 %  Helper: for numeric VB in class(B) compute VC is VA+VB, then emit VC-C and C=AB.
 %  Builds the folded constant lazily while keeping AB as the class Id.
-%  Note: arithmetic uses is/2; types follow Prolog's numeric tower.
+%  Note: arithmetic uses is/2; evaluation follows Prolog's numeric tower and type promotion rules.
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
    (  {number(VB)}
    -> {VC is VA + VB},
@@ -230,7 +234,7 @@ rule(Index, Node, Rule) -->
 %  Enables fast per-class access during rule matching.
 %  Complexity: O(N log N) overall (grouping + tree build).
 %  Notes:
-%    - Ids reflect current aliasing after unions.
+%    - Ids reflect current aliasing after unions; Ids are logic variables used as map keys.
 %    - Each value lists all concrete Keys for that class.
 %    - Assumes Nodes are canonicalized by merge_nodes/2 to avoid duplicates.
 %    - group_pairs_by_key/2 sorts internally; Nodes need not be pre-sorted by Id.
@@ -258,14 +262,14 @@ push_back(L), L --> [].
 %    - push_back(NewNodes): append Key-Id items to the DCG output.
 %    - merge_nodes//0: canonicalize.
 %  Effects are logical and backtrackable (via variable aliasing).
-%  Note: equalities are consumed (not re-enqueued); only Node-Id items flow forward.
+%  Note: equalities are consumed (not re-enqueued); only Node-Id items flow forward. Alias-only steps will not be observed by the length-based fixpoint in saturate//2 unless they lead to pair additions/removals.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
 %  Saturate with Rules until no new nodes/equalities are produced (fixpoint).
-%  Note: see saturate/4 for the length-based fixpoint caveat.
+%  Note: see saturate/4 for the length-based fixpoint caveat (alias-only progress is invisible).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -276,7 +280,7 @@ saturate(Rules) -->
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Underlying 4-ary form used by DCG expansion of saturate//2.
 %  Threads the e-graph difference list explicitly (In/Out).
-%  Note: length-based fixpoint; pure Id aliasing with no net pair change is not detected as progress.
+%  Note: length-based fixpoint; pure Id aliasing with no net pair change is not detected as progress. Use a bounded MaxSteps if rules can cycle without adding/removing pairs.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -312,7 +316,7 @@ extract(Nodes) :-
 %  DCG variant: validate graph invariants after saturation.
 %  Invariant: after grouping Id→Keys, each Id-group must have at least one concrete Key.
 %  Warning: uses member(Id, Keys), which can bind class Id variables; use only for validation on throwaway states or under backtracking (not for persisted states).
-%  Note: this validation can alias Ids further if Keys contain those Ids; do not run on persisted graphs.
+%  Note: this validation can alias Ids further if Keys contain those Ids; do not run on persisted graphs or states that must remain unchanged.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each Id-group has a concrete Key.
 %  Note: arguments are typically the same variable to avoid copying; do not rely on side effects.
