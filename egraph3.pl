@@ -3,32 +3,32 @@
 /** <module> egraph
 E-graphs (equivalence graphs) for congruence closure on Prolog terms.
 
-Essentials
-- Class IDs: each equivalence class is represented by a fresh Prolog variable (its ID). Union is plain unification (=)/2. All effects are logical and backtrackable.
-- Graph: ordset of Key-Id pairs (standard term order). Key is any term (variables allowed). Id is the current class representative (a variable).
-- Rules: DCGs that produce new nodes (Key-Id) and equalities (A=B). Saturation applies rules to a fixpoint.
+Overview
+- Classes are represented by fresh Prolog variables (IDs). Union is (=)/2. All effects are logical and backtrackable.
+- The graph is an ordset of Key-Id pairs (standard term order). Keys may contain variables; after ordering, identity uses (==), so variable identity matters.
+- Rules are DCGs that produce nodes (Key-Id) and equalities (A=B). Saturation applies rules to a fixpoint.
 
 Data model
-- Nodes: ordset Key-Id; canonicalization guarantees at most one pair per distinct Key.
+- Nodes: ordset of Key-Id; canonicalization ensures at most one pair per distinct Key.
 - Index: rbtree Id -> [Keys], rebuilt after canonicalization for per-class access.
 
 Execution model
 - DCGs thread the e-graph as a difference list (In/Out).
-- “Mutation” is only unification of class ID variables; this can instantiate variables inside Keys. Effects are logical, fully backtrackable, and non-destructive.
+- The only “mutation” is unifying class ID variables. This may instantiate variables inside Keys. Effects are logical, fully backtrackable, and non-destructive.
 
 Identity and variants
-- Membership uses standard term order; after ordering, identity uses (==). Variable identity matters.
-- No variant-normalization: two structurally equal Keys that differ only in variable identity remain distinct.
+- Membership uses standard term order; after ordering, identity uses (==).
+- No variant-normalization: structurally equal Keys that differ only by variable identity remain distinct.
 
-Key caveats
-- merge_nodes/2: sorts by Key, groups duplicates, unifies all IDs in each group into the first; repeats until no further duplicates appear. Because ID unification may instantiate variables inside Keys, re-sorting can reveal new duplicates.
-- saturate//2 fixpoint: compares lengths before/after rebuild; pure aliasing with no net pair change is invisible. Rules must eventually add/remove Key-Id pairs.
-- Class IDs are variables (not atoms). Unifying IDs aliases classes and may instantiate variables inside Keys. No occurs-check is used; safe because IDs are never unified with compound terms.
+Caveats
+- merge_nodes/2: sort by Key, group equal Keys, unify all IDs in each group into the first; repeat to a fixpoint. Because ID unification can instantiate variables in Keys, re-sorting may reveal new duplicates.
+- saturate//2 fixpoint: compares lengths before/after rebuild; pure aliasing with no net Key-Id change is invisible. Rules must eventually add/remove pairs.
+- Class IDs are variables (not atoms). Unifying IDs aliases classes and can instantiate variables occurring in Keys. No occurs-check is needed here because IDs are only unified with IDs (never with compounds).
 - extract//0 validates but may bind/alias IDs via member/2. Use only on throwaway states or under backtracking, not on persisted graphs.
 
 Notes on “mutable unique identifiers”
-- Class IDs are plain Prolog variables used as mutable representatives. Unifying two IDs aliases the classes and may instantiate variables occurring in Keys. All such effects are backtrackable.
-- The rbtree index uses these variables as keys; always rebuild the index after any aliasing (this module does so each saturation step).
+- IDs are plain logic variables used as mutable class representatives. Unifying two IDs aliases the classes and may instantiate variables in Keys. All such effects are backtrackable.
+- The rbtree index uses these variables as map keys; always rebuild the index after any aliasing (this module does so each saturation step).
 
 See also
 - add//2, union//2, merge_nodes//0, saturate//2, extract//0.
