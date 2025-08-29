@@ -1,35 +1,34 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs (equivalence graphs) for congruence closure over Prolog terms.
+E-graphs (equivalence graphs) for congruence closure on Prolog terms.
 
-Overview
-- Classes: each equivalence class is represented by a fresh Prolog variable (its class ID). Union is (=)/2 over class IDs (A=B). Effects are logical and fully backtrackable.
-- Graph: an ordset of Key-Id pairs, ordered by standard term order. Key is any term (may contain variables). ID is the current class representative (a Prolog variable).
-- Rules: DCGs that produce new nodes (Key-Id) and equalities (A=B). Saturation applies rules until a fixpoint.
+Summary
+- Classes: each equivalence class is represented by a fresh Prolog variable (its class ID). Union is A=B (plain (=)/2). All effects are logical and fully backtrackable.
+- Graph: an ordset of Key-Id pairs in standard term order. Key is any term (may contain variables). Id is the current class representative (a Prolog variable).
+- Rules: DCGs that produce new nodes (Key-Id) and equalities (A=B). Saturation applies rules to a fixpoint.
 
 Data model
 - Nodes: ordset of Key-Id; canonicalization ensures at most one pair per distinct Key.
-- Index: rbtree Id -> [Keys] for per-class access during rule matching; always built from canonicalized nodes.
+- Index: rbtree Id -> [Keys] rebuilt from canonicalized nodes for per-class access.
 
 Execution model
-- All DCGs thread the e-graph as a difference list (In/Out).
-- “Mutation” is performed by unifying class ID variables; this may also bind variables inside Keys. Effects are logical, backtrackable, and non-destructive.
+- DCGs thread the e-graph as a difference list (In/Out).
+- “Mutation” is unification of class ID variables; this can also instantiate variables inside Keys. Effects are logical, backtrackable, and non-destructive.
 
 Identity and variants
-- Membership uses standard term order; exact identity uses (==) after ordering.
-- No variant-normalization: keys differing only by variable identity remain distinct by design.
+- Membership uses standard term order; identity after ordering is tested with (==).
+- No variant-normalization: keys that differ only by variable identity remain distinct.
 
-Caveats and notes
-- merge_nodes/2: sort by Key, group, unify all IDs in a group into the first; repeat while any group changed. Because ID unification can bind variables inside Keys, resorting can expose new duplicates.
-- DCG nonterminals (e.g., merge_nodes//0) operate on the same threaded state.
+Caveats
+- merge_nodes/2 repeatedly sorts by Key, groups duplicates, and unifies IDs within each group until no change. Because unification of IDs can bind variables inside Keys, resorting may reveal new duplicates.
 - The length-based fixpoint in saturate//2 ignores alias-only progress; rules must eventually add or remove Key-Id pairs.
-- Class IDs are fresh Prolog variables (not atoms). Unifying IDs aliases classes and can instantiate variables inside Keys. The occurs-check is not used; this is safe because IDs are never unified with compound terms.
-- Validation with extract//0 may further alias IDs (member/2 can bind the ID). Use it only for throwaway validation states, not for persisted graphs.
+- Class IDs are fresh Prolog variables (not atoms). Unifying IDs aliases classes and may instantiate variables inside Keys. No occurs-check is used; safe because IDs are never unified with compound terms.
+- Validation with extract//0 can further alias IDs (member/2 can bind an ID). Use only for throwaway validation states, not for persisted graphs.
 
 Notes on “mutable unique identifiers”
-- Class IDs are plain Prolog variables used as mutable representatives. Unifying two IDs aliases the classes and can instantiate variables that appear inside Keys. This is intentional; all such effects are backtrackable.
-- The rbtree index uses these Prolog variables as keys; always rebuild the index after any aliasing (this module does so per saturation step).
+- Class IDs are plain Prolog variables used as mutable representatives. Unifying two IDs aliases the classes and may instantiate variables appearing inside Keys. All such effects are backtrackable.
+- The rbtree index uses these variables as keys; always rebuild the index after any aliasing (this module does so per saturation step).
 
 See also
 - add//2, union//2, merge_nodes//0, saturate//2, extract//0.
@@ -43,9 +42,9 @@ See also
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  Read-only lookup in an ordset of Key-Val pairs (standard term order).
 %  - Pairs must be a strictly ordered ordset; Key must be nonvar.
-%  - Identity after ordering uses (==); at most one solution.
+%  - Identity is tested with (==) after ordering; at most one solution.
 %  - Complexity: O(N) small-window linear scan (4/2/1 lookahead).
-%  - Errors: var Key -> instantiation_error via compare/3; Key is never bound here.
+%  - Errors: if Key is var, compare/3 raises instantiation_error; Key is not bound here.
 %  Determinism: semidet.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -79,7 +78,7 @@ lookup(Item-V, [X1-V1]) :-
 %  - Compound: add subterms first; Key = F(ChildIDs) where ChildIDs are class IDs of subterms (congruence).
 %  - Atomic (incl. variables): Key = Term.
 %  Notes:
-%    - Id is a fresh Prolog variable (mutable class rep). Unions/rules may alias classes by unification, which can also instantiate variables inside Keys; all effects are backtrackable.
+%    - Id is a fresh Prolog variable (mutable class rep). Unions/rules may alias classes by unification, which may also instantiate variables inside Keys; all effects are backtrackable.
 %    - No canonicalization here; call merge_nodes//0 to collapse duplicates.
 %  Determinism: det.
 add(Term, Id, In, Out) :-
@@ -269,27 +268,29 @@ push_back(L), L --> [].
 %    - push_back(NewNodes): append Key-Id items to the DCG output.
 %    - merge_nodes//0: canonicalize.
 %  Effects are logical and backtrackable (via variable aliasing).
-%  Note: equalities are consumed (not re-enqueued); only Node-Id items flow forward. Alias-only steps will not be observed by the length-based fixpoint in saturate//2 unless they lead to pair additions/removals.
+%  Notes:
+%    - Equalities are consumed (not re-enqueued); only Node-Id items flow forward.
+%    - Alias-only steps are invisible to the length-based fixpoint in saturate//2 unless they add/remove pairs.
 %  Determinism: det.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Saturate with Rules until no new nodes/equalities are produced (fixpoint).
+%  Saturate with Rules until a fixpoint (no new nodes/equalities).
 %  Note: see saturate/4 for the length-based fixpoint caveat (alias-only progress is invisible).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
-%  Saturate for at most MaxSteps iterations (MaxSteps is a non-negative integer or inf for unbounded).
-%  Fixpoint uses lengths before/after rebuild/1 (after merge_nodes/2).
-%  Caveat: the length-only fixpoint ignores alias-only steps; rules must eventually add/remove pairs to make progress.
+%  Saturate for at most MaxSteps iterations (non-negative integer or inf).
+%  Fixpoint compares lengths before/after rebuild/1 (after merge_nodes/2).
+%  Caveat: alias-only steps do not change the length; rules must eventually add/remove pairs.
 %  Determinism: det driver; nondeterminism comes only from rules.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
-%  Underlying 4-ary form used by DCG expansion of saturate//2.
+%  Underlying 4-ary predicate for saturate//2.
 %  Threads the e-graph difference list explicitly (In/Out).
 %  N must be inf or a non-negative integer.
-%  Note: length-based fixpoint; pure Id aliasing with no net pair change is not detected as progress. Use a bounded MaxSteps if rules can cycle without adding/removing pairs.
+%  Note: length-based fixpoint; pure ID aliasing with no net pair change is not detected as progress. Use a bounded MaxSteps if rules can cycle without adding/removing pairs.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -326,7 +327,7 @@ extract(Nodes) :-
 %  DCG variant: validate graph invariants after saturation.
 %  Invariant: after grouping Id→Keys, each Id-group must have at least one concrete Key.
 %  Warning: uses member(Id, Keys), which can bind class ID variables; use only for validation on throwaway states or under backtracking (not for persisted states).
-%  Note: may further alias Ids if Keys contain those Ids; do not run on persisted graphs or states that must remain unchanged.
+%  Note: may further alias IDs if Keys contain those IDs; do not run on persisted graphs or states that must remain unchanged.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each ID-group has a concrete Key.
 %  Note: arguments are typically the same variable to avoid copying; do not rely on side effects.
