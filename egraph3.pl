@@ -37,6 +37,11 @@ Public API
 
 Related
 - merge_nodes/2, make_index/2, rebuild//1.
+
+Notes
+- IDs are logic variables used as mutable unique identifiers; unifying them merges classes (backtrackable).
+- Equality of Keys uses (==) after standard order; variable identity is observable and never normalized.
+- DCGs thread an ordset of Key-Id pairs as a difference list; rules only emit items, rebuild applies (=)/2.
 */
 
 
@@ -45,17 +50,14 @@ Related
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Pure read-only lookup in an ordset (list in standard term order) of Key-Val pairs; never binds.
-%  - Pairs: strictly ordered ordset; Key must be nonvar.
-%  - Equality uses (==) after ordering; variable identity matters; never unifies.
-%  - Complexity: O(N) small-window linear scan (4/2/1 lookahead).
-%  - Errors: var Key triggers instantiation_error via compare/3.
-%  - Side-effects: none; does not bind Key or Pairs.
-%  - Failure: fails cleanly if Key is not present.
+%  Read-only lookup in an ordset of Key-Val pairs (standard order); never binds.
+%  - Pairs: strictly ordered ordset; Key must be nonvar (var -> instantiation_error from compare/3).
+%  - Equality after ordering uses (==); variable identity matters; no unification occurs.
+%  - Complexity: O(N) with a small-window linear scan (4/2/1 lookahead).
+%  - Side-effects: none. Failure means Key absent.
 %  Determinism: semidet.
 %  Notes:
-%    - Pure read; does not alias or bind IDs.
-%    - Comparison uses standard order; equality check uses (==) after ordering; never binds variables.
+%    - Pure read; never aliases class IDs or modifies Pairs.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -142,19 +144,16 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG reference to merge_nodes/2.
-%  In DCGs, writing merge_nodes expands to merge_nodes(+In,-Out); there is no merge_nodes//0 clause by design.
+%  DCG alias of merge_nodes/2; no clause body here (DCG expands to merge_nodes(+In,-Out)).
 %! merge_nodes(+In, -Out) is det.
-%  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat until a fixpoint.
-%  Complexity: O(N log N) per pass (sort + group); may take multiple passes.
-%  Notes:
-%    - Unifying Ids can instantiate variables inside Keys; a subsequent sort can reveal new duplicates, hence multiple passes.
-%    - Leaves exactly one Key-Id pair per distinct Key at fixpoint.
-%    - Change detection uses a fold accumulator: the next pass runs only if at least one group had >1 Id.
+%  Canonicalize: sort by Key, group equal Keys, unify all Ids in each group into the first; repeat to a fixpoint.
+%  Complexity: O(N log N) per pass (sort + group); may need multiple passes if unifications instantiate variables inside Keys.
+%  Effects: only ID variable unifications; Keys are never unified.
 %  Determinism: det.
-%  Note:
-%    - The loop continues if any group had >1 Id or if resorting after unifications exposes new equal Keys.
-%    - Sorting uses standard term order; equality after ordering uses (==); only Ids unify (no occurs-check needed).
+%  Notes:
+%    - Exactly one Key-Id pair remains per distinct Key at the fixpoint.
+%    - Another pass runs if any group had >1 Id or if resorting after unifications reveals new duplicates.
+%    - Sorting uses standard term order; equality after ordering uses (==); no occurs-check is needed because only IDs are unified.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -280,7 +279,7 @@ make_index(In, Index) :-
    ord_list_to_rbtree(Groups, Index).
 
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
-%  Run Rules over Worklist to produce new matches (nodes and equalities).
+%  Run Rules over Worklist to produce Matches (Key-Id items and (=)/2 equalities).
 %  Central collection phase before rebuilding the graph. Worklist is the current node set (ordset of Key-Id pairs).
 %  Determinism: det given Rules/Worklist/Index; produces a (possibly empty) list; no mutation.
 match(Rules, Worklist, Index, Matches) :-
@@ -291,11 +290,11 @@ match(Rules, Worklist, Index, Matches) :-
 %  Note: purely structural; no deduplication and no unification side effects.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
-%  Apply equalities and schedule nodes, then canonicalize:
-%    - exclude(unif, Matches, NewNodes): unifies A=B items and drops them.
-%    - push_back(NewNodes): appends Key-Id items to the DCG output.
-%    - merge_nodes: canonicalizes (calls merge_nodes/2 via DCG).
-%  Effects: only class-ID aliasing via (=)/2; logical and backtrackable. Equalities are consumed; no other mutation. Deduplication happens only in merge_nodes/2.
+%  Apply Matches (a list of Key-Id items and (=)/2 equalities) and canonicalize:
+%    - exclude(unif, Matches, NewNodes): performs A=B unifications and drops equalities.
+%    - push_back(NewNodes): schedules the remaining Key-Id items.
+%    - merge_nodes: canonicalizes the graph.
+%  Effects: only class-ID aliasing via (=)/2; logical and backtrackable. Equalities are consumed; no other mutation. Deduplication occurs only in merge_nodes/2.
 %  Determinism: det.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
@@ -312,13 +311,13 @@ saturate(Rules) -->
 %  Caveat: alias-only steps do not change the length; rules must eventually add/remove pairs.
 %  Determinism: det as a driver; nondeterminism comes only from rules.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
-%  Worker for saturate//2. Threads the e-graph difference list explicitly (In/Out).
-%  MaxSteps must be a non-negative integer. Do not pass the atom inf here; use the DCG
-%  wrappers (saturate//1 or saturate//2) if you need an unbounded loop.
-%  Fixpoint is length-based; pure ID aliasing with no net pair change is invisible. Use a bounded
-%  MaxSteps if rules can cycle without adding/removing pairs.
-%  Implementation: rebuilds the Id->Keys index on every iteration because ID variables may alias.
-%  Note: length-based fixpoint ignores pure aliasing; ensure rules eventually add/remove Key-Id pairs or use a bounded MaxSteps.
+%  Worker for saturate//2. Threads the e-graph explicitly (difference list).
+%  - MaxSteps: non-negative integer. Do not pass inf here; use the DCG wrappers for unbounded loops.
+%  - Fixpoint: length-based; pure ID aliasing with no net Key-Id change is invisible.
+%  - Each iteration rebuilds the Id->Keys index because ID variables may alias after unification.
+%  Determinism: det as a driver; nondet comes only from Rules.
+%  Notes:
+%    - Use a bounded MaxSteps if rules can cycle without adding/removing Key-Id pairs.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -353,11 +352,10 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG variant: validates minimal invariants after saturation.
-%  Invariant: for each Id, its class has at least one concrete Key.
-%  Note: uses member/2 in a way that can alias/bind Id variables; use only for validation on throwaway states or under backtracking, not on persisted graphs.
-%  Side-effects: may bind/alias Id variables; do not call on persisted graphs you intend to keep.
-%  Note: prefer extract/1 in production; use extract//0 only for validation under backtracking.
+%  DCG variant that validates a minimal invariant after saturation:
+%    for each Id, its class has at least one concrete Key.
+%  Warning: uses member/2 in a way that can alias/bind Id variables. Use only for validation on throwaway states or under backtracking; do not call on persisted graphs.
+%  Prefer extract/1 in production.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each ID-group has a concrete Key.
 %  Note: arguments are typically the same variable to avoid copying; do not rely on side effects.
