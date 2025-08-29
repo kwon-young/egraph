@@ -52,8 +52,9 @@ Related
 %  - Side-effects: none; does not bind Key or Pairs.
 %  - Failure: fails cleanly if Key is not present.
 %  Determinism: semidet.
-%  Note: uses member/2 which can alias/bind Id variables during validation; safe only on throwaway states.
-%  Note: comparisons are by standard order; identity is preserved with (==) after ordering; never binds variables.
+%  Notes:
+%    - Pure read; does not alias or bind IDs.
+%    - Comparison uses standard order; equality check uses (==) after ordering; never binds variables.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -140,8 +141,8 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG view of merge_nodes/2. In a DCG body, writing merge_nodes is translated to merge_nodes(+In,-Out).
-%  There is intentionally no merge_nodes//0 clause; calling it in a DCG canonicalizes the state.
+%  DCG reference to merge_nodes/2.
+%  In DCGs, writing merge_nodes expands to merge_nodes(+In,-Out); there is no merge_nodes//0 clause by design.
 %! merge_nodes(+In, -Out) is det.
 %  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat until a fixpoint.
 %  Complexity: O(N log N) per pass (sort + group); may take multiple passes.
