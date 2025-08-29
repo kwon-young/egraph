@@ -34,6 +34,7 @@ Notes
 %  Complexity: O(N) worst-case.
 %  Determinism: semidet — succeeds at most once; fails if Key absent.
 %  Requirements: Pairs is a strictly ordered ordset (standard term order). Identity uses (==) after ordering via compare/3.
+%  Precondition: Key must be ground (or otherwise comparable) for compare/3; passing a variable will error.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -68,6 +69,7 @@ lookup(Item-V, [X1-V1]) :-
 %  Notes:
 %    - Id is a fresh logic variable used as the mutable class identifier; later union/2 may unify it with others.
 %    - DCG threads the e-graph state (In/Out).
+%    - If Term's Key already exists, Id is unified with the existing class Id (no duplicate is inserted).
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -84,6 +86,7 @@ add(Term, Id, In, Out) :-
 %  Notes:
 %    - In/Out are ordsets of Key-Id pairs (standard term order).
 %    - Key identity uses (==) only after ordering; variants with different variables are distinct Keys.
+%    - Node may contain variables inside Keys; later unifications can affect ordering — merge_nodes/2 re-canonicalizes.
 %    - No merging is done here; call merge_nodes/2 after unions.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -114,6 +117,7 @@ union(A, B, In, Out) :-
 %    - Uses a boolean “changed” accumulator to drive the outer recursion.
 %    - Unifications can bind variables inside Keys; re-sorting may reveal new duplicates, requiring another pass.
 %    - Leaves exactly one Key-Id pair per distinct Key.
+%    - Implementation detail: uses foldl/5 to rebuild Key→Rep pairs while threading a Changed flag.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -163,6 +167,7 @@ assoc_([], _, _) --> [].
 %! reduce(+Node, +Index)// is semidet.
 %  Unit for (+): if class of B contains 0, emit A=AB.
 %  Why: eliminate neutral elements; once/1 limits duplicate emissions.
+%  Note: checks for the integer 0 using (==); only keys already bound to 0 qualify.
 reduce(A+B-AB, Index) -->
    {  rb_lookup(B, Nodes, Index),
       once((member(Node, Nodes), Node == 0))
@@ -236,6 +241,7 @@ match(Rules, Worklist, Index, Matches) :-
 %! push_back(+List)// is det.
 %  DCG trick to append a list of items at the end of the current output.
 %  Why: schedule newly discovered items after the current worklist.
+%  Effect: O(1) DCG append via difference lists.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
 %  Apply equalities (by unification), enqueue new nodes, then canonicalize.
@@ -283,6 +289,7 @@ unif(A=B) :- A=B.
 %! extract(-Nodes) is det.
 %  Predicate variant: return the current nodes as Nodes (no validation).
 %  Why: pair with extract//0 for validation in DCG contexts.
+%  Recommendation: prefer this predicate in user code to avoid identifier mutation.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
