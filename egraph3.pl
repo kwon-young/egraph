@@ -104,6 +104,8 @@ union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
 
+%! merge_nodes//0 is det.
+%  DCG variant: canonicalize the threaded node set (In/Out).
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize the node set after Id unifications.
 %  How: sort/2, group by Key, unify all Ids in each group with the first, then repeat until stable.
@@ -283,18 +285,18 @@ unif(A=B) :- A=B.
 %  Why: pair with extract//0 for validation in DCG contexts.
 extract(Nodes) :-
    extract(Nodes, Nodes).
-%! extract//0 is det.
+%! extract//0 is semidet.
 %  DCG variant: validate graph invariants after saturation.
-%  Intended invariant: for every Key-Ids group, Key ∈ Ids.
-%  Note: Current code groups after transpose_pairs/2 (Id→Keys) and checks member(Id, Keys); verify this matches the intent.
+%  Intended invariant: after grouping Id→Keys, each Id-group must have at least one concrete Key.
+%  Note: The current check uses member(Id, Keys), which unifies Id with a Key and can bind Ids; use only for validation on throwaway states or under backtracking.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
    extract_node(Groups).
 %! extract_node(+Groups) is semidet.
-%  True iff each group's representative occurs among its members.
-%  Why: minimal consistency check for a well-formed extraction.
-%  Note: With Id→Keys groups (from transpose_pairs/2), this tests member(Id, Keys); confirm grouping matches the invariant.
+%  True iff every Id-group has at least one concrete Key; fails otherwise.
+%  Why: minimal consistency check; may bind Ids via member/2.
+%  Note: member/2 here can bind the group Id to a Key term, logically mutating identifiers; avoid outside validation.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
