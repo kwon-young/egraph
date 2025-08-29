@@ -5,11 +5,11 @@ E-graphs (equivalence graphs) with congruence closure for Prolog terms, fully ba
 
 Essentials
 - State is an ordset of Key-Id pairs (standard order).
-- Id are fresh logic variables acting as mutable, backtrackable class identifiers. Unifying two Ids merges classes.
+- Ids are fresh Prolog logic variables acting as mutable, backtrackable class identifiers (mutable unique identifiers). Unifying two Ids merges classes.
 - A DCG threads the state as a difference list; the only mutation is Id unification.
 
 Representation
-- Node Key: either an atomic/var term or a compound whose arguments are child class Ids (congruence).
+- Node Key: either an atomic or variable term, or a compound whose arguments are child class Ids (congruence).
 - Canonical form: after merge_nodes/2 there is at most one Key-Id per distinct Key (equality after sort uses (==), so variable identity matters).
 - Index: rbtree Id -> [Keys], rebuilt after each canonicalization.
 
