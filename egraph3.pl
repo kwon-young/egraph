@@ -10,7 +10,7 @@ Summary
 
 Data
 - Nodes: ordset of Key-Id; canonicalization keeps at most one pair per Key.
-- Index: rbtree Id -> [Keys] for per-class access during rule matching.
+- Index: rbtree Id -> Keys (list) for per-class access during rule matching.
 
 Execution model
 - All DCGs thread the graph as a difference list (In/Out).
@@ -37,8 +37,8 @@ Notes
 %  - Search: small-window linear scan with 4/2/1 lookahead (no tree lookup).
 %  - Requires: Pairs is a strictly ordered ordset; Key must be nonvar.
 %  - Equality: after ordering, uses (==) for exact identity; succeeds at most once.
-%  - Complexity: O(N) worst case; no allocation on success (reuses Val).
-%  - Note: a var Key will raise in compare/3; this predicate never binds Key.
+%  - Complexity: O(N) worst case; does not allocate on success (unifies Val with the stored value).
+%  - Note: a var Key will throw in compare/3; this predicate never binds Key.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -115,7 +115,7 @@ union(A, B, In, Out) :-
 %! merge_nodes//0 is det.
 %  DCG: canonicalize the threaded node set (In/Out).
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize Nodes after Id unifications: sort, group by Key, unify all Ids per group with the first; repeat while any group changed.
+%  Canonicalize Nodes after Id unifications: sort, group by Key, unify all Ids per group with the first; repeats while any group changed.
 %  Complexity: O(N log N) per pass; repeats to a fixpoint.
 %  Notes:
 %    - The pass sets a change flag; recursion continues while true.
@@ -213,7 +213,7 @@ constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply all DCG rules to Node with access to Index.
-%  Rules is a list of callables Rule(Node, Index)//; backtracks over rules.
+%  Rules is a list of DCG callables Rule(Node, Index)//; backtracks over Rules.
 %  Notes:
 %    - Rules should be pure producers; unification/merging happens in rebuild//1.
 %  Determinism: nondet over Rules; output is appended to the DCG stream.
@@ -242,7 +242,7 @@ make_index(In, Index) :-
 
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
 %  Run Rules over Worklist to produce new matches (nodes and equalities).
-%  Central collection phase before rebuilding the graph.
+%  Central collection phase before rebuilding the graph. Worklist is the current node set (ordset of Key-Id pairs).
 %  Determinism: det given Rules/Worklist/Index; output is a (possibly empty) list.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
