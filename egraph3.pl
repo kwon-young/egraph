@@ -1,18 +1,22 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for term equivalence using Prolog logic variables as class IDs.
+E-graphs for term equivalence with Prolog logic variables as class IDs.
 
-Why:
-- Class IDs are Prolog logic variables; union is just unification (=/2).
-- Nodes are kept in an ordered set of Key-Id pairs; deduplication and merging are cheap.
-- Rewrite rules are DCGs that emit new nodes (Key-Id) and equalities (Id=Id); saturation applies rules to a fixpoint.
+Overview:
+- Class IDs are logic variables; union is plain unification (=/2).
+- The e-graph is an ordset of Key-Id pairs (Key is a term; Id is a var).
+- Rules are DCGs that emit new pairs and equalities; saturation runs them to a fixpoint.
+
+Key points:
+- After unions, several pairs may share a Key while their Ids are aliases; merge_nodes/2 canonicalizes by grouping on Key and unifying Ids.
+- Index (an rbtree) maps each class Id to the list of Keys in that class for targeted rule matching.
+- DCG nonterminals thread the e-graph as a difference list (In/Out is the ordset).
+- Identity of Keys uses standard term order for set operations and (==) for exact identity; variants with distinct variables are distinct Keys.
 
 Notes:
-- After unions, multiple pairs may share the same Key while their Ids are aliases; merge_nodes/2 canonicalizes.
-- Index maps each class Id to the concrete nodes currently known in that class for targeted rule application.
-- Predicates with // are DCG nonterminals that thread the e-graph as a difference list (In/Out is an ordset of Key-Id).
-- Identity of Keys uses standard term order and (==); variants with distinct variables are different Keys by design.
+- Calling a nonterminal like merge_nodes//0 inside a DCG reuses merge_nodes/2 directly (same (In,Out) pair).
+- Using logic variables as IDs makes unification the only “mutation”. Backtracking undoes unions, keeping the design purely logical.
 */
 
 
@@ -21,12 +25,11 @@ Notes:
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Lookup by key in an ordset of Key-Val pairs with fewer comparisons.
-%  Why: minimize constant factors during saturation by peeking 4/2/1 items
-%  at a time and comparing only on keys; Val is returned without touching
-%  the structure of the set.
-%  Notes: Pairs must be a strictly ordered set (standard term order). Key
-%  equality is tested with (==) after ordering by compare/3.
+%  Locate Val for Key in an ordset of Key-Val pairs with fewer comparisons.
+%  Why: reduce constant factors during saturation by peeking 4/2/1 items and
+%  comparing only Keys; Val is returned without touching the set structure.
+%  Notes: Pairs must be a strictly ordered ordset (standard term order). Key
+%  identity uses (==) after ordering via compare/3. Does not rebuild the set.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -228,10 +231,9 @@ match(Rules, Worklist, Index, Matches) :-
 %  Why: schedule newly discovered items after the current worklist.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
-%  Drop trivial equalities, enqueue new items, then canonicalize nodes.
-%  Why: maintain a normalized e-graph while growing it.
-%  Note: merge_nodes/0 is called as a DCG nonterminal; in this context
-%  it relies on the same In/Out list threading as merge_nodes/2.
+%  Apply equalities (by unification), enqueue new nodes, then canonicalize.
+%  Why: maintain a normalized e-graph while growing it and integrate A=B edges immediately.
+%  Note: merge_nodes//0 is invoked as a DCG nonterminal; this reuses merge_nodes/2 on the same (In,Out).
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
@@ -267,8 +269,9 @@ saturate(Rules, N, In, Out) :-
    ).
 
 %! unif(+Eq) is semidet.
-%  True iff Eq is an already-true equality A=B.
-%  Why: used with exclude/3 to discard redundant equalities.
+%  True for equalities A=B and performs the unification as a side effect.
+%  Why: used with exclude/3 in rebuild//1 to apply equalities and drop them from the worklist.
+%  Note: this intentionally mutates class IDs via unification; it fails for non-(=)/2 items.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is det.
@@ -276,10 +279,10 @@ unif(A=B) :- A=B.
 %  Why: pair with extract//0 for validation in DCG contexts.
 extract(Nodes) :-
    extract(Nodes, Nodes).
-%! extract// is det.
-%  DCG variant: validate that each equivalence class contains its key.
-%  Why: ensures that for each class Key-Ids, Key ∈ Ids.
-%  Notes: Fails if internal invariants are broken (useful as a sanity check).
+%! extract//0 is det.
+%  DCG variant: validate that each equivalence class contains its Key.
+%  Why: ensures for every group Key-Ids that Key ∈ Ids.
+%  Notes: Fails if invariants are broken; useful as a sanity check after saturation.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
