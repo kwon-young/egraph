@@ -1,16 +1,17 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graph for term equivalence using Prolog variables as class IDs.
+E-graph for term equivalence using Prolog logic variables as class IDs.
 
 Why:
-- Prolog variables act as mutable unique identifiers for equivalence classes; unification (=/2) performs union.
+- Logic variables act as unique identifiers for equivalence classes; union is performed by unification (=/2).
 - Nodes are stored as an ordered set of Key-Id pairs to deduplicate and make merging cheap.
-- Rewrite rules are expressed as DCGs that emit new nodes and equalities; saturation applies them until a fixpoint.
+- Rewrite rules are DCGs that emit new nodes and equalities; saturation applies them until a fixpoint.
 
 Notes:
 - After unions, multiple nodes may collapse to the same key with aliased Ids; merge_nodes/2 resolves this to a canonical set.
 - Indexes map class IDs to member nodes for targeted rule application.
+- All predicates with // are DCG nonterminals that thread the e-graph as the In/Out difference list (an ordset of Key-Id pairs).
 */
 
 
@@ -19,10 +20,12 @@ Notes:
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Lookup by key in an ordset of Key-Val pairs with fewer compares.
+%  Lookup by key in an ordset of Key-Val pairs with fewer comparisons.
 %  Why: minimize constant factors during saturation by peeking 4/2/1 items
 %  at a time and comparing only on keys; Val is returned without touching
 %  the structure of the set.
+%  Notes: Pairs must be a strictly ordered set (standard term order). Key
+%  equality is tested with (==) after ordering by compare/3.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -54,6 +57,8 @@ lookup(Item-V, [X1-V1]) :-
 %  Add a term to the e-graph and return its class Id.
 %  Why: structural interning — subterms are added first and their class
 %  IDs become the children of the node key; ensures maximal sharing.
+%  Notes: Id is a logic variable used as the class representative and may
+%  later be unified by unions.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -68,6 +73,9 @@ add(Term, Id, In, Out) :-
 %  Ensure Node has a unique class Id in the ordset; reuse if present.
 %  Why: the Id variable is the equivalence-class representative; reusing
 %  it preserves class identity across insertions.
+%  Notes: In/Out are ordsets of Node-Id pairs (standard term order). Key
+%  identity uses (==) after ordering; variants with distinct variables are
+%  considered different keys.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -80,6 +88,8 @@ add_node(Node, Id, In, Out) :-
 %  Union two equivalence classes by unifying their Id variables, then
 %  request a structural merge to remove duplicates caused by aliasing.
 %  Why: unification is the cheapest "mutable" union in Prolog.
+%  Notes: A and B must be class IDs (logic variables) returned by add/3 or
+%  add_node/4; unification may bind variables appearing in nodes.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -89,6 +99,7 @@ union(A, B, In, Out) :-
 %  Why: after Id unifications, multiple Key-Id pairs may share keys;
 %  grouping by key and unifying Ids collapses duplicates; repeat until
 %  no changes remain to reach a fixpoint.
+%  Complexity: O(N log N) per pass due to sort/2; repeats until stable.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -100,6 +111,7 @@ merge_nodes(In, Out) :-
 %  Unify all Ids in a group into the first and signal if anything changed.
 %  Why: propagates equivalence within a key-group and drives the outer
 %  fixpoint in merge_nodes/2.
+%  Notes: Changed is true iff the group had more than one Id (i.e., T\==[]).
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
    (  T == []
@@ -111,6 +123,7 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
 %  Commutativity for (+): emit B+A with equality BA=AB.
 %  Why: model equalities without destructive rewrites; both orders inhabit
 %  the same class.
+%  Notes: matches only +(A,B) nodes.
 comm((A+B)-AB, _Nodes) -->
    !,
    [B+A-BA, AB=BA].
@@ -119,6 +132,7 @@ comm(_, _) --> [].
 %  Associativity for (+): for (A+(B+C)) emit ((A+B)+C) and equality.
 %  Why: explore rebracketings that already exist in the target class to
 %  avoid quadratic blind search.
+%  Notes: requires that the class of BC is present in Index.
 assoc((A+BC)-ABC, Index) -->
    !,
    {rb_lookup(BC, Nodes, Index)},
@@ -178,17 +192,21 @@ constant_folding_b([], _, _, _) --> [].
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply all rules (DCGs) to Node with access to Index.
 %  Why: treat rules as pluggable DCGs for extensibility.
+%  Notes: Rules is a list of DCGs of the form Rule(Node, Index)//.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
 %  Meta-call a single DCG rule on Node.
 %  Why: decouple the saturation engine from concrete rewrites.
+%  Notes: Rule is a callable DCG of arity 3: Rule(Node, Index)//.
 rule(Index, Node, Rule) -->
    call(Rule, Node, Index).
 
 %! make_index(+Nodes, -Index) is det.
 %  Build an rbtree mapping Id -> [Nodes] from Key-Id pairs.
 %  Why: fast per-class access when matching rules.
+%  Notes: Nodes must be an ordset of Key-Id; Index maps Id to all keyed
+%  nodes in its class.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -220,6 +238,8 @@ saturate(Rules) -->
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Saturate for at most MaxSteps iterations (inf for unbounded).
 %  Why: bound the search when desired while preserving convergence checks.
+%  Notes: fixpoint is detected by length/2 before and after rebuild/1
+%  (after merge_nodes), which relies on canonicalization to remove dups.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -244,7 +264,7 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is det.
-%  Predicate variant: return the current nodes as Nodes.
+%  Predicate variant: return the current nodes as Nodes (no validation).
 %  Why: pair with extract//0 for validation in DCG contexts.
 extract(Nodes) :-
    extract(Nodes, Nodes).
