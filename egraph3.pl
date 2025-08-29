@@ -2,23 +2,21 @@
 
 /** <module> egraph
 E-graphs with congruence closure for Prolog terms.
-Backtrackable: the only effect is unification of class identifiers (logic variables used as mutable unique IDs).
 
-Core
-- State: ordset of Key-Id pairs (standard order).
-- Ids: fresh logic variables acting as mutable, backtrackable class identifiers; aliasing is by (=)/2 unification.
-- Keys: atom/var or compound F(ChildIds). Variable identity is observable (no α-normalization).
+Essentials
+- Class IDs are fresh logic variables that act as mutable, backtrackable identifiers; aliasing is only via (=)/2.
+- State is an ordset of Key-Id pairs (standard order). Keys are atom/var or F(ChildIds); variable identity is observable (no α-normalization).
 - Canonical form: after merge_nodes/2 there is at most one Key-Id per Key; the Id→Keys index is rebuilt from the canonical set.
 
-Execution
+Execution model
 - DCGs thread the state as a difference list; rules only emit Key-Id items and (=)/2 equalities (they never unify).
 - rebuild//1 applies equalities (unifies Ids), schedules items, then calls merge_nodes/2.
-- Unifying Ids may instantiate variables inside Keys; merge_nodes/2 repeats to a fixpoint.
+- Unifying Ids may instantiate variables inside Keys; merge_nodes/2 repeats until no new merges appear.
 
 Caveats
 - Fixpoint in saturate//2 is length-based; alias-only steps do not count as progress.
 - Ids are variables; do not serialize or rely on print names.
-- extract//0 validates using member/2 and can alias Ids; prefer extract/1 in user code.
+- extract//0 performs validation using member/2 and can alias Ids; prefer extract/1 in user code.
 
 API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
@@ -27,7 +25,7 @@ Related
 - merge_nodes/2, make_index/2, rebuild//1.
 
 Notes
-- Key equality uses (==) after standard order; variable identity matters.
+- Key equality checks use (==) after ordering; variable identity matters.
 - The only mutation is unification of Id variables; all effects are logical and backtrackable.
 */
 
