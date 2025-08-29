@@ -4,19 +4,19 @@
 E-graphs with congruence closure for Prolog terms.
 
 Essentials
-- Class IDs are fresh logic variables that act as mutable, backtrackable identifiers; aliasing is only via (=)/2.
-- State is an ordset of Key-Id pairs (standard order). Keys are atomic/var or F(ChildIds); variable identity is observable (no α-normalization).
+- Class Ids are fresh logic variables acting as mutable, backtrackable identifiers; aliasing is only via (=)/2.
+- State is an ordset of Key-Id pairs (standard order). Keys are atomic/var or F(ChildIds); variable identity is observable (no alpha-normalization).
 - Canonical form: after merge_nodes/2 there is at most one Key-Id per Key; the Id→Keys index is rebuilt from the canonical set.
 
 Execution model
-- DCGs thread the state as a difference list; rules only emit Key-Id items and (=)/2 equalities (they never unify).
-- rebuild//1 applies equalities (unifies Ids), schedules items, then calls merge_nodes/2.
+- DCGs thread the state as a difference list; rules emit only Key-Id items and (=)/2 equalities (they never unify).
+- rebuild//1 applies equalities (unify Ids), schedules items, then calls merge_nodes/2.
 - Unifying Ids may instantiate variables inside Keys; merge_nodes/2 repeats until no new merges appear.
 
 Caveats
 - Fixpoint in saturate//2 is length-based; alias-only steps do not count as progress.
 - Ids are variables; do not serialize or rely on print names.
-- extract//0 performs validation using member/2 and can alias Ids; prefer extract/1 in user code.
+- extract//0 validates using member/2 and can alias Ids; prefer extract/1 in user code.
 
 API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
@@ -35,13 +35,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only lookup in an ordset of Key-Val pairs.
-%  - Pairs must be a strictly ordered ordset; Key must be nonvar.
-%  - Comparison uses standard order; equality check uses (==), preserving variable identity.
-%  - Complexity: O(N) small-window scan; no bindings; fails if absent.
+%  Read-only lookup in an ordset of Key-Val pairs (standard order).
+%  - Requires: Pairs is a strictly ordered ordset; Key is nonvar.
+%  - Compares by standard order; confirms equality with (==) to preserve variable identity in Keys.
+%  - Complexity: O(N) scan using a small unrolled window; creates no bindings; fails if absent.
 %  Notes:
-%    - Pure: never binds Keys or Ids.
-%    - Uses (==) after ordering to respect variable identity in Keys.
+%    - Pure: never binds Keys or Ids; does not change Pairs.
+%    - This is intentionally O(N); we trade simplicity and locality for asymptotics.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -320,11 +320,8 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  Validate minimal invariant after saturation:
-%    each Id-class has at least one concrete Key.
-%  Warning: uses member/2 and can alias/bind Ids. Use only for validation on throwaway states or under backtracking; prefer extract/1.
-%  Notes:
-%    - Because Ids are logic variables, member/2 may instantiate/alias Ids during validation.
+%  Validate: every Id-class has at least one concrete Key.
+%  Warning: uses member/2 and can alias/bind Ids; use only for validation or under backtracking. Prefer extract/1 in user code.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Helper for extract//0; succeeds iff each Id-group has a concrete Key.
 %  Note: typically called with the same variable to avoid copying; do not rely on side effects (may alias Ids).
