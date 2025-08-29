@@ -28,8 +28,9 @@ Caveats
 - extract//0 validates invariants but may bind/alias IDs via member/2; use only for validation on throwaway states or under backtracking (not on persisted graphs).
 
 Notes on “mutable unique identifiers”
-- IDs are plain logic variables acting as mutable class representatives. Unifying IDs aliases classes and may instantiate variables in Keys; all effects are backtrackable.
+- IDs are plain logic variables acting as mutable class representatives (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys; all effects are backtrackable.
 - The Id->Keys index uses these variables as map keys; always rebuild after aliasing.
+- Do not persist or print these IDs as stable identifiers; their identity and aliasing are purely runtime properties.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
@@ -147,6 +148,7 @@ merge_nodes(In, Out) :-
 %  Unify all IDs in a Key-group into the first; set Changed=true if the group had >1 ID.
 %  Result: Rep is the first ID; each tail ID is unified with it.
 %  Drives the outer fixpoint in merge_nodes/2.
+%  Note: unifying IDs may instantiate variables appearing inside Keys; a subsequent sort can therefore reveal new duplicates.
 %  Determinism: det.
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
@@ -159,7 +161,7 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
 %  Commutativity of (+): from (A+B)-AB emit B+A-BA and AB=BA.
 %  Models equality without in-place rewrites; both orders share the class.
 %  Matches only +(A,B) nodes; emits at most one result per match.
-%  Note: rules never unify class IDs; aliasing happens only in rebuild//1.
+%  Note: BA is a fresh class ID for B+A; AB=BA is consumed by rebuild//1 to alias classes. Rules never perform unification themselves.
 %  Determinism: nondet over the worklist; at most one emission per matching node (prevents duplicate blow-up).
 comm((A+B)-AB, _Nodes) -->
    !,
@@ -168,7 +170,7 @@ comm(_, _) --> [].
 %! assoc(+Node, +Index)// is nondet.
 %  Associativity of (+): from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  Restricts BC candidates to class(BC) via Index to avoid quadratic search over unrelated nodes.
-%  Note: rule only emits nodes/equalities; no ID unification here.
+%  Note: AB and ABC_ are fresh class IDs; ABC=ABC_ is consumed by rebuild//1 to alias. The rule only emits nodes/equalities; no unification here.
 assoc((A+BC)-ABC, Index) -->
    !,
    {rb_lookup(BC, Nodes, Index)},
@@ -188,7 +190,7 @@ assoc_([], _, _) --> [].
 %! reduce(+Node, +Index)// is semidet.
 %  Neutral element of (+): if class(B) contains the integer 0, emit A=AB.
 %  Eliminates the unit; once/1 avoids duplicates.
-%  Note: uses (==) to match 0 exactly (not 0.0); only Keys already bound to 0 qualify. No ID unification here.
+%  Note: uses (==) to match 0 exactly (not 0.0); only Keys already bound to 0 qualify. Emits A=AB; unification happens later in rebuild//1 (the rule itself does not unify).
 reduce(A+B-AB, Index) -->
    {  rb_lookup(B, Nodes, Index),
       once((member(Node, Nodes), Node == 0))
@@ -198,7 +200,7 @@ reduce(A+B-AB, Index) -->
 reduce(_, _) --> [].
 %! constant_folding(+Node, +Index)// is nondet.
 %  Fold numeric additions (integers/floats) into a single constant.
-%  Shrinks the search space by canonicalizing ground arithmetic; preserves AB as the class Id via C=AB.
+%  Shrinks the search space by canonicalizing ground arithmetic; introduces fresh C and preserves AB as the class Id via C=AB.
 %  Note: uses is/2 for evaluation; the rule only emits nodes/equalities and does not unify IDs.
 constant_folding((A+B)-AB, Index) -->
    !,
@@ -219,7 +221,7 @@ constant_folding_a([VA | ANodes], B, AB, Index) -->
 constant_folding_a([], _, _, _) --> [].
 %! constant_folding_b(+ClassB, +VA, -AB, +Index)// is nondet.
 %  Helper: for numeric VB in class(B) compute VC is VA+VB; emit VC-C and C=AB.
-%  Introduces C as the class Id for VC while preserving AB as the class Id for the sum via C=AB.
+%  Introduces fresh C as the class Id for VC while preserving AB as the class Id for the sum via C=AB (consumed by rebuild//1).
 %  Note: arithmetic uses is/2; evaluation follows Prolog's numeric tower and type promotion rules.
 %  Determinism: nondet over numeric members of class(B).
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
