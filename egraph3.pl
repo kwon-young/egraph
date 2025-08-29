@@ -1,29 +1,29 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs (equivalence graphs) for congruence closure on Prolog terms.
+E-graphs (equivalence graphs) with backtrackable congruence closure on Prolog terms.
 
-Overview
-- Classes are represented by fresh Prolog variables (IDs). Union is (=)/2. All effects are logical and backtrackable.
+Essentials
+- Class identifiers are fresh logic variables (IDs). Union is (=)/2 between IDs. All effects are logical and fully backtrackable.
 - The graph is an ordset of Key-Id pairs (standard term order). Keys may contain variables; after ordering, identity uses (==), so variable identity matters.
 - Rules are DCGs that produce nodes (Key-Id) and equalities (A=B). Saturation applies rules to a fixpoint.
 
 Data model
-- Nodes: ordset of Key-Id; canonicalization ensures at most one pair per distinct Key.
-- Index: rbtree Id -> [Keys], rebuilt after canonicalization for per-class access.
+- Nodes: ordset of Key-Id. Canonicalization guarantees at most one pair per distinct Key.
+- Index: rbtree Id -> [Keys], rebuilt after each canonicalization to reflect any ID aliasing.
 
 Execution model
 - DCGs thread the e-graph as a difference list (In/Out).
-- The only “mutation” is unifying class ID variables. This may instantiate variables inside Keys. Effects are logical, fully backtrackable, and non-destructive.
+- The only “mutation” is unifying class ID variables. This can instantiate variables inside Keys but is backtrackable and non-destructive.
 
 Identity and variants
-- Membership uses standard term order; after ordering, identity uses (==).
-- No variant-normalization: structurally equal Keys that differ only by variable identity remain distinct.
+- Membership uses standard term order; identity after ordering uses (==).
+- No variant-normalization: structurally equal Keys that differ only in variable identity are distinct.
 
 Caveats
-- merge_nodes/2: sort by Key, group equal Keys, unify all IDs in each group into the first; repeat to a fixpoint. Because ID unification can instantiate variables in Keys, re-sorting may reveal new duplicates.
-- saturate//2 fixpoint: compares lengths before/after rebuild; pure aliasing with no net Key-Id change is invisible. Rules must eventually add/remove pairs.
-- Class IDs are variables (not atoms). Unifying IDs aliases classes and can instantiate variables occurring in Keys. No occurs-check is needed here because IDs are only unified with IDs (never with compounds).
+- merge_nodes/2: sort by Key, group equal Keys, unify all IDs in each group into the first; repeat to a fixpoint. ID unification can instantiate variables inside Keys; re-sorting can reveal new duplicates.
+- saturate//2 fixpoint: compares list lengths before/after rebuild; pure aliasing with no net Key-Id change is invisible. Rules must eventually add or remove pairs to make progress.
+- IDs are variables (not atoms). Unifying IDs aliases classes and may instantiate variables occurring in Keys. No occurs-check is needed here because IDs are only unified with IDs (never with compounds).
 - extract//0 validates but may bind/alias IDs via member/2. Use only on throwaway states or under backtracking, not on persisted graphs.
 
 Notes on “mutable unique identifiers”
@@ -122,8 +122,9 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG: canonicalize the threaded node set (In/Out).
-%  Implementation: provided by merge_nodes/2 (explicit DCG form).
+%  DCG synonym for merge_nodes/2: canonicalize the threaded node set (In/Out).
+%  Rationale: in DCGs, calling merge_nodes//0 expands to merge_nodes/2 (explicit DCG form).
+%  Note: no separate //0 clause exists; this relies on the DCG translator.
 %! merge_nodes(+In, -Out) is det.
 %  Sort by Key, group equal Keys, unify all Ids in each group into the first; repeat while any group changed.
 %  Complexity: O(N log N) per pass (sort + group); repeats until a fixpoint.
