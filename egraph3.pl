@@ -48,11 +48,11 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only lookup in an ordset of Key-Val pairs (standard order).
-%  - Requires: Pairs is a strictly ordered ordset; Key must be nonvar.
-%  - Equality: narrow by standard order, then confirm with (==) so variable identity in Keys is preserved.
-%  - Complexity: O(N) scan (small unrolled window). Pure (does not bind Keys); unifies Val on success; fails if absent.
-%  Note: intentional O(N) for simplicity/locality over asymptotics.
+%  Read-only lookup in an ordset of Key-Val pairs.
+%  - Requires: Pairs is strictly ordered by standard order; Key nonvar.
+%  - Equality: narrow by standard order, then confirm with (==) to preserve variable identity in Keys.
+%  - Complexity: O(N) linear scan (4-way unrolled). Pure: does not bind Keys; unifies Val on success; fails if absent.
+%  Note: deliberately O(N) for simplicity and cache locality.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -87,9 +87,9 @@ lookup(Item-V, [X1-V1]) :-
 %  - Atomic/var: Key = Term. Variable identity is part of the Key (no alpha/variant-normalization).
 %  - No canonicalization here; duplicates may be introduced. Use merge_nodes/2 to collapse.
 %  Notes:
-%    - Id is a fresh logic variable (mutable class Id via unification). Unifying Ids may instantiate variables inside Keys; effects are logical and backtrackable.
-%    - DCG state is an ordset of Key-Id pairs (standard order). Rules do not unify; equalities are consumed by rebuild//1.
-%    - Pure w.r.t. Keys: only creates fresh Id variables; no other bindings.
+%    - Id is a fresh logic variable (mutable class Id). Unifying Ids can instantiate variables inside Keys; effects are logical and backtrackable.
+%    - DCG state is an ordset of Key-Id pairs (standard order). Rules do not unify; equalities are consumed only in rebuild//1.
+%    - Pure w.r.t. Keys: allocates fresh Id variables; no other bindings.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -101,12 +101,12 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node has a class Id; reuse existing Id if present, else insert Node-Id.
-%  - In/Out are ordsets of Key-Id (standard order). Equality after ordering uses (==).
+%  Ensure Node (the Key) has a class Id; reuse existing Id if present, else insert Node-Id.
+%  - In/Out are ordsets of Key-Id (standard order). Equality after ordering is confirmed with (==) to preserve variable identity in Keys.
 %  - No unification or canonicalization here; call merge_nodes/2 after any aliasing.
 %  Side-effects: none (except allocating a fresh Id when Node is new). Determinism: det.
 %  Notes:
-%    - Ids are logic variables serving as mutable, unique class Ids (by later unification).
+%    - Ids are logic variables used as mutable, unique class identifiers (by later unification).
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -130,15 +130,15 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG alias of merge_nodes/2 (expands to merge_nodes(+In,-Out)).
+%  DCG alias of merge_nodes/2 (merge_nodes(+In,-Out)).
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize: sort by Key, group equal Keys, unify Ids within each group into the first; repeat to a fixpoint.
-%  - Complexity: O(N log N) per pass (sort+group); multiple passes if unification instantiates vars inside Keys.
+%  Canonicalize to one Key-Id per Key:
+%  sort by Key, group equal Keys, unify all Ids in each group into the first; repeat to a fixpoint.
+%  - Complexity: O(N log N) per pass (sort+group); extra passes if unification instantiates vars inside Keys.
 %  - Effects: only Id unifications; Keys are never unified. Determinism: det.
 %  Notes:
-%    - Exactly one Key-Id per Key at fixpoint; preserves variable identity in Keys.
+%    - Exactly one Key-Id per Key at fixpoint; variable identity in Keys is preserved.
 %    - Another pass runs if any group had >1 Id or resorting reveals new duplicates.
-%    - Ids are logic variables; unification can ground/instantiate variables embedded in Keys, enabling new merges.
 %    - Terminates: each pass either unifies at least one pair of Ids or leaves the set unchanged; the set is finite.
 merge_nodes(In, Out) :-
    sort(In, Sort),
@@ -148,10 +148,10 @@ merge_nodes(In, Out) :-
    ;  Sort = Out
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
-%  Unify all Ids in a Key-group into the first; set Changed=true if the group had >1 Id.
+%  Unify all Ids in a Key-group into the first; set Changed=true iff the group had >1 Id.
 %  Result: Rep is the first Id; each tail Id is unified with it.
 %  Drives the outer fixpoint in merge_nodes/2.
-%  Note: unifying Ids may instantiate variables inside Keys; a subsequent sort can reveal new duplicates.
+%  Note: unifying Ids can instantiate variables inside Keys; a subsequent sort can reveal new duplicates.
 %  Determinism: det.
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
@@ -237,14 +237,14 @@ constant_folding_b([VB | BNodes], VA, AB, Index) -->
 constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
-%  Apply each DCG Rule(Node,Index)// to Node with access to Index; backtracks over Rules.
+%  Apply each DCG Rule(Node,Index)// to Node with access to Index; nondet over Rules.
 %  Note: rules are pure producers (emit nodes and A=B); Id aliasing happens only in rebuild//1.
 %  Determinism: nondet over Rules; outputs are appended to the DCG stream.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
 %  Meta-call a single DCG rule Rule(Node,Index)// on Node.
-%  Determinism: follows the determinism of Rule/3.
+%  Determinism: matches the determinism of Rule/3.
 rule(Index, Node, Rule) -->
    call(Rule, Node, Index).
 
@@ -253,6 +253,7 @@ rule(Index, Node, Rule) -->
 %  - Complexity: O(N log N) (group + tree build).
 %  - Ids are variables and may alias; always rebuild after aliasing.
 %  - Assumes Nodes are canonicalized by merge_nodes/2. Determinism: det.
+%  Note: Index is used read-only by rules; never store it across aliasing steps.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -262,12 +263,14 @@ make_index(In, Index) :-
 %  Run Rules over Worklist to produce Matches (Key-Id items and (=)/2 equalities).
 %  Central collection phase before rebuilding the graph. Worklist is the current node set (ordset of Key-Id pairs).
 %  Determinism: det given Rules/Worklist/Index; produces a (possibly empty) list; no mutation.
+%  Note: Rules must not perform unification; only emit nodes and equalities.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
 %! push_back(+List)// is det.
 %  DCG helper: append List at the end of the current output.
 %  Schedules newly discovered items after the current worklist (O(1) via difference lists).
 %  Note: purely structural; no deduplication and no unification side effects.
+%  Determinism: det.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
 %  Apply Matches (Key-Id items and (=)/2 equalities) and canonicalize:
@@ -277,7 +280,7 @@ push_back(L), L --> [].
 %  Effects: only class-Id aliasing via (=)/2; logical and backtrackable. Equalities are consumed; no other mutation. Deduplication occurs only in merge_nodes/2.
 %  Determinism: det.
 %  Notes:
-%    - unif/1 intentionally performs side-effect unification of Id variables; use only via exclude/3 here. This is the single place where (=)/2 is executed.
+%    - unif/1 intentionally performs side-effect unification of Id variables; use only via exclude/3 here. This is the only place where (=)/2 is executed.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
@@ -298,7 +301,7 @@ saturate(Rules) -->
 %  - Fixpoint is length-based; alias-only progress is invisible.
 %  Determinism: det driver; nondet comes only from Rules.
 %  Notes:
-%    - Rules must be pure producers (emit items and equalities only). Any unification they rely on should happen via rebuild//1.
+%    - Rules must be pure producers (emit nodes and equalities only). Any unification they rely on should happen via rebuild//1.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -322,6 +325,7 @@ saturate(Rules, N, In, Out) :-
 %  Use with exclude/3 to apply equalities and drop them from a worklist.
 %  Effects: intentionally unifies class Id variables; fails for non-(=)/2 items. Effects are logical and backtrackable.
 %  Determinism: semidet; succeeds once on (=)/2, fails otherwise.
+%  Note: This predicate is deliberately impure and should be used only via rebuild//1.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is det.
