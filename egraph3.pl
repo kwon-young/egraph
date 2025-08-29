@@ -106,10 +106,11 @@ union(A, B, In, Out) :-
 
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize the node set after Id unifications.
-%  How: sort/2, group by Key, unify all Ids in each group with the first, repeat until no group changes.
+%  How: sort/2, group by Key, unify all Ids in each group with the first, then repeat until stable.
 %  Complexity: O(N log N) per pass; repeats to a fixpoint.
 %  Notes:
 %    - Uses a boolean “changed” accumulator to drive the outer recursion.
+%    - Unifications can bind variables inside Keys; re-sorting may reveal new duplicates, requiring another pass.
 %    - Leaves exactly one Key-Id pair per distinct Key.
 merge_nodes(In, Out) :-
    sort(In, Sort),
@@ -219,6 +220,7 @@ rule(Index, Node, Rule) -->
 %    - Nodes must be an ordset of Key-Id pairs.
 %    - Ids reflect current aliasing after any unions.
 %    - Each value lists all concrete Keys known for that class.
+%    - Assumes Nodes have been canonicalized by merge_nodes/2; otherwise per-class lists may include duplicates.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -282,15 +284,17 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is det.
-%  DCG variant: validate that for every Key-Ids group, Key ∈ Ids.
-%  Fails if invariants are broken; use as a sanity check after saturation.
+%  DCG variant: validate graph invariants after saturation.
+%  Intended invariant: for every Key-Ids group, Key ∈ Ids.
+%  Note: Current code groups after transpose_pairs/2 (Id→Keys) and checks member(Id, Keys); verify this matches the intent.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
    extract_node(Groups).
 %! extract_node(+Groups) is semidet.
-%  True iff for every group Key-Members, Key ∈ Members.
+%  True iff each group's representative occurs among its members.
 %  Why: minimal consistency check for a well-formed extraction.
+%  Note: With Id→Keys groups (from transpose_pairs/2), this tests member(Id, Keys); confirm grouping matches the invariant.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
