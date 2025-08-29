@@ -42,9 +42,9 @@ See also
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  Read-only lookup in an ordset of Key-Val pairs (standard term order).
 %  - Pairs must be a strictly ordered ordset; Key must be nonvar.
-%  - Identity is tested with (==) after ordering; at most one solution.
-%  - Complexity: O(N) small-window linear scan (4/2/1 lookahead).
-%  - Errors: if Key is var, compare/3 raises instantiation_error; Key is not bound here.
+%  - Identity is tested with (==) after standard ordering (variable identity matters).
+%  - Time: O(N) small-window linear scan (4/2/1 lookahead).
+%  - Errors: if Key is var, compare/3 raises instantiation_error; lookup/2 never binds Key.
 %  Determinism: semidet.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -80,6 +80,7 @@ lookup(Item-V, [X1-V1]) :-
 %  Notes:
 %    - Id is a fresh Prolog variable (mutable class rep). Unions/rules may alias classes by unification, which may also instantiate variables inside Keys; all effects are backtrackable.
 %    - No canonicalization here; call merge_nodes//0 to collapse duplicates.
+%    - DCG state threads an ordset of Key-Id pairs (standard term order).
 %  Determinism: det.
 add(Term, Id, In, Out) :-
    (  compound(Term)
@@ -271,6 +272,7 @@ push_back(L), L --> [].
 %  Notes:
 %    - Equalities are consumed (not re-enqueued); only Node-Id items flow forward.
 %    - Alias-only steps are invisible to the length-based fixpoint in saturate//2 unless they add/remove pairs.
+%    - Unifying class IDs may instantiate variables appearing inside Keys; merge_nodes//0 re-canonicalizes after such aliasing.
 %  Determinism: det.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
@@ -291,6 +293,7 @@ saturate(Rules) -->
 %  Threads the e-graph difference list explicitly (In/Out).
 %  N must be inf or a non-negative integer.
 %  Note: length-based fixpoint; pure ID aliasing with no net pair change is not detected as progress. Use a bounded MaxSteps if rules can cycle without adding/removing pairs.
+%  Implementation note: rebuilds the Id->Keys index on every iteration because ID variables may alias.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
