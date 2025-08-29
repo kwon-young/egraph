@@ -4,28 +4,32 @@
 E-graphs for congruence closure over Prolog terms.
 
 Overview
-- Classes: represented by fresh logic variables (class Ids). Union is plain Prolog unification (A=B). All effects are logical and fully backtrackable.
-- Graph: ordset of Key-Id pairs ordered by standard term order. Key is any term (may contain variables). Id is the class representative (a logic variable).
-- Rules: DCGs that produce new nodes (Key-Id) and equalities (A=B). Saturation iterates rules to a fixpoint.
+- Classes: each equivalence class is represented by a fresh logic variable (its class Id). Union is plain unification (A=B). All effects are logical and fully backtrackable.
+- Graph: an ordset of Key-Id pairs, ordered by standard term order. Key is any term (may contain variables). Id is the current class representative (a logic variable).
+- Rules: DCGs that produce new nodes (Key-Id) and equalities (A=B). Saturation applies rules until a fixpoint.
 
 Data model
-- Nodes: ordset of Key-Id; canonicalization keeps at most one pair per distinct Key.
-- Index: rbtree Id -> [Keys] for per-class access during rule matching (built from canonicalized nodes).
+- Nodes: ordset of Key-Id; canonicalization ensures at most one pair per distinct Key.
+- Index: rbtree Id -> [Keys] for per-class access during rule matching; always built from canonicalized nodes.
 
 Execution model
 - All DCGs thread the e-graph as a difference list (In/Out).
-- “Mutation” happens by unifying class Id variables; this can also bind variables inside Keys. Effects are logical and backtrackable (no destructive updates).
+- “Mutation” is performed by unifying class Id variables; this may also bind variables inside Keys. Effects are logical, backtrackable, and non-destructive.
 
 Identity and variants
-- Membership uses standard term order; exact identity checks use (==) after ordering.
-- Keys that differ only by variable identity are intentionally distinct (no variant-normalization).
+- Membership uses standard term order; exact identity uses (==) after ordering.
+- No variant-normalization: keys differing only by variable identity remain distinct by design.
 
 Caveats and notes
-- merge_nodes/2: sort by Key, group, unify Ids per group into the first; repeat while any group changed (Id unification can bind variables inside Keys and create new duplicates upon resort).
+- merge_nodes/2: sort by Key, group, unify all Ids in a group into the first; repeat while any group changed. Because Id unification can bind variables inside Keys, resorting can expose new duplicates.
 - DCG nonterminals (e.g., merge_nodes//0) operate on the same threaded state.
-- The length-based fixpoint in saturate//2 does not notice alias-only progress; rules must eventually add/remove Key-Id pairs.
-- Class Ids are logic variables (not atoms); unifications may alias classes and bind variables inside user terms. No occurs-check is used, which is safe here because class Ids are fresh logic variables.
-- Validation with extract//0 can further alias Ids due to member/2; use it only for throwaway validation states.
+- The length-based fixpoint in saturate//2 ignores alias-only progress; rules must eventually add or remove Key-Id pairs.
+- Class Ids are logic variables (not atoms). Unifications alias classes and can instantiate variables inside Keys. No occurs-check is used; this is safe because class Ids are fresh logic variables and are never unified with compound terms.
+- Validation with extract//0 may further alias Ids (member/2 can bind the Id). Use it only for throwaway validation states, not for persisted graphs.
+
+Notes on “mutable unique identifiers”
+- Class Ids are plain Prolog variables used as mutable representatives. Unifying two Ids aliases the classes and can instantiate variables that appear inside Keys. This is intentional; all such effects are backtrackable.
+- The rbtree index uses these logic variables as keys; always rebuild the index after any aliasing (this module does so per saturation step).
 
 See also
 - add//2, union//2, merge_nodes//0, saturate//2, extract//0.
