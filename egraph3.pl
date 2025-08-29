@@ -23,6 +23,7 @@ Identity
 Notes
 - merge_nodes/2 re-sorts, groups by Key, unifies group Ids, and repeats if anything changed (a boolean accumulator via foldl/5 drives the loop).
 - Calling a nonterminal like merge_nodes//0 inside a DCG acts on the same threaded state (expands to merge_nodes/2 on In/Out).
+- Warning: class Ids are logic variables; unifications may bind variables inside Keys (observable in user terms).
 */
 
 
@@ -33,7 +34,7 @@ Notes
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  Lookup Val for Key in an ordset of Key-Val pairs using a small-window linear scan (4/2/1 lookahead) to reduce comparisons.
 %  Complexity: O(N) worst case. Determinism: semidet (succeeds once or fails).
-%  Requires: Pairs is a strictly ordered ordset (standard term order). Key must be comparable for compare/3 (errors if var).
+%  Requires: Pairs is a strictly ordered ordset (standard term order). Key must be nonvar and comparable for compare/3.
 %  Identity check uses (==) after ordering to avoid reordering side effects.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -69,6 +70,7 @@ lookup(Item-V, [X1-V1]) :-
 %  Notes:
 %    - Id is a fresh logic variable serving as the mutable class identifier; union/2 may later unify it with others.
 %    - DCG threads the e-graph (In/Out). No merging here; see merge_nodes//0.
+%    - Warning: later Id unifications can bind variables occurring inside Term's Keys.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -250,7 +252,7 @@ saturate(Rules) -->
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Saturate for at most MaxSteps iterations (use inf for unbounded).
 %  Fixpoint: compares sizes before/after rebuild/1 (after merge_nodes/2).
-%  Caveat: size-only check may miss changes affecting only Index; rules must eventually add/remove pairs when it matters.
+%  Caveat: length-only check may miss Id aliasing that does not change pair count; rules must eventually add or remove pairs to make progress.
 %  Determinism: deterministic driver; nondeterminism comes only from rules.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Underlying 4-ary form used by DCG expansion of saturate//2.
@@ -289,7 +291,7 @@ extract(Nodes) :-
 %! extract//0 is semidet.
 %  DCG variant: validate graph invariants after saturation.
 %  Invariant: after grouping Id→Keys, each Id-group must have at least one concrete Key.
-%  Note: uses member(Id, Keys), which unifies Id with a Key and can bind Ids; use only for validation on throwaway states or under backtracking.
+%  Warning: uses member(Id, Keys), which unifies Id with a Key and can bind class Id variables; use only for validation on throwaway states or under backtracking (not for reading a persisted state).
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each Id-group has a concrete Key.
 %  Note: arguments are the same variable in practice to avoid copying; do not rely on side effects.
