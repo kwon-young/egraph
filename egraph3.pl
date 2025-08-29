@@ -32,11 +32,11 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Lookup Val for Key in an ordset of Key-Val pairs using a small-window linear scan (4/2/1 lookahead).
+%  Find Val for Key in an ordset of Key-Val pairs using a small-window linear scan (4/2/1 lookahead).
 %  Complexity: O(N) worst case. Determinism: semidet (succeeds at most once).
-%  Requires: Pairs is a strictly ordered ordset (standard term order). Key must be nonvar and comparable by compare/3.
-%  Identity check uses (==) only after ordering to avoid side effects from reordering.
-%  Note: Fails if Key is absent; no exceptions are thrown.
+%  Requires: Pairs is a strictly ordered ordset (standard term order); Key is nonvar and comparable by compare/3.
+%  Identity test uses (==) only after ordering to avoid side effects.
+%  Fails if Key is absent; no exceptions are thrown.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -65,13 +65,13 @@ lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
 
 %! add(+Term, -Id)// is det.
-%  Insert Term and return its class Id, reusing an existing Id if Key is already present.
-%  - Compound: add subterms first; their class Ids become arguments of the Key (congruence by construction).
+%  Insert Term and return its class Id; reuse Id if Key already exists.
+%  - Compound: add subterms first; their class Ids are used as arguments (congruence by construction).
 %  - Atomic: Key = Term.
 %  Notes:
-%    - Id is a fresh logic variable used as a mutable class identifier via unification; union//2 may later alias it.
+%    - Id is a logic variable used as a mutable class identifier via unification; union//2 may alias classes.
 %    - DCG threads the e-graph ordset (In/Out). No canonicalization here; see merge_nodes//0.
-%    - Warning: later Id unifications can bind variables that occur inside Keys.
+%    - Unifying Ids can bind variables occurring inside Keys.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -83,12 +83,12 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node has a class Id; reuse existing Id if present, otherwise insert Node-Id.
+%  Ensure Node has a class Id; reuse existing Id if present, else insert Node-Id.
 %  Notes:
 %    - In/Out are ordsets of Key-Id pairs (standard term order).
-%    - Identity uses (==) only after ordering; variants with different variables are distinct Keys.
-%    - Variables inside Keys may be bound later via Id unifications; merge_nodes/2 re-canonicalizes.
-%  Determinism: deterministic; either reuses or inserts exactly one pair.
+%    - Identity uses (==) only after ordering; variants differing only by variable identity are distinct Keys.
+%    - Later Id unifications may bind variables inside Keys; merge_nodes/2 re-canonicalizes.
+%  Determinism: det; exactly one reuse or insert.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -99,7 +99,7 @@ add_node(Node, Id, In, Out) :-
 
 %! union(+IdA, +IdB)// is det.
 %  Unify two class Ids (alias classes) and then canonicalize the e-graph.
-%  Why: logic-variable unification provides a cheap, fully backtrackable union.
+%  Rationale: logic-variable unification provides a cheap, fully backtrackable union.
 %  Notes:
 %    - IdA/IdB must be class Ids obtained from add//2 or add_node/4.
 %    - Unifying Ids may bind variables inside Keys; rules rely on this.
@@ -111,11 +111,10 @@ union(A, B, In, Out) :-
 %! merge_nodes//0 is det.
 %  DCG: canonicalize the threaded node set (In/Out).
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize Nodes after Id unifications.
-%  How: sort/2, group by Key, unify all Ids in each group with the first, then repeat while anything changed.
+%  Canonicalize Nodes after Id unifications: sort, group by Key, unify all Ids per group with the first, repeat while changed.
 %  Complexity: O(N log N) per pass; repeats to a fixpoint.
 %  Notes:
-%    - A boolean “changed” accumulator is threaded via foldl/5; outer recursion continues iff it ends true.
+%    - A boolean "changed" flag is threaded via foldl/5; outer recursion continues if true.
 %    - Id unifications may bind variables inside Keys; re-sorting can expose new duplicates.
 %    - Leaves exactly one Key-Id pair per distinct Key.
 merge_nodes(In, Out) :-
@@ -178,14 +177,14 @@ reduce(A+B-AB, Index) -->
 reduce(_, _) --> [].
 %! constant_folding(+Node, +Index)// is nondet.
 %  Fold numeric additions (integers/floats) into a single constant.
-%  Shrinks the search space by canonicalizing ground arithmetic; preserves AB as the class Id by equating C=AB.
+%  Shrinks the search space by canonicalizing ground arithmetic; preserves AB as the class Id via C=AB.
 constant_folding((A+B)-AB, Index) -->
    !,
    { rb_lookup(A, ANodes, Index) },
    constant_folding_a(ANodes, B, AB, Index).
 constant_folding(_, _) --> [].
 %! constant_folding_a(+ClassA, +B, -AB, +Index)// is nondet.
-%  Helper: pick numeric VA in class(A) and search class(B) for numeric VB.
+%  Helper: pick numeric VA in class(A), then search class(B) for numeric VB.
 %  Staged search avoids building pairs eagerly.
 constant_folding_a([VA | ANodes], B, AB, Index) -->
    (  {number(VA)}
@@ -197,8 +196,8 @@ constant_folding_a([VA | ANodes], B, AB, Index) -->
 constant_folding_a([], _, _, _) --> [].
 %! constant_folding_b(+ClassB, +VA, -AB, +Index)// is nondet.
 %  Helper: for numeric VB in class(B) compute VC is VA+VB, then emit VC-C and C=AB.
-%  Constructs the folded constant lazily while keeping AB as the class Id.
-%  Note: arithmetic uses is/2; types follow Prolog numeric tower semantics.
+%  Builds the folded constant lazily while keeping AB as the class Id.
+%  Note: arithmetic uses is/2; types follow Prolog's numeric tower.
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
    (  {number(VB)}
    -> {VC is VA + VB},
@@ -211,7 +210,7 @@ constant_folding_b([], _, _, _) --> [].
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply all DCG rules to Node with access to Index.
 %  Rules is a list of callables Rule(Node, Index)//; backtracks over rules.
-%  Determinism: nondet over Rules.
+%  Determinism: nondet over Rules; output is appended to the DCG stream.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
@@ -237,37 +236,38 @@ make_index(In, Index) :-
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
 %  Run Rules over Worklist to produce new matches (nodes and equalities).
 %  Central collection phase before rebuilding the graph.
-%  Determinism: deterministic given Rules/Worklist/Index; output is a (possibly empty) list.
+%  Determinism: det given Rules/Worklist/Index; output is a (possibly empty) list.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
 %! push_back(+List)// is det.
 %  DCG trick: append List at the end of the current output.
 %  Schedules newly discovered items after the current worklist (O(1) via difference lists).
-%  Note: this is purely structural; it does not perform deduplication.
+%  Note: purely structural; no deduplication is performed.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
 %  Apply equalities (by unification), enqueue new nodes, then canonicalize.
 %  Details:
 %    - exclude(unif, Matches, NewNodes) performs A=B unifications as a side effect and drops them.
 %    - Only (Key-Id) items are queued via push_back//1, then merge_nodes//0 runs.
-%  Effects are logical and backtrackable (through variable aliasing).
+%  Effects are logical and backtrackable (via variable aliasing).
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
 %  Saturate with Rules until no new nodes/equalities are produced (fixpoint).
+%  Note: See saturate/4 for the length-based fixpoint caveat.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Saturate for at most MaxSteps iterations (use inf for unbounded).
-%  Fixpoint: compares sizes before/after rebuild/1 (after merge_nodes/2).
-%  Caveat: length-only check may miss Id aliasing that does not change pair count; rules must eventually add or remove pairs to make progress.
+%  Fixpoint uses lengths before/after rebuild/1 (after merge_nodes/2).
+%  Caveat: a length-only check may miss pure Id aliasing; rules must eventually add/remove pairs to make progress.
 %  Determinism: deterministic driver; nondeterminism comes only from rules.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Underlying 4-ary form used by DCG expansion of saturate//2.
 %  Threads the e-graph difference list explicitly (In/Out).
-%  Note: Uses a length-based fixpoint; pure Id aliasing with no net pair change will not be detected as progress.
+%  Note: length-based fixpoint; pure Id aliasing with no net pair change is not detected as progress.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -294,7 +294,7 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is det.
-%  Predicate variant: return the current nodes as Nodes (no validation).
+%  Return the current nodes as Nodes (no validation).
 %  Pairs with extract//0, which performs a validation pass.
 %  Recommendation: prefer this predicate in user code to avoid identifier mutation during validation.
 extract(Nodes) :-
@@ -302,8 +302,8 @@ extract(Nodes) :-
 %! extract//0 is semidet.
 %  DCG variant: validate graph invariants after saturation.
 %  Invariant: after grouping Id→Keys, each Id-group must have at least one concrete Key.
-%  Warning: uses member(Id, Keys), which unifies Id with a Key and can bind class Id variables; use only for validation on throwaway states or under backtracking (not for reading a persisted state).
-%  Note: this validation can alias Ids further if Keys contain those Ids; do not call on persisted states.
+%  Warning: uses member(Id, Keys), which unifies Id with a Key and can bind class Id variables; use only for validation on throwaway states or under backtracking (not for persisted states).
+%  Note: this validation can alias Ids further if Keys contain those Ids.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each Id-group has a concrete Key.
 %  Note: arguments are typically the same variable to avoid copying; do not rely on side effects.
