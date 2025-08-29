@@ -1,17 +1,18 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graph for term equivalence using Prolog logic variables as class IDs.
+E-graphs for term equivalence using Prolog logic variables as class IDs.
 
 Why:
-- Logic variables act as unique identifiers for equivalence classes; union is performed by unification (=/2).
-- Nodes are stored as an ordered set of Key-Id pairs to deduplicate and make merging cheap.
-- Rewrite rules are DCGs that emit new nodes and equalities; saturation applies them until a fixpoint.
+- Class IDs are Prolog logic variables; union is just unification (=/2).
+- Nodes are kept in an ordered set of Key-Id pairs; deduplication and merging are cheap.
+- Rewrite rules are DCGs that emit new nodes (Key-Id) and equalities (Id=Id); saturation applies rules to a fixpoint.
 
 Notes:
-- After unions, multiple nodes may collapse to the same key with aliased Ids; merge_nodes/2 resolves this to a canonical set.
-- Indexes map class IDs to member nodes for targeted rule application.
-- All predicates with // are DCG nonterminals that thread the e-graph as the In/Out difference list (an ordset of Key-Id pairs).
+- After unions, multiple pairs may share the same Key while their Ids are aliases; merge_nodes/2 canonicalizes.
+- Index maps each class Id to the concrete nodes currently known in that class for targeted rule application.
+- Predicates with // are DCG nonterminals that thread the e-graph as a difference list (In/Out is an ordset of Key-Id).
+- Identity of Keys uses standard term order and (==); variants with distinct variables are different Keys by design.
 */
 
 
@@ -85,21 +86,24 @@ add_node(Node, Id, In, Out) :-
    ).
 
 %! union(+IdA, +IdB)// is det.
-%  Union two equivalence classes by unifying their Id variables, then
-%  request a structural merge to remove duplicates caused by aliasing.
+%  Unify two class IDs and then request a structural merge to remove
+%  duplicates caused by aliasing.
 %  Why: unification is the cheapest "mutable" union in Prolog.
-%  Notes: A and B must be class IDs (logic variables) returned by add/3 or
-%  add_node/4; unification may bind variables appearing in nodes.
+%  Notes:
+%  - IdA/IdB must be class IDs (logic variables) returned by add/3 or add_node/4.
+%  - Unifying class IDs may bind variables occurring inside Keys; this is intentional.
+%  - merge_nodes/2 is invoked to canonicalize after the union.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
 
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize the node set after unions.
-%  Why: after Id unifications, multiple Key-Id pairs may share keys;
-%  grouping by key and unifying Ids collapses duplicates; repeat until
-%  no changes remain to reach a fixpoint.
-%  Complexity: O(N log N) per pass due to sort/2; repeats until stable.
+%  Why: after Id unifications, multiple Key-Id pairs can share a Key;
+%  grouping by Key and unifying all Ids in each group collapses dups; the
+%  process repeats until no group changes (fixpoint).
+%  Complexity: O(N log N) per pass due to sort/2; repeated until stable.
+%  Notes: Uses foldl/4 to detect whether any group had >1 Id (i.e., a change).
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -205,8 +209,10 @@ rule(Index, Node, Rule) -->
 %! make_index(+Nodes, -Index) is det.
 %  Build an rbtree mapping Id -> [Nodes] from Key-Id pairs.
 %  Why: fast per-class access when matching rules.
-%  Notes: Nodes must be an ordset of Key-Id; Index maps Id to all keyed
-%  nodes in its class.
+%  Notes:
+%  - Nodes must be an ordset of Key-Id pairs.
+%  - Id keys in the rbtree reflect current aliasing (after any unions).
+%  - Each value is the list of concrete Keys known for that class.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -238,8 +244,10 @@ saturate(Rules) -->
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Saturate for at most MaxSteps iterations (inf for unbounded).
 %  Why: bound the search when desired while preserving convergence checks.
-%  Notes: fixpoint is detected by length/2 before and after rebuild/1
-%  (after merge_nodes), which relies on canonicalization to remove dups.
+%  Notes:
+%  - Fixpoint is detected by comparing lengths before/after rebuild/1
+%    (after merge_nodes), relying on canonicalization to remove dups.
+%  - Nondeterminism only comes from the rules; the driver is deterministic.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -270,7 +278,8 @@ extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract// is det.
 %  DCG variant: validate that each equivalence class contains its key.
-%  Why: ensures that for each class Key-Ids, Key is a member of Ids.
+%  Why: ensures that for each class Key-Ids, Key ∈ Ids.
+%  Notes: Fails if internal invariants are broken (useful as a sanity check).
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
