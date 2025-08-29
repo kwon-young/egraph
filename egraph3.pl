@@ -52,6 +52,8 @@ Related
 %  - Side-effects: none; does not bind Key or Pairs.
 %  - Failure: fails cleanly if Key is not present.
 %  Determinism: semidet.
+%  Note: uses member/2 which can alias/bind Id variables during validation; safe only on throwaway states.
+%  Note: comparisons are by standard order; identity is preserved with (==) after ordering; never binds variables.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -90,8 +92,12 @@ lookup(Item-V, [X1-V1]) :-
 %    - In/Out (the DCG state) is an ordset of Key-Id pairs in standard term order. Equality after ordering uses (==); variable identity matters.
 %  Side-effects: none (apart from growing the DCG output); Id creation is by allocating a fresh variable.
 %  Determinism: det.
+%  Note: consumes equalities (A=B) and appends only Key-Id items; rules themselves must not perform unification.
+%  Note: variables (Ids) are used as rbtree keys under standard term order; always rebuild after any aliasing.
+%  Note: unifying IDs here can instantiate variables appearing in Keys; a subsequent sort may reveal new duplicates.
 %  Note:
 %    - Keys are kept exactly as constructed; do not assume α-equivalence collapses variants.
+%    - Ids are opaque logic variables local to the graph; do not treat them as stable names or serialize them.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -109,6 +115,7 @@ add(Term, Id, In, Out) :-
 %    - Unifying Ids elsewhere may bind variables inside Keys. Always re-canonicalize with merge_nodes/2 (or //0) after aliasing.
 %  Side-effects: none (except possibly allocating a fresh Id variable when Node is new).
 %  Determinism: det.
+%  Note: reuses the existing Id if Node already exists; no unification occurs here and no canonicalization is performed.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -127,6 +134,7 @@ add_node(Node, Id, In, Out) :-
 %    - Uses (=)/2 without occurs-check. Safe here: class IDs are only ever unified with class IDs (never with compound terms).
 %  Side-effects: aliases the two Id variables (logical, backtrackable); no other mutation.
 %  Determinism: det.
+%  Note: may expose new duplicate Keys only after merge_nodes/2; keep union + merge_nodes paired.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -144,6 +152,7 @@ union(A, B, In, Out) :-
 %  Determinism: det.
 %  Note:
 %    - The loop continues if any group had >1 Id or if resorting after unifications exposes new equal Keys.
+%    - Sorting uses standard term order; equality after ordering uses (==); only Ids unify (no occurs-check needed).
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -307,6 +316,7 @@ saturate(Rules) -->
 %  Fixpoint is length-based; pure ID aliasing with no net pair change is invisible. Use a bounded
 %  MaxSteps if rules can cycle without adding/removing pairs.
 %  Implementation: rebuilds the Id->Keys index on every iteration because ID variables may alias.
+%  Note: length-based fixpoint ignores pure aliasing; ensure rules eventually add/remove Key-Id pairs or use a bounded MaxSteps.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -330,6 +340,7 @@ saturate(Rules, N, In, Out) :-
 %  Use with exclude/3 to apply equalities and remove them from a worklist.
 %  Notes: intentionally mutates class IDs via unification; fails for non-(=)/2 items. Effects are logical and backtrackable.
 %  Determinism: semidet; succeeds once on (=)/2, fails otherwise.
+%  Note: intentionally performs side-effect unification of class Id variables; use via exclude/3 to consume equalities.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is det.
@@ -344,6 +355,7 @@ extract(Nodes) :-
 %  Invariant: for each Id, its class has at least one concrete Key.
 %  Note: uses member/2 in a way that can alias/bind Id variables; use only for validation on throwaway states or under backtracking, not on persisted graphs.
 %  Side-effects: may bind/alias Id variables; do not call on persisted graphs you intend to keep.
+%  Note: prefer extract/1 in production; use extract//0 only for validation under backtracking.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Underlying helper for extract//0; succeeds iff each ID-group has a concrete Key.
 %  Note: arguments are typically the same variable to avoid copying; do not rely on side effects.
