@@ -1,29 +1,29 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for term equivalence using logic variables as class identifiers.
+E-graphs for term equivalence; class identifiers are plain logic variables unified to merge classes.
 
-Core ideas
-- Each equivalence class is identified by a fresh logic variable Id; union is plain unification (IdA=IdB), fully backtrackable.
-- The graph is an ordset of Key-Id pairs (standard term order). Key is a concrete term; Id is the class variable.
-- Rules are DCGs that emit new nodes (Key-Id) and equalities (A=B). Saturation applies rules to a fixpoint.
+Summary
+- Classes: a class Id is a fresh logic variable; union is A=B (logical, backtrackable).
+- Graph: ordset of Key-Id pairs ordered by standard term order. Key is a concrete term; Id is the class var.
+- Rules: DCGs that emit new nodes (Key-Id) and equalities (A=B). Saturation drives to a fixpoint.
 
-Data structures
-- Nodes: ordset of Key-Id pairs (no duplicates per Key after canonicalization).
-- Index: rbtree mapping Id -> [Keys] for fast per-class queries during rule matching.
+Data
+- Nodes: ordset of Key-Id; canonicalization keeps at most one pair per Key.
+- Index: rbtree Id -> [Keys] for fast per-class access during rule matching.
 
-Execution model
-- All DCGs thread the e-graph as a difference list (In/Out).
-- “Mutation” happens only via unification of Ids, which can also bind variables inside Keys; effects are logical and backtrackable.
+Execution
+- All DCGs thread the graph as a difference list (In/Out).
+- “Mutation” is only via unifying class Id variables; this may also bind variables occurring inside Keys. Effects are logical and fully backtrackable.
 
-Identity
-- Membership/ordering use standard term order; exact identity uses (==) only after ordering.
-- Variants differ: variables inside Keys make distinct Keys by design.
+Identity and variants
+- Ordering/membership use standard term order; exact identity checks use (==) after ordering.
+- Keys that differ only by variable identity are distinct on purpose.
 
 Notes
-- merge_nodes/2 re-sorts, groups by Key, unifies group Ids, and repeats if anything changed (a boolean accumulator via foldl/5 drives the loop).
-- Calling a nonterminal like merge_nodes//0 inside a DCG acts on the same threaded state (expands to merge_nodes/2 on In/Out).
-- Warning: class Ids are logic variables; unifications may bind variables inside Keys (observable in user terms).
+- merge_nodes/2 sorts, groups by Key, unifies all Ids per group with the first, and repeats while a change flag (from foldl/5) is true.
+- Calling a nonterminal (e.g., merge_nodes//0) acts on the same threaded state.
+- Warning: class Ids are logic variables, not atoms or symbols; unification can alias classes and bind variables inside user terms.
 */
 
 
