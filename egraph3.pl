@@ -178,9 +178,9 @@ assoc_([Node | Nodes], A, ABC) -->
    assoc_(Nodes, A, ABC).
 assoc_([], _, _) --> [].
 %! reduce(+Node, +Index)// is semidet.
-%  Unit of (+): if class(B) contains 0, emit A=AB.
-%  Eliminates the neutral element; once/1 avoids duplicates.
-%  Note: checks for the integer 0 using (==); 0.0 does not qualify; only Keys already bound to 0 qualify.
+%  Neutral element of (+): if class(B) contains 0, emit A=AB.
+%  Eliminates the unit; once/1 avoids duplicates.
+%  Note: tests for the integer 0 using (==); 0.0 does not qualify; only Keys already bound to 0 qualify.
 reduce(A+B-AB, Index) -->
    {  rb_lookup(B, Nodes, Index),
       once((member(Node, Nodes), Node == 0))
