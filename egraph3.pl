@@ -3,34 +3,34 @@
 /** <module> egraph
 Backtrackable e-graphs (equivalence graphs) with congruence closure for Prolog terms.
 
-What this is
-- Equivalence classes are represented by fresh logic variables (class IDs). Unifying two IDs merges classes; effects are logical, backtrackable, and may instantiate variables inside stored Keys.
-- The e-graph is an ordset of Key-Id pairs in standard term order. Membership uses ordering then (==), so variable identity matters; no variant-normalisation.
-- DCGs thread the e-graph as a difference list. The only “mutation” is ID unification.
+Overview
+- Equivalence classes are represented by fresh logic variables (class IDs). Unifying two IDs merges classes; effects are logical and backtrackable. This unification may instantiate variables occurring inside stored Keys.
+- The e-graph state is an ordset of Key-Id pairs in standard term order. After ordering, equality uses (==), so variable identity matters; no variant-normalisation.
+- A DCG threads the e-graph as a difference list. The only “mutation” is ID unification.
 
 Representation
-- Nodes: ordset of Key-Id; at most one pair per distinct Key after canonicalization.
-- Index: rbtree Id -> [Keys], rebuilt after each canonicalization to reflect any ID aliasing.
+- Nodes: ordset of Key-Id; after canonicalization there is at most one pair per distinct Key.
+- Index: rbtree Id -> [Keys]; rebuilt after each canonicalization to reflect any ID aliasing.
 
-Execution model
+Execution
 - add//2 constructs Keys by replacing subterms with their class IDs (congruence).
-- Rules (DCGs) emit new nodes and equalities (A=B). rebuild//1 applies equalities, enqueues nodes, then canonicalizes via merge_nodes/2.
-- All effects happen via ID unification and are fully backtrackable.
+- Rules (DCGs) only emit new nodes and equalities (A=B). rebuild//1 first applies equalities (by unifying IDs), then enqueues nodes, and finally canonicalizes via merge_nodes/2.
+- All observable effects come from unifying class IDs; everything is backtrackable.
 
 Identity and variants
-- Standard term order for the ordset; identity after ordering uses (==).
-- No variant-normalization: structurally equal Keys that differ only in variable identities remain distinct.
+- Ordset ordering is by standard term order; identity after ordering uses (==).
+- No variant-normalization: structurally equal Keys that differ only in variable identities are distinct.
 
 Caveats
-- merge_nodes/2: sort by Key, group equal Keys, unify group IDs into the first; repeat until a fixpoint. Unification can bind variables inside Keys, which may reveal new duplicates after resorting.
-- saturate//2: the fixpoint compares lengths before/after rebuild; pure aliasing with no net Key-Id change is invisible. Rules must eventually add or remove pairs.
-- IDs are logic variables (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys. No occurs-check is needed because IDs unify only with IDs.
-- extract//0 validates invariants but may bind/alias IDs via member/2; use only for validation on throwaway states or under backtracking (not on persisted graphs).
+- merge_nodes/2: sort by Key, group equal Keys, unify all group IDs into the first; repeat until a fixpoint. Unification can bind variables inside Keys, which can reveal new duplicates after resorting.
+- saturate//2: the fixpoint compares lengths before/after rebuild; alias-only progress (no net Key-Id change) is invisible. Rules must eventually add or remove pairs.
+- IDs are logic variables (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys. No occurs-check is needed because IDs unify only with IDs (never with compound terms).
+- extract//0 validates invariants but may bind/alias IDs via member/2; use only on throwaway states or under backtracking, never on persisted graphs.
 
-Notes on mutable unique identifiers (class IDs)
-- Class IDs are plain logic variables used as mutable representatives (not atoms). Unifying IDs aliases classes and may instantiate variables in Keys; effects are logical and backtrackable.
+Class IDs: mutable logic variables (notes)
+- Class IDs are plain logic variables used as mutable representatives. Unifying IDs aliases classes and may instantiate variables in Keys; effects are logical and backtrackable.
 - The Id->Keys index uses these variables as map keys; always rebuild after aliasing.
-- Never persist or print these IDs as stable identifiers; their identity and aliasing are runtime-only.
+- Do not persist or print these IDs as stable identifiers; their identity and aliasing are runtime-only. If you need stable names, maintain your own mapping outside the e-graph.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
