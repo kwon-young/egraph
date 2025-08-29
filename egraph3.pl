@@ -249,9 +249,13 @@ saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Saturate for at most MaxSteps iterations (use inf for unbounded).
-%  Fixpoint check: compares sizes before/after rebuild/1 (after merge_nodes/2).
-%  Caveat: size-only check may miss changes affecting only Index; provided rules add/remove pairs when it matters.
+%  Fixpoint: compares sizes before/after rebuild/1 (after merge_nodes/2).
+%  Caveat: size-only check may miss changes affecting only Index; rules must eventually add/remove pairs when it matters.
 %  Determinism: deterministic driver; nondeterminism comes only from rules.
+%! saturate(+Rules, +MaxSteps, +In, -Out) is det.
+%  Underlying 4-ary form used by DCG expansion of saturate//2.
+%  Threads the e-graph difference list explicitly (In/Out).
+%  Note: uses length-based fixpoint check; see caveat above.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -286,6 +290,9 @@ extract(Nodes) :-
 %  DCG variant: validate graph invariants after saturation.
 %  Invariant: after grouping Id→Keys, each Id-group must have at least one concrete Key.
 %  Note: uses member(Id, Keys), which unifies Id with a Key and can bind Ids; use only for validation on throwaway states or under backtracking.
+%! extract(+Nodes, -Nodes) is semidet.
+%  Underlying helper for extract//0; succeeds iff each Id-group has a concrete Key.
+%  Note: arguments are the same variable in practice to avoid copying; do not rely on side effects.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
