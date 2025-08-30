@@ -1,7 +1,7 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms using logic variables as class identifiers.
+E-graphs for Prolog terms using logic variables as class identifiers (Ids as mutable, backtrackable unique identifiers).
 
 Essentials
 - Nodes: canonical ordset of Key-Id, where Key is an atom/var or F(ChildIds).
@@ -64,6 +64,7 @@ Notes
 %  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by name.
 %  - Keys preserve variable identity (no alpha/variant normalization).
 %  - Variant-equal keys with different variables are distinct and will not match (intentional); do not use =@=/2 here.
+%  - Note: This is by design; see test lookup_variant_key_identity in egraph3.plt.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -301,6 +302,7 @@ rule(Index, Node, Rule) -->
 %  Complexity/Determinism: O(N log N); det; pure; steadfast.
 %  Impl: transpose_pairs/2 flips Key-Id to Id-Key; Keys are stored as-is (no unification).
 %  Notes:
+%  - Uses transpose_pairs/2 and group_pairs_by_key/2 (autoloaded from library(pairs)).
 %  - Result is rbtree(Id->[Keys]) with nonempty value lists; rebuild after any Id aliasing.
 %  - Intended for the current iteration only; discard and rebuild after each rebuild//1 or merge.
 make_index(In, Index) :-
@@ -324,6 +326,7 @@ match(Rules, Worklist, Index, Matches) :-
 %  - Scheduling only; merge_nodes/2 does canonicalization.
 %  Notes:
 %  - Defined via the DCG idiom: push_back(L), L --> [].
+%  - Scheduling helper only; does not perform canonicalization or aliasing.
 %  - Pure w.r.t. Keys/Ids; no side effects.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
