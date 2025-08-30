@@ -139,7 +139,7 @@ union(A, B, In, Out) :-
 %  - Iterate until stable; unifying Ids may instantiate variables inside Keys and expose new duplicates.
 %  - Complexity: O(N log N) per pass.
 %  Effect: only Id variables unify; Keys never do. Key equality confirmed with (==) after ordering.
-%  Note: Continue while Changed from foldl/5 is true; never compare Ids by name.
+%  Note: foldl/5 threads a Changed flag; recurse while true. Ids are logic variables; never compare by name.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -227,7 +227,7 @@ constant_folding_a([], _, _, _) --> [].
 %! constant_folding_b(+ClassB, +VA, -AB, +Index)// is nondet.
 %  Helper: for each numeric VB in class(B), compute VC is VA+VB; emit VC-C and C=AB.
 %  - Introduces fresh C for VC while preserving AB as the class Id for the sum via C=AB.
-%  Note: Arithmetic uses is/2. Emits nodes/equalities only; unification is deferred to rebuild//1.
+%  Note: Arithmetic uses is/2; guards in constant_folding_a//4 ensure both VA and VB are numbers. Emits nodes/equalities only; unification is deferred to rebuild//1.
 %  Determinism: nondet over numeric members of class(B); one emission per numeric VB.
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
    (  {number(VB)}
@@ -250,6 +250,7 @@ rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
 %  Meta-call a single DCG rule Rule(Node,Index)// on Node.
+%  - Node is a Key-Id pair Key-Id; Id is an opaque class identifier (logic variable).
 %  - Rule is a DCG nonterminal Rule//2 (compiles to Rule/4).
 %  - Rule must not perform unification; only emit nodes and (=)/2 items.
 %  Determinism: matches the determinism of Rule//2.
