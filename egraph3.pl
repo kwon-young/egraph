@@ -349,8 +349,8 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Rules are pure producers (emit only Key-Id and (=)/2).
 %  - Alias-only steps are ignored (no change in length).
-%  Portability: wraps saturate//2 with MaxSteps=inf; if inf is unsupported, call saturate//2 with a large integer.
-%  Note: In this implementation MaxSteps=inf is an atom; the driver compares MaxSteps arithmetically, so passing inf may raise. Use a large integer if needed.
+%  Portability: calls saturate//2 with MaxSteps=inf.
+%  Warning: inf is an atom here; the driver uses arithmetic (N > 0), so some systems will error. Use saturate//2 with a large integer if needed.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -358,7 +358,7 @@ saturate(Rules) -->
 %  - MaxSteps: integer >= 0 (or inf where supported).
 %  - Alias-only steps do not count as progress.
 %  Determinism: det.
-%  Note: The driver compares MaxSteps arithmetically; non-numeric atoms like inf may raise. Use a large integer if necessary.
+%  Warning: compared arithmetically (N > 0); non-numeric atoms (e.g., inf) may raise. Prefer a large integer on systems without inf.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Driver. Each iteration: build Index, apply Rules to Nodes, rebuild (aliases Ids), then merge.
 %  - Only rebuild//1 and merge_nodes/2 may unify Ids.
@@ -368,7 +368,7 @@ saturate(Rules) -->
 %  Notes:
 %  - Progress is measured by list length; alias-only steps are ignored.
 %  - Worklist per step is the current canonical Nodes.
-%  - MaxSteps is compared arithmetically (>); passing a non-numeric atom (e.g., inf) will raise in this driver. Use a large integer if needed.
+%  - MaxSteps is compared arithmetically (N > 0); passing a non-numeric atom (e.g., inf) may raise. Use a large integer if needed.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -399,8 +399,8 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract exactly one concrete Prolog term per class by unifying each class Id with one of its Keys.
-%  Goal: extract a concrete Prolog term per class; this is the last standard step when using an e-graph.
+%  Extract one concrete Prolog term per equivalence class by unifying each class Id with one of its Keys.
+%  This is the final standard step when using an e-graph; it materializes concrete representatives.
 %  Effects: aliases Id variables via unification (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
 %  Determinism: semidet (fails only if some class has no Keys; should not happen after merge_nodes/2).
 %  Notes:
