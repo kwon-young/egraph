@@ -56,13 +56,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only lookup in a canonical ordset of Key-Id pairs.
-%  - Complexity: O(N) worst case; prunes by standard order, then confirms with (==) to preserve variable identity.
-%  - Pure: only binds Val; never touches Ids or mutates Pairs. Fails if Key is absent.
-%  - Pairs must be a strictly ordered ordset (from merge_nodes/2 or sort/2).
+%  Read-only lookup in a canonical ordset of Key-Id.
+%  - Worst-case O(N): prunes by standard order, then confirms Key identity with (==) to preserve variable identity.
+%  - Pure: only binds Val; never inspects/unifies Ids or mutates Pairs. Fails if Key is absent.
+%  - Requires Pairs to be a strictly ordered ordset (from merge_nodes/2 or sort/2).
 %  Notes:
-%    - Ids are fresh logic variables (class Ids); do not unify/inspect them here.
-%    - At most one match by construction.
+%    - Ids are fresh logic variables (class Ids); never compare by print-name.
+%    - Unique by construction: at most one matching Key.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -92,13 +92,13 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id; reuse Id if Key already exists.
-%  - Compound: Key = F(ChildIds) from left-to-right (congruence).
-%  - Atom/var: Key = Term (preserves variable identity; no variant-normalization).
-%  - Pure producer: no unification/canonicalization; duplicates may appear (merged later).
-%  - DCG variant threads a difference list; add/4 is the worker (foldl accumulates ChildIds).
-%  Effects: allocates a fresh Id only when Key is new. If Ids were aliased elsewhere, variables inside Keys may instantiate; call merge_nodes/2 afterwards.
-%  Notes: Ids are fresh logic variables used as mutable class identifiers; never compare by print-name.
+%  Insert Term and return its class Id; reuse the existing Id if Key already exists.
+%  - Compound: Key = F(ChildIds), built left-to-right (congruence).
+%  - Atom/var: Key = Term; preserves variable identity (no alpha/variant normalization).
+%  - Pure producer: no unification or canonicalization; duplicates are allowed (merged later).
+%  - DCG variant threads a difference list; add/4 is the worker (foldl/4 accumulates ChildIds).
+%  Effects: allocates a fresh Id only when Key is new. If Ids were aliased elsewhere, variables embedded in Keys may instantiate; call merge_nodes/2 afterwards.
+%  Notes: Ids are fresh logic variables acting as mutable class identifiers; never compare by print-name.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -110,11 +110,11 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node has a class Id; reuse if present, else insert Node-Id with a fresh Id.
-%  - In/Out are ordsets of Key-Id pairs; prunes by standard order, confirms equality with (==).
-%  - No unification/canonicalization here; call merge_nodes/2 after any Id aliasing elsewhere.
-%  Effects: allocates a fresh Id only when Node is new; Out=In if Node already existed; pure w.r.t. Keys.
-%  Notes: In must be an ordset (ord_add_element/3). Ids are logic variables; never compare by print-name.
+%  Ensure Node has a class Id; reuse it if present, else insert Node-Id with a fresh Id.
+%  - In/Out are ordsets of Key-Id; prunes by standard order, then confirms equality with (==).
+%  - No unification or canonicalization here; call merge_nodes/2 after any Id aliasing elsewhere.
+%  Effects: allocates a fresh Id only when Node is new; Out=In if Node already existed. Pure w.r.t. Keys.
+%  Notes: In must be an ordset (ord_add_element/3 maintains order). Ids are logic variables; never compare by print-name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -125,11 +125,11 @@ add_node(Node, Id, In, Out) :-
 
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
-%  Alias classes by unifying IdA with IdB, then canonicalize via merge_nodes/2.
+%  Alias classes by unifying IdA with IdB, then re-canonicalize via merge_nodes/2.
 %  - IdA/IdB must be class Ids produced by this e-graph.
 %  - Uses (=)/2 intentionally (no occurs-check); safe because Ids are fresh, acyclic logic variables.
 %  Effects: only class-Id aliasing (logical/backtrackable). Keys are never unified.
-%  Note: The only effect is on Id variables; re-canonicalization is required because Id aliasing can expose duplicate Keys.
+%  Notes: Re-canonicalization is needed because Id aliasing can expose duplicate Keys.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -138,11 +138,11 @@ union(A, B, In, Out) :-
 %  DCG wrapper for merge_nodes/2.
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize to one Key-Id per Key; returns a sorted ordset.
-%  - Pipeline: sort/2 -> group by Key -> unify group Ids into first (representative).
-%  - Iterate to a fixpoint: Id aliasing may instantiate variables inside Keys and expose new duplicates.
-%  - Complexity: O(N log N) per pass; loops only if a merge occurred.
-%  Effects: only Id variables unify; Keys are never unified. Key equality preserves var identity via (==) after ordering.
-%  Notes: Do not compare Ids by print-name; the foldl/5 Changed flag controls recursion.
+%  - Pipeline: sort/2 → group by Key → unify all Ids in each group into the first (representative).
+%  - Iterates to a fixpoint only if any group merged (>1 Id): Id aliasing may instantiate variables inside Keys and reveal new duplicates.
+%  - Complexity: O(N log N) per pass.
+%  Effects: only Id variables unify; Keys are never unified. Key equality preserves variable identity via (==) after ordering.
+%  Notes: Do not compare Ids by print-name; merge continues while the Changed flag from foldl/5 is true.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -243,6 +243,7 @@ constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply each DCG Rule(Node,Index)// to Node, given Index; nondet over Rules.
+%  - Rules is a list of DCG nonterminals Rule//2.
 %  - Rules may only emit Key-Id items and (=)/2 equalities; no unification.
 %  - Appends outputs to the DCG stream; rebuild//1 later consumes them.
 %  - Uses sequence/2 (library(dcg/high_order)) to iterate rules in order.
