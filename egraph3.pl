@@ -22,22 +22,22 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract//0, extract/1: last standard step; materializes concrete Prolog terms (one per class).
 
 Implementation predicates (quick reference)
-- lookup/2 (semidet, pure, steadfast): Find Id for Key in a canonical ordset; prune by standard order, confirm with (==). Binds Id only. Pre: canonical. O(N); no choicepoints on success.
-- add//2, add/4 (det, pure w.r.t. Keys): Build Key=F(ChildIds) left-to-right (stable congruence). Emit only Key-Id; no Id aliasing. Pre: In is an ordset (canonical preferred).
-- add_node/4, add_node/3 (det, quasi-pure): Reuse existing Id for Node or insert Node-Id with a fresh Id var. Out remains canonical. No Id aliasing. Pre: In canonical.
+- lookup/2 (semidet, pure, steadfast): Canonical ordset lookup of Key-Id. Prunes by standard order, confirms with (==). Binds Id only. Pre: canonical. O(N). No choicepoints on success.
+- add//2, add/4 (det, pure w.r.t. Keys): Build Key=F(ChildIds) left-to-right (stable congruence). Emit only Key-Id; never alias Ids. Pre: In is an ordset (canonical preferred).
+- add_node/4, add_node/3 (det, quasi-pure): Reuse existing Id or insert Node-Id with a fresh Id var. Out canonical. No Id aliasing. Pre: In canonical.
 - merge_nodes//0, merge_nodes/2 (det; Id effects only): sort -> group -> unify all Ids per Key with the first; repeat to a fixpoint. Keys never unify. Terminates because the number of distinct Id vars strictly decreases.
 - merge_group/4 (det; Id effects only): For Key-[H|T], unify each Id in T with H; Changed=true iff T \= []; representative is H. Only Id vars unify.
-- make_index/2 (det, pure): Build rbtree Id->[Keys] from canonical Nodes, keyed by Id variable identity (==). Rebuild after any Id aliasing. O(N log N).
+- make_index/2 (det, pure): Build rbtree Id->[Keys] from canonical Nodes; keyed by Id variable identity (==). Rebuild after any Id aliasing. O(N log N).
 - rules//3, rule//3 (nondet, pure): Apply DCG Rule(Node,Index)//2 to Node. Rules may emit only Key-Id and (=)/2 between Ids; must not inspect/bind Ids. Output order: per-node, then per-rule.
 - match/4 (det, pure): Run Rules over Worklist using Index; produce scheduled Matches (Key-Id and (=)/2). No unification here. Output order: worklist order, then per-rule.
-- push_back//1 (det, pure): Append a list to DCG output in O(1) (difference lists). Scheduling only.
-- rebuild//1 (det; Id effects only): Apply A=B to alias Ids, enqueue Key-Id items, then canonicalize via merge_nodes/2. Only Ids unify; instantiations inside Keys collapse in the next merge.
+- push_back//1 (det, pure): Append a list to DCG output in O(1) via difference lists. Scheduling only.
+- rebuild//1 (det; Id effects only): Apply A=B to alias Ids, enqueue Key-Id items, then canonicalize via merge_nodes/2. Only Ids unify; variable instantiations inside Keys collapse in the next merge.
 - unif/1 (semidet, intentionally impure): Recognize Eq=(A=B) and perform A=B (no occurs-check). Used only by rebuild//1 via exclude/3. Safe for fresh, acyclic Ids. Never call from rules.
 - comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): Example rewrite rules/helpers. Pure producers; consult Index only; never inspect/bind Ids; no in-place rewrites.
 - extract/2, extract_node/1 (semidet; aliases Ids): Helpers for extract//0. Unify each class Id with one of its Keys (via member/2) to materialize exactly one concrete Prolog term per class. Use only as the last standard step; discard bindings if continuing analysis.
 - saturate/4 (det, driver): Step-bounded driver: make_index, match, rebuild (alias Ids), merge. Stop when length stabilizes; alias-only steps are not progress. Only Ids may unify (during rebuild/merge).
-- DCG bridging: DCG calls to merge_nodes//0 expand to merge_nodes/2; nonterminals remain pure producers.
-- Id discipline: Class Ids are fresh logic variables (not predicate symbols) used as mutable class identifiers. Alias via (=)/2 only; compare by identity (==), never by name/print-name.
+- DCG bridging: DCG calls to merge_nodes//0 expand to merge_nodes/2; nonterminals are pure producers.
+- Id discipline: Class Ids are fresh logic variables (not predicate symbols). Alias via (=)/2 only; compare by identity (==), never by name/print-name.
 
 Notes on mutable class Ids
 - Class Ids are fresh logic variables (not predicate symbols) that act as mutable, unique class identifiers. They alias via unification only; never compare them by print-name.
@@ -392,7 +392,7 @@ unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
 %  Materialize exactly one concrete Prolog term per equivalence class by unifying each class Id with one of its Keys (a representative).
-%  Goal: extract a concrete Prolog term per class; this is the last standard step of using an e‑graph.
+%  Goal: extract a concrete Prolog term per class; this is the last standard step of using an e-graph.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, inspect Nodes directly.
 %  Det: semidet; fails only if some class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
@@ -402,7 +402,7 @@ extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
 %  DCG wrapper for extract/1; aliases Ids to materialize exactly one concrete term per class.
-%  Last standard step of using an e‑graph; stop rewriting/saturation after this.
+%  Last standard step of using an e-graph; stop rewriting/saturation after this.
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
