@@ -2,8 +2,8 @@
 
 /** <module> egraph
 E-graphs for Prolog terms using logic variables as mutable unique identifiers.
-Each class is keyed by a fresh Id variable, which may only be aliased via (=)/2
-and whose equality must be tested with (==).
+Each class is keyed by a fresh Id variable that may only be aliased via (=)/2.
+Compare Id variables by identity with (==) and never by name or print-name.
 
 Nodes are an ordset of Key-Id pairs where Key is an atom, a var, or F(ChildIds).
 Keys preserve variable identity and are never alpha-renamed or normalized.
@@ -11,10 +11,10 @@ Ids are opaque logic variables and must never be inspected or compared by name.
 Canonicalization keeps at most one Key-Id per Key and is performed by
 merge_nodes/2 after any aliasing.
 
-Rules are pure producers that emit Key-Id pairs and equalities A=B, and rules
-must not inspect or bind Ids.
-Only rebuild//1 and merge_nodes/2 perform Id aliasing, and they must run after
-rules to propagate effects and re-canonicalize.
+Rules are pure producers that emit Key-Id pairs and equalities A=B only.
+Rules must not inspect or bind Id variables and must not unify Keys.
+Only rebuild//1 and merge_nodes/2 perform Id aliasing and must run after rules
+to propagate effects and to re-canonicalize.
 
 add//2 inserts a term as nodes and returns its class Id via DCG.
 union//2 aliases two class Ids via DCG and re-canonicalizes.
@@ -27,25 +27,26 @@ saturate iterates make_index, match, rebuild, and merge until the node count
 stabilizes, and alias-only steps do not count as progress.
 
 Ids are compared by identity with (==) and never by name or print-name.
-Unifying Ids may instantiate variables inside Keys, and a subsequent merge
-collapses any resulting collisions.
-lookup/2 expects canonicalized input, and non-canonical sets may fail spuriously.
+Unifying Ids may instantiate variables inside Keys, and the next merge collapses
+any resulting collisions.
+lookup/2 expects canonicalized input and non-canonical sets may fail spuriously.
 
-Keys are variable-identity sensitive, and variant-equal keys with distinct
-variables are different by design.
+Keys are variable-identity sensitive and variant-equal Keys with distinct vars
+are different by design.
 BUG: assoc//2 contains a cut that commits before rb_lookup/3 and fails when BC
 is absent from the Index; the intended behavior is to emit no output.
 
 The goal of extract is to obtain a concrete Prolog term per class by unifying
 each class Id with a representative Key.
-It is the last standard step and should not be followed by rewriting or
+Extract is the last standard step and should not be followed by rewriting or
 saturation.
 
 Notes.
-The use of logic variables as mutable class identifiers is subtle and requires
-strict separation of concerns where only rebuild//1 and merge_nodes/2 unify Ids.
-Ids are logic variables, not predicate symbols, and not atoms or numbers.
-Do not inspect, compare by name, or print Id variables in user code or rules.
+Use Id variables as mutable identifiers but keep unification restricted to
+rebuild//1 and merge_nodes/2.
+Do not inspect, print, or compare Id variables by name in user code or rules.
+Portability note: using the atom inf as an unbounded step in saturate//2 may be
+non-portable across Prolog systems.
 */
 
 /* ----------------------------------------------------------------------
