@@ -38,10 +38,10 @@ BUG: assoc//2 has a cut that commits before rb_lookup/3 and fails when BC is
 absent from the Index.
 The intended behavior is to emit no output when BC is absent.
 
-The goal of extract is to extract a concrete Prolog term per class by unifying
-each class Id with a representative Key.
-Extract is the last standard step and should not be followed by rewriting or
-saturation.
+The goal of extract is to extract a concrete prolog term per class by
+unifying each class Id with a representative Key.
+Extract is the last standard step of using an egraph and must not be followed
+by rewriting or saturation.
 
 Notes.
 Use Id variables as mutable unique identifiers but keep unification restricted
@@ -417,8 +417,8 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - BUG: a cut commits before rb_lookup/3 and causes failure when BC is absent
-%    from Index; the intended behavior is to emit no output.
+%  - BUG: a cut commits before rb_lookup/3; when BC is absent in Index the
+%    rule fails, but the intended behavior is to emit no output.
 %  - Note: When BC is missing in Index, this predicate should emit no output.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
@@ -495,6 +495,7 @@ constant_folding_a([], _, _, _) --> [].
 %  - Emits exactly two outputs per numeric pair: VC-C and C=AB.
 %  - Pure producer; unification is deferred to rebuild//1 (Ids only).
 %  - Rules must not inspect or bind Ids.
+%  Note: Index is unused; kept to match the Rule//2 interface.
 %  Determinism: nondet over numeric members of class(B); no side effects.
 %  The emitted VC-C is a new Key-Id pair; equality C=AB is consumed by
 %  rebuild//1.
