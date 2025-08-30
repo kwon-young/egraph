@@ -194,7 +194,7 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; emit at most one triple per match.
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - If BC is absent from Index, the rule emits nothing.
+%  - If BC is absent from Index, the intended behavior is to emit nothing. Note: due to the cut in the first clause, the current implementation fails instead of succeeding with no emissions ([]).
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -326,7 +326,7 @@ match(Rules, Worklist, Index, Matches) :-
 %  Append List to DCG output in O(1) (difference lists).
 %  - Scheduling only; merge_nodes/2 does canonicalization.
 %  Notes:
-%  - Idiomatic DCG trick: push_back(L), L --> [].
+%  - Defined via the DCG idiom: push_back(L), L --> [].
 %  - Pure w.r.t. Keys/Ids; no side effects.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
@@ -348,7 +348,7 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  - Portability: some systems cannot compare atoms with integers; prefer saturate//2 with a large finite integer there.
+%  - Portability: N='inf' triggers arithmetic comparison in saturate/4; on systems where atoms cannot be compared arithmetically (e.g., SWI), prefer saturate//2 with a large finite MaxSteps.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -364,7 +364,7 @@ saturate(Rules) -->
 %  Det: det. Notes:
 %  - Progress is measured by list length after merge; alias-only steps are ignored.
 %  - Worklist is the current canonical Nodes.
-%  - N is compared arithmetically (N > 0); non-numeric MaxSteps (e.g., the atom 'inf') will error on some systems; supply a large integer there.
+%  - N is compared arithmetically (N > 0); a non-numeric MaxSteps (e.g., 'inf') will error on systems that disallow arithmetic on atoms; use a large integer instead.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -391,8 +391,7 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Last standard step: materialize one concrete Prolog term per class by unifying each class Id with one of its Keys (a representative).
-%  Goal: extract a concrete Prolog term per class; this is the last standard step of using an e-graph.
+%  Materialize one concrete Prolog term per class by unifying each class Id with a representative Key. This is the last standard step of using an e-graph.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, inspect Nodes directly.
 %  Det: semidet; fails only if some class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
@@ -401,7 +400,7 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extract/1 (last standard step). Aliases Ids to materialize one concrete term per class; stop rewriting/saturation after this.
+%  DCG wrapper for extract/1. Aliases Ids to materialize one concrete term per class; this should be the last standard step (stop rewriting/saturation after this).
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
@@ -439,7 +438,7 @@ example1(G) :-
 
 
 %! add_expr(+N, -Expr) is det.
-%  Build right-associated sum 1+2+...+N (as a +(A,B) term chain). N >= 1.
+%  Build left-associated sum 1+2+...+N as a +(A,B) chain: ((1+2)+3)+... . N >= 1.
 add_expr(N, Add) :-
    numlist(1, N, L), L = [H|T], foldl([B, A, A+B]>>true, T, H, Add).
 
