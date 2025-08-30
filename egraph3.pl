@@ -408,14 +408,13 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
    ).
 
 %! comm(+Node, +Index)// is nondet.
-%  Commutativity of +/2: from (A+B)-AB emit B+A-BA and AB=BA.
-%  - Models equality without in-place rewrite; at most one commuted variant per match.
+%  Commutativity of +/2: for (A+B)-AB emit B+A-BA and AB=BA without binding Ids.
+%  Emits exactly two outputs in order: the commuted node and then the equality.
+%  Models equality without in place rewrite and emits at most one variant.
 %  Notes:
-%  - BA is fresh and AB is the original Id.
-%  - The equality is consumed by rebuild//1 (Id aliasing only).
-%  - Emits exactly two outputs per match: the commuted node and one equality.
-%  - Rules must not inspect or bind Ids.
-%  - Rules may only emit nodes and (=)/2.
+%  - BA is a fresh Id and AB is the original Id.
+%  - The equality is consumed by rebuild//1 and aliases only Id variables.
+%  - Rules must not inspect or bind Ids and may only emit nodes and A=B.
 comm((A+B)-AB, _Nodes) -->
    !,
    [B+A-BA, AB=BA].
@@ -555,7 +554,7 @@ make_index(In, Index) :-
 
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
 %  Run Rules over Worklist using Index; produce scheduled Matches (Key-Id items and (=)/2).
-%  - Output order: worklist, then per-node rule order.
+%  - Output order: worklist order then per-rule per-node order.
 %  Impl: foldl/4 with rules//3.
 %  Complexity: O(|Worklist|*|Rules| + |Matches|) plus per-Rule Index work.
 %  Determinism: det; pure; steadfast (no Id unification here).
@@ -637,8 +636,9 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract a concrete Prolog term per class by unifying each class Id with a representative Key.
-%  - This is the last standard step; do not run rewriting/saturation after extraction.
+%  The goal of extract is to unify each class Id with a representative Key
+%  to materialize a concrete Prolog term per class and it is the last
+%  standard step.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, read Nodes directly.
 %  Fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
