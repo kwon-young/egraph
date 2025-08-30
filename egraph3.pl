@@ -316,7 +316,8 @@ lookup(Item-V, [X1-V1]) :-
 %  - Atom/var:  Key = Term (variable identity is part of the Key).
 %  - Emits Key-Id only; never aliases Ids (dedup via merge_nodes/2).
 %  Pre: In is an ordset (canonical preferred).
-%  Det/Complexity: det; steadfast. Build O(|Term|); insert O(N) via ord_add_element/3.
+%  Det/Complexity: det; steadfast.
+%  Build O(|Term|) and insert O(N) via ord_add_element/3.
 %  Notes:
 %  - Allocates at most one fresh Id (logic variable) if absent.
 %  - DCG form is a pure producer (no Id aliasing).
@@ -568,7 +569,9 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  - Portability: uses MaxSteps=inf here; on systems where N=inf in arithmetic errors, use saturate//2 with a large integer bound.
+%  Portability: uses MaxSteps=inf for convenience.
+%  On systems where inf in arithmetic raises an error, use saturate//2 with a
+%  large integer bound.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -583,7 +586,8 @@ saturate(Rules) -->
 %  - MaxSteps: integer >= 0; use saturate//2 to select the bound portably.
 %  Det: det.
 %  Notes:
-%  - Progress is measured by list length after merge; alias-only steps are ignored.
+%  Progress is measured by list length after merge.
+%  Alias-only steps are ignored.
 %  - Worklist is the current canonical Nodes.
 saturate(Rules, N, In, Out) :-
    (  N > 0
