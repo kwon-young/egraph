@@ -35,8 +35,8 @@ test(lookup_found_last, true(V == Z)) :-
     X = _, Y = _, Z = _,
     egraph:lookup(c-V, [a-X, b-Y, c-Z]).
 
-% BUG: Keys are variable-identity sensitive; variant-equal keys with different variables are not identical and should not be found.
-% Demonstrates that lookup/2 does not match f(V2) against existing f(V1) when V1 \== V2.
+% Keys are variable-identity sensitive; variant-equal keys with different variables are not identical and should not be found.
+% Confirms that lookup/2 fails to match f(V2) against existing f(V1) when V1 \== V2 (goal is expected to fail).
 test(lookup_variant_key_identity, [fail]) :-
     V1 = _, V2 = _,
     V1 \== V2,
@@ -1011,3 +1011,91 @@ test(no_duplicate_identical_pair, true(Out == [a-X])) :-
     ord_add_element([a-X], a-X, Out).
 
 :- end_tests(ordsets_ord_add_element).
+
+
+% ordsets: ord_subtract/3 behavior with variables and Key-Id pairs
+:- begin_tests(ordsets_ord_subtract).
+
+% Removing nothing: subtracting [] from a non-empty set returns the same set
+test(sub_empty_subtrahend, true(R == [a,b,c])) :-
+    ord_subtract([a,b,c], [], R).
+
+% Removing from empty: subtracting a non-empty set from [] yields []
+test(sub_empty_minuend, true(R == [])) :-
+    ord_subtract([], [a,b], R).
+
+% Identical sets: subtracting a set from itself yields []
+test(sub_identical_sets, true(R == [])) :-
+    X = _, Y = _,
+    S = [a, b, c],
+    ord_subtract(S, S, R).
+
+% Variable identity: shared variable is removed
+% Here X is the same variable in both ordsets, so it is subtracted
+test(sub_var_identity_removed, true(R == [Y])) :-
+    X = _, Y = _,
+    ord_subtract([X, Y], [X], R).
+
+% Variable non-identity: distinct variables are not removed
+% Here Z is a different variable than X, so X remains
+test(sub_var_different_not_removed, true(R == [X,Y])) :-
+    X = _, Y = _, Z = _, X \== Z,
+    ord_subtract([X, Y], [Z], R).
+
+% Compound with variable identity: f(X) is removed when the same X appears
+test(sub_compound_var_identity_removed, true(R == [])) :-
+    X = _,
+    ord_subtract([f(X)], [f(X)], R).
+
+% Compound with variant-equal but non-identical variable: f(X) is NOT removed by f(Y)
+test(sub_compound_var_variant_not_removed, true(R == [f(X)])) :-
+    X = _, Y = _, X \== Y,
+    ord_subtract([f(X)], [f(Y)], R).
+
+% Node-Id pair identity: subtracting the exact same pair removes it
+test(sub_pair_exact_identity_removed, true(R == [b-Y])) :-
+    X = _, Y = _,
+    ord_subtract([a-X, b-Y], [a-X], R).
+
+% Node-Id pair non-identity on Id: different Id var means the pair is not removed
+test(sub_pair_diff_id_not_removed, true(R == [a-X, b-Y])) :-
+    X = _, Y = _, Z = _, X \== Z,
+    ord_subtract([a-X, b-Y], [a-Z], R).
+
+% Order preserved: result remains an ordset in canonical order
+test(sub_order_preserved, true(R == [a, c])) :-
+    ord_subtract([a, b, c], [b], R).
+
+% Idempotence w.r.t. the same subtrahend: subtracting again yields the same result
+test(sub_idempotent_same_subtrahend, true(R2 == R)) :-
+    ord_subtract([a, b, c], [b], R),
+    ord_subtract(R, [b], R2).
+
+% Multiple removals: remove two items appearing in the subtrahend
+test(sub_remove_two_items, true(R == [c])) :-
+    ord_subtract([a, b, c], [a, b], R).
+
+% Removing non-members: elements not present in minuend are ignored
+test(sub_remove_non_members_ignored, true(R == [a, b])) :-
+    ord_subtract([a, b], [x, y], R).
+
+% Mixed terms with variables: ensure only identical terms are removed
+test(sub_mixed_terms_var_identity, true(R == [g(2), h(Z)])) :-
+    X = _, Z = _,
+    ord_subtract([f(X), g(2), h(Z)], [f(X)], R).
+
+% Mixed terms with different variables: nothing removed if variables differ
+test(sub_mixed_terms_var_non_identity, true(R == [f(X), g(2), h(Z)])) :-
+    X = _, Y = _, Z = _, X \== Y,
+    ord_subtract([f(X), g(2), h(Z)], [f(Y)], R).
+
+% Defensive precondition highlight: ord_subtract requires canonical ordsets
+% Here we provide already-canonical inputs constructed with ordsets primitives to ensure correctness.
+test(sub_canonical_inputs_ok, true(R == [a-X, b-Y])) :-
+    X = _, Y = _, Z = _,
+    ord_add_element([], a-X, S1),
+    ord_add_element(S1, b-Y, S2),
+    ord_add_element([], a-Z, T1),
+    ord_subtract(S2, T1, R).
+
+:- end_tests(ordsets_ord_subtract).
