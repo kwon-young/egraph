@@ -335,8 +335,8 @@ push_back(L), L --> [].
 %    - exclude(unif, Matches, NewNodes): perform Id aliasing (A=B) and drop equalities.
 %    - push_back(NewNodes): enqueue Key-Id items.
 %    - merge_nodes: dedupe; propagate effects of Id aliasing.
-%  Effects: only Id aliasing; may instantiate variables inside Keys (collapsed on merge).
-%  Determinism: det. Equalities must be between Ids (A and B are Id vars).
+%  Effects: Id aliasing only; variables inside Keys may instantiate and are collapsed by merge.
+%  Det: det. Equalities must be between Ids (A and B are Id vars).
 %  Notes:
 %  - Rebuild any Id->[Keys] index after this (Ids are the map keys).
 %  - Keys must never appear on the left/right of (=)/2 here.
@@ -385,29 +385,29 @@ saturate(Rules, N, In, Out) :-
    ).
 
 %! unif(+Eq) is semidet.
-%  Recognize Eq=(A=B) and perform A=B (Id aliasing). Only used by rebuild//1; never call from rules/user code.
+%  Recognize Eq=(A=B) and perform A=B (Id aliasing). Only ever called by rebuild//1; never call from rules/user code.
 %  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id vars.
 %  - Only Id vars may appear; Keys must not.
 %  Det: semidet; intentionally impure. Notes: the only explicit Id unification outside merge_nodes/2.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Goal: extract a concrete Prolog term per equivalence class by unifying each class Id with one of its Keys (representative).
-%  Effects: aliases Id variables (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
+%  Finalization: for each class, unify its Id with one of its Keys (representative), yielding a concrete Prolog term per class.
+%  Effects: aliases Id variables (backtrackable). To inspect without aliasing, examine Nodes directly.
 %  Det: semidet; fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
-%  - Last standard step when using an e-graph; do not continue rewriting after extraction.
+%  - This is the last standard step when using an e-graph; stop rewriting after extraction.
 %  - Only Id variables unify; Keys never unify with each other.
 %  - Ids are logic variables; compare by identity (==), never by name/print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for the final extraction (aliases Ids). Last standard step: materializes concrete Prolog terms.
+%  DCG wrapper for the final extraction; aliases Ids to materialize concrete Prolog terms.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  Alias each class Id with one of its Keys (choose representatives); returns the same list.
-%  Last standard step: extract concrete Prolog terms and stop rewriting/saturation.
+%  Alias each class Id with one of its Keys (choose representatives) and return Nodes unchanged.
+%  Final step: extract concrete Prolog terms, then stop rewriting/saturation.
 %  Det: semidet (fails only if some class has no Keys).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
@@ -421,7 +421,7 @@ extract(Nodes, Nodes) :-
 %  Core of extraction; aliases Ids. Use only as the last step.
 %  Det: semidet.
 %  Notes:
-%  - Picks via member/2; Keys do not unify with each other.
+%  - Picks a representative via member/2; Keys do not unify with each other.
 %  - Ids are logic variables; compare by identity (==).
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
