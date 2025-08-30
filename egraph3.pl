@@ -330,7 +330,7 @@ rebuild(Matches) -->
 %! saturate(+Rules)// is det.
 %  Apply Rules to a length-based fixpoint (no new pairs/equalities observed). See caveat on alias-only steps.
 %  Notes: Fixpoint is based on node-list length; alias-only steps are invisible unless later rule outputs change size.
-%  Determinism: det driver.
+%  Determinism: det driver; pure producer (rules must not unify).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
