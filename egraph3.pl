@@ -1,7 +1,7 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs with congruence closure for Prolog terms.
+E-graphs with congruence closure for Prolog terms (variable-identity sensitive).
 
 Core model
 - Nodes: ordset of Key-Id pairs (standard order). A Key is an atom/var or a term F(ChildIds). Variable identity is part of the Key (no alpha/variant normalization).
@@ -407,7 +407,7 @@ extract(Nodes) :-
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Alias each class Id with one of its Keys (representative) and return Nodes unchanged.
-%  Goal: materialize concrete Prolog terms; last standard step (stop rewriting/saturation afterward).
+%  Goal: extract a concrete Prolog term per class; last standard step of using an e‑graph; stop rewriting/saturation afterward.
 %  Det: semidet; fails only if some class has no Keys; nondet over representative choice.
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
