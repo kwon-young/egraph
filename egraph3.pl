@@ -59,13 +59,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Find Id for Key in a canonical ordset of Key-Id pairs.
+%  Lookup Id for Key in a canonical ordset of Key-Id pairs (no Key construction).
 %  - Pre: Pairs is canonical (after merge_nodes/2).
-%  - Algo: prune by standard order, confirm with (==); binds Id only; never constructs or binds Keys.
-%  - Det/Complexity: semidet, steadfast; O(N); no choicepoints on success.
+%  - Algo: prune by standard order, confirm with (==); binds Id only.
+%  - Determinism/Complexity: semidet, steadfast; O(N); no choicepoints on success.
 %  Notes:
 %  - Non-canonical input may fail spuriously.
-%  - Ids are logic variables acting as mutable class IDs; compare by identity (==) only.
+%  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by name.
 %  - Keys preserve variable identity (no alpha/variant normalization).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -348,23 +348,23 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  - Portability: saturate//1 uses MaxSteps=inf; on systems where N > 0 with atoms errors (e.g., SWI), prefer saturate//2 with a large integer MaxSteps.
+%  - Portability: uses MaxSteps=inf here; on systems that disallow atom/integer comparison in arithmetic (e.g., SWI), prefer saturate//2 with a large integer MaxSteps.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run up to MaxSteps iterations; stop early when length stabilizes (after rebuild/merge).
-%  - MaxSteps: integer >= 0 (or a large finite integer on systems without atom/integer comparison).
+%  - MaxSteps: integer >= 0; choose a large integer instead of 'inf' on systems without atom/integer comparison in arithmetic.
 %  - Alias-only steps are ignored (no new Key-Id pairs).
 %  Det: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Driver. Each iteration: make_index/2, match/4, rebuild//1 (aliases Ids), merge_nodes/2.
 %  - Only rebuild//1 and merge_nodes/2 unify Ids.
 %  - Ids are logic variables (class IDs); rebuild Index after aliasing; never compare by name.
-%  - MaxSteps: integer >= 0 (use a large integer if 'inf' is unsupported).
-%  Det: det. Notes:
+%  - MaxSteps: integer >= 0; on systems where atom/integer comparison in arithmetic fails, pass a large integer (use saturate//2).
+%  Det: det.
+%  Notes:
 %  - Progress is measured by list length after merge; alias-only steps are ignored.
 %  - Worklist is the current canonical Nodes.
-%  - N is compared arithmetically (N > 0); using an atom like inf may error on some systems; use a large integer instead.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
