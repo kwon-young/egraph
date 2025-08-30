@@ -394,35 +394,31 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract concrete Prolog representatives for each class by unifying each class Id with one of its Keys.
-%  - Goal: last standard step of using an e-graph to obtain concrete Prolog terms.
-%  - Side effect: aliases Ids; discard these bindings if you need to continue rewriting.
-%  - To inspect without aliasing, inspect Nodes directly.
-%  Determinism: semidet. Ids are logic variables; the aliasing here is intentional.
+%  Extract one concrete Prolog representative per class by unifying each class Id with one of its Keys.
+%  This is the last standard step of using an e-graph to obtain concrete terms.
+%  Side effects: aliases Ids; discard these bindings if you need to continue rewriting.
+%  To inspect without aliasing, examine Nodes directly.
+%  Determinism: semidet. Ids are logic variables; aliasing here is intentional.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper to extract representatives (aliases Ids) as the last standard e-graph step.
-%  - Succeeds iff every class has at least one Key; otherwise fails.
-%  - Prefer extract/1 outside DCGs.
+%  DCG wrapper for extraction (aliases Ids). Last standard e-graph step.
+%  Succeeds iff every class has at least one Key; otherwise fails.
+%  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  DCG implementation of extract//0: for each Id->[Keys] group, unify Id with a chosen Key.
-%  - Purpose: extract concrete Prolog terms; use as the last standard step after saturation/merges.
-%  - Side effect: aliases Ids; do not continue rewriting with these bindings.
-%  Determinism: semidet.
-%  Notes:
-%  - Fails only if a class has no Keys (should not happen after merge_nodes/2).
+%  DCG implementation of extract//0: for each Id->[Keys] group, unify Id with one Key.
+%  Purpose: obtain concrete Prolog terms; use only as the final step after saturation/merges.
+%  Side effects: aliases Ids; do not continue rewriting with these bindings.
+%  Determinism: semidet. Fails only if a class has no Keys (should not happen after merge_nodes/2).
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
    extract_node(Groups).
 %! extract_node(+Groups) is semidet.
-%  For each Id->[Keys] group, unify Id with one of its Keys; fails if a group is empty.
-%  - Chooses concrete representatives (aliases Ids); core of extraction.
-%  - With Groups from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
-%  Determinism: semidet; aliases Ids.
-%  Notes:
-%  - Perform extraction only as the final step; do not continue rewriting with these bindings.
+%  For each Id->[Keys] group, unify Id with one of its Keys; fails on an empty group.
+%  Chooses concrete representatives (aliases Ids); core of extraction.
+%  With Groups from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
+%  Determinism: semidet; aliases Ids. Perform extraction only as the final step.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
