@@ -142,7 +142,8 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG wrapper for merge_nodes/2; emits nothing. Pure producer.
+%  DCG call to merge_nodes/2; emits nothing. Pure producer.
+%  Note: On SWI-Prolog, DCG expansion calls merge_nodes/2 directly; no extra shim is needed.
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize Nodes to a single Key-Id per Key; loop to a fixpoint.
 %  - Steps: sort -> group_pairs_by_key -> unify all Ids in a group with the first.
