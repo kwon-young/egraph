@@ -1,33 +1,32 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms using logic variables as class identifiers (Ids as mutable, backtrackable unique identifiers).
+E-graphs for Prolog terms. Class identifiers (Ids) are fresh logic variables used as mutable, backtrackable unique identifiers.
 
-Essentials
-- Nodes: canonical ordset of Key-Id, where Key is an atom/var or F(ChildIds).
-- Keys preserve variable identity (no alpha/variant normalization). Use (==) to confirm a hit after ordering-based pruning.
-- Class Ids: fresh logic variables acting as opaque, backtrackable, unique identifiers. The only mutation is aliasing Ids via (=)/2.
-- Canonicalization: merge_nodes/2 keeps at most one Key-Id per Key and must be (re)run after any Id aliasing.
+Core concepts
+- Nodes: canonical ordset of Key-Id. Key is an atom/var or a compound F(ChildIds).
+- Keys preserve variable identity (no alpha/variant normalization). Use (==) after order pruning.
+- Ids: opaque logic variables; the only mutation is aliasing via (=)/2.
+- Canonicalization: merge_nodes/2 keeps at most one Key-Id per Key; rerun after any Id aliasing.
 
 Execution model (DCG pipeline)
-- Rules are pure producers: they may emit only Key-Id items and equalities A=B; they never inspect or bind Ids.
-- Only rebuild//1 and merge_nodes/2 unify Ids. rebuild//1 consumes A=B equalities (aliasing), enqueues items, then canonicalizes.
+- Rules are pure producers: they only emit Key-Id items and equalities A=B; they never inspect or bind Ids.
+- Only rebuild//1 and merge_nodes/2 unify Ids. rebuild//1 consumes A=B, enqueues items, then canonicalizes.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract//0, extract/1.
 
-Implementation overview
-- lookup/2: O(N) lookup in canonical ordset; prunes by standard order then confirms with (==). Binds Id only; steadfast; no choicepoints on success.
-- add/4, add//2: build nodes. Compounds become F(ChildIds) left-to-right (stable congruence). Emit Key-Id only (no aliasing).
-- add_node/3, add_node/4: reuse Id if present; otherwise insert with a fresh Id. In/Out stay canonical. Never unify Ids.
-- merge_nodes/2, merge_nodes//0: sort → group → alias all Ids per Key to the first; repeat while any merge happened. Keys never unify.
-- merge_group/4: helper for merge_nodes/2; unifies tail Ids with head; signals whether any merge occurred.
-- make_index/2: rbtree Id->[Keys], keyed by Id identity (==). Always rebuild after aliasing.
-- rules//3, rule//3: apply Rule(Node,Index)//2 in the given order. Output order is per-node then per-rule.
+Implementation outline
+- lookup/2: O(N) scan over canonical ordset; prune by standard order, confirm Key with (==); binds Id only; no choicepoints on success.
+- add/4, add//2: build nodes. Compounds become F(ChildIds) left-to-right (stable congruence). Emit only Key-Id.
+- add_node/3,4: reuse Id if present; else insert with a fresh Id. Never unify Ids.
+- merge_nodes/2, //0: sort → group → alias all Ids per Key to the first; repeat while any merge happened. Keys never unify.
+- merge_group/4: unify tail Ids with head; signal whether any merge occurred.
+- make_index/2: rbtree Id->[Keys], keyed by Id identity (==). Rebuild after aliasing.
+- rules//3, rule//3: apply Rule(Node,Index)//2 in order; output order is per-node then per-rule.
 - match/4: apply rules over a worklist to produce scheduled matches (Key-Id and A=B); no unification here.
 - push_back//1: O(1) append to DCG output (scheduling only).
-- rebuild//1: perform (=)/2 on Ids, drop equalities, append Key-Id items, then merge_nodes/2.
-- unif/1: recognize and execute A=B (Ids only); used solely by rebuild//1.
+- rebuild//1: perform (=)/2 on Ids, drop equalities, enqueue Key-Id items, then merge_nodes/2.
 - comm//2: for (A+B)-AB, emit B+A-BA and AB=BA.
 - assoc//2, assoc_//3: associativity for +/2 constrained by class(BC) from Index. Known issue: a cut causes failure if BC is absent; intended behavior is “no output”.
 - reduce//2: neutral element 0 for +/2; if class(B) contains 0, emit A=AB.
@@ -37,15 +36,15 @@ Extraction (last standard step)
 - extract//0, extract/1, extract/2, extract_node/1: alias each class Id with a chosen representative Key to materialize one concrete Prolog term per class. Do not run rewriting after extraction.
 
 Driver
-- saturate//1, saturate//2, saturate/4: iterate make_index → match → rebuild → merge until the size stabilizes. Alias-only steps (only A=B) are not counted as progress.
-  Note (SWI-Prolog): saturate//1 uses MaxSteps=inf and N>0 with N=inf throws error. Prefer saturate//2 with a large integer bound.
+- saturate//1, saturate//2, saturate/4: iterate make_index → match → rebuild → merge until size stabilizes. Alias-only steps (only A=B) do not count as progress.
+  Note (SWI-Prolog): saturate//1 with MaxSteps=inf and N>0 where N=inf throws; prefer saturate//2 with a large integer bound.
 
-Id discipline and gotchas
-- Compare Ids by identity (==), never by name/print-name. Do not serialize Ids.
-- Unifying Ids can instantiate variables inside Keys; always merge afterward (rebuild//1 already does).
+Id discipline
+- Compare Ids by identity (==), never by print-name; do not serialize Ids.
+- Unifying Ids can instantiate variables inside Keys; always re-merge (rebuild//1 does).
 - lookup/2 expects canonical input; non-canonical lists may fail spuriously.
 
-Notes
+Note
 - Keys are intentionally variable-identity sensitive; variant-equal keys with different variables are distinct.
 */
 
@@ -391,21 +390,21 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Goal: extract concrete Prolog terms from the e-graph. Materialize one term per class by unifying each class Id with a representative Key. This is the last standard step; do not run rewriting after this.
+%  Goal: extract a concrete Prolog term per class from the e-graph by unifying each class Id with a representative Key. This is the last standard step of using an e-graph; do not run rewriting after this.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, read Nodes directly.
-%  Semidet: fails only if a class has no Keys (should not happen after merge_nodes/2).
+%  Fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
 %  - Ids are logic variables used as mutable class identifiers; compare by identity (==), never by name/print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extract/1; last standard step: aliases Ids to materialize one concrete term per class (stop rewriting/saturation after this).
+%  DCG wrapper for extract/1. Last standard step: alias Ids to materialize one concrete Prolog term per class (stop rewriting/saturation after this).
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Alias each class Id with one of its Keys (a representative) and return Nodes unchanged.
-%  Goal: extract concrete Prolog terms (one per class); this is the last standard step of using an e-graph; stop rewriting/saturation afterward.
+%  Goal: extract a concrete Prolog term per class; this is the last standard step of using an e-graph; stop rewriting/saturation afterward.
 %  Det: semidet; fails only if some class has no Keys; nondet over representative choice.
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
