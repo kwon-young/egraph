@@ -53,8 +53,14 @@ test(add_compound_parent_uses_child_ids, true(member(f(A,B)-Id, Out))) :-
     egraph:add(f(a,b), Id, [], Out).
 
 % DCG form: add//2 builds nodes via phrase/3
+% Verifies that adding an atom via DCG yields a singleton list with that node.
 test(add_dcg_atom, true(Out == [a-Id])) :-
     phrase(egraph:add(a, Id), [], Out).
+
+% DCG form for compound term: ensures children and parent entries are produced
+% Verifies that phrase/3 over add//2 inserts a-A, b-B, and f(A,B)-Id.
+test(add_dcg_compound_builds_all_nodes, true((member(a-A, Out), member(b-B, Out), member(f(A,B)-Id, Out)))) :-
+    phrase(egraph:add(f(a,b), Id), [], Out).
 
 :- end_tests(add).
 
@@ -154,6 +160,12 @@ test(merge_nodes_alias_instantiates_keys_ids_equal, true(FB==FA)) :-
     A = B,
     egraph:merge_nodes(In, Out),
     _ = Out.
+
+% DCG wrapper on non-canonical input: deduplicates and aliases Ids
+% Ensures phrase/3 with merge_nodes//0 canonicalizes [x-A,x-B] into [x-A] and unifies A,B.
+test(merge_nodes_dcg_dedup_and_alias, true((Out == [x-A], A==B))) :-
+    A = _, B = _,
+    phrase(egraph:merge_nodes, [x-A, x-B], Out).
 
 :- end_tests(merge_nodes).
 
@@ -306,6 +318,12 @@ test(const_fold_skips_non_numeric_A, true(Out == [])) :-
     ord_list_to_rbtree([A-[foo], B-[3]], Index),
     phrase(egraph:constant_folding((A+B)-AB, Index), Out).
 
+% Skips when class(B) has no numeric members
+test(const_fold_skips_non_numeric_B, true(Out == [])) :-
+    A = _, B = _,
+    ord_list_to_rbtree([A-[2], B-[foo]], Index),
+    phrase(egraph:constant_folding((A+B)-_AB, Index), Out).
+
 :- end_tests(constant_folding).
 
 
@@ -343,6 +361,10 @@ test(const_fold_b_filters_pair, true(member(5-_C, Out))) :-
 % Emits equality C=AB for numeric VB
 test(const_fold_b_filters_eq, true(member(_C=_AB, Out))) :-
     phrase(egraph:constant_folding_b([3, foo], 2, _AB, _Index), Out).
+
+% No output when class(B) has no numeric members
+test(const_fold_b_non_numeric_only, true(Out == [])) :-
+    phrase(egraph:constant_folding_b([foo, bar], 2, _AB, _Index), Out).
 
 :- end_tests(constant_folding_b).
 
@@ -386,6 +408,13 @@ test(rule_wrapper_comm_node, true((member(K-_BA, Out), K = B+A))) :-
 test(rule_wrapper_comm_eq, true(member(_AB=_BA, Out))) :-
     A = _, B = _,
     phrase(egraph:rule(_Index, (A+B)-_AB, comm), Out).
+
+% Wrapper invokes reduce rule: emits A=AB when class(B) contains 0
+% Confirms that rule//3 passes Index correctly to the reduce rule.
+test(rule_wrapper_reduce_eq, true(member(A=_AB, Out))) :-
+    A = _, B = _,
+    ord_list_to_rbtree([B-[0]], Index),
+    phrase(egraph:rule(Index, (A+B)-_AB, reduce), Out).
 
 :- end_tests(rule).
 
@@ -467,6 +496,14 @@ test(rebuild_canonicalizes_x, true(member(x-A, Out))) :-
 
 % Canonicalizes after alias: y key maps to aliased Id
 test(rebuild_canonicalizes_y, true(member(y-A, Out))) :-
+    A = _, B = _, C = _,
+    In = [x-A, y-B],
+    Matches = [A=B, z-C],
+    phrase(egraph:rebuild(Matches), In, Out).
+
+% Drops (=)/2 equalities from the scheduled matches in the final output set
+% Ensures that equalities are consumed and do not remain in the node list.
+test(rebuild_drops_equalities, true(\+ member(_=_ , Out))) :-
     A = _, B = _, C = _,
     In = [x-A, y-B],
     Matches = [A=B, z-C],
@@ -574,6 +611,12 @@ test(extract_node_chooses_members, true((A==x, B==z))) :-
     A = _, B = _,
     Groups = [A-[x,y], B-[z]],
     once(egraph:extract_node(Groups)).
+
+% Fails when a group has an empty member list (defensive check)
+% Although groups built from Nodes are nonempty, the predicate is semidet and should fail here.
+test(extract_node_fails_on_empty_group, fail) :-
+    A = _,
+    egraph:extract_node([A-[]]).
 
 :- end_tests(extract_node).
 
