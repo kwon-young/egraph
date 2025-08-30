@@ -392,37 +392,38 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Finalization: for each class, unify its Id with one of its Keys (representative), yielding a concrete Prolog term per class.
+%  Finalization step: for each class, unify its Id with one of its Keys (a representative), yielding a concrete Prolog term per class.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, examine Nodes directly.
 %  Det: semidet; fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
-%  - This is the last standard step when using an e-graph; stop rewriting after extraction.
+%  - This is the last standard step of using an e-graph; stop rewriting after extraction.
 %  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are logic variables; compare by identity (==), never by name/print-name.
+%  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
 %  DCG wrapper for the final extraction; aliases Ids to materialize concrete Prolog terms.
+%  Goal: extract concrete Prolog terms; this is the last standard step of using an e-graph.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Alias each class Id with one of its Keys (choose representatives) and return Nodes unchanged.
-%  Final step: extract concrete Prolog terms, then stop rewriting/saturation.
+%  Final step: extract concrete Prolog terms; stop rewriting/saturation.
 %  Det: semidet (fails only if some class has no Keys).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are logic variables; compare by identity (==).
+%  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
    extract_node(Groups).
 %! extract_node(+Groups) is semidet.
-%  For each Id->[Keys], unify Id with one member; fails on empty groups.
+%  For each Id->[Keys], unify Id with one member; backtracks over choices; fails on empty groups.
 %  Core of extraction; aliases Ids. Use only as the last step.
 %  Det: semidet.
 %  Notes:
 %  - Picks a representative via member/2; Keys do not unify with each other.
-%  - Ids are logic variables; compare by identity (==).
+%  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
