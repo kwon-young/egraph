@@ -33,7 +33,7 @@ Implementation predicates (internal)
 - push_back//1: append a list to the DCG output (difference-list scheduler).
 - rebuild//1: apply (=)/2 equalities (alias Ids), enqueue new nodes, then canonicalize; the only place where unification happens.
 - unif/1: recognize and execute (=)/2 on class Ids (used only via exclude/3).
-- assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4: internal example rules/helpers; pure producers.
+- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4: internal example rules/helpers; pure producers.
 
 Equality and identity
 - Key equality is determined after standard ordering and confirmed with (==), preserving variable identity.
@@ -49,12 +49,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only search in an ordset of Key-Id pairs (standard order).
+%  Read-only lookup in an ordset of Key-Id pairs (standard order).
 %  - Requires: Pairs is a strictly ordered ordset; Key is nonvar.
 %  - Equality: prunes by standard order, then confirms with (==) to preserve variable identity in Keys.
-%  - Complexity: O(N) linear scan (4-way unrolled). Pure: binds only Val on success; never touches Keys or Pairs.
+%  - Complexity: O(N) linear scan (4-way unrolled). Pure: binds only Val on success; never touches Keys/Pairs.
 %  Notes:
 %    - O(N) is deliberate (simple, cache-friendly); no mutation; backtrack-safe.
+%    - Ids are opaque logic variables; never unified or inspected here.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -247,6 +248,7 @@ constant_folding_b([], _, _, _) --> [].
 %  Apply each DCG Rule(Node,Index)// to Node, given Index; nondet over Rules.
 %  - Purity: rules may only emit Key-Id items and (=)/2 equalities; no unification.
 %  - Scheduling: outputs are appended to the DCG stream and later consumed by rebuild//1.
+%  - Uses library(dcg/high_order): sequence/2 to iterate rules.
 %  Determinism: nondet over Rules; each Rule is called exactly once per Node.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
