@@ -63,7 +63,7 @@ Notes
 %  - Non-canonical input may fail spuriously.
 %  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by name.
 %  - Keys preserve variable identity (no alpha/variant normalization).
-%  - Variant-equal keys with different variables are distinct and will not match; this is by design.
+%  - Variant-equal keys with different variables are distinct and will not match (intentional); do not use =@=/2 here.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -191,7 +191,7 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - BUG: If BC is absent in Index the cut (!) prevents fallback, so the rule fails instead of emitting [] (intended behavior).
+%  - BUG: If BC is absent in Index the cut (!) prevents fallback; the rule fails instead of emitting [] (intended no-output). Known issue.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -217,7 +217,7 @@ assoc_([Node | Nodes], A, ABC) -->
 assoc_([], _, _) --> [].
 %! reduce(+Node, +Index)// is semidet.
 %  Neutral element of +/2: if class(B) contains integer 0, emit A=AB.
-%  - Uses once/1 to avoid duplicates; match 0 exactly with (==).
+%  - Uses once/1 to avoid duplicates; match the integer 0 exactly with (==).
 %  Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
 %  - Unification happens in rebuild//1 (Ids only); rules must not inspect or bind Ids.
