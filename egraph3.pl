@@ -59,8 +59,8 @@ Notes
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
 %  Find Id for Key in a canonical ordset of Key-Id pairs.
-%  - Pre: Pairs canonical (call merge_nodes/2 first).
-%  - Algo: prune via standard order, confirm with (==); binds Id only.
+%  - Pre: Pairs are canonical (run merge_nodes/2 first).
+%  - Algorithm: prune via standard order, then confirm with (==). Binds Id only; never allocates or unifies Keys.
 %  - Det/Cost: semidet, O(N); steadfast; no choicepoints on success.
 %  Notes:
 %  - Undefined on non-canonical input.
@@ -100,7 +100,7 @@ lookup(Item-V, [X1-V1]) :-
 %  - atom/var Term: Key = Term (variable identity is part of the Key).
 %  - Emits only Key-Id; never unifies Ids. merge_nodes/2 deduplicates.
 %  Pre: In is an ordset (prefer canonical).
-%  Det/Cost: build O(|Term|), insertion O(N) via ord_add_element/3. det; steadfast; pure w.r.t. Keys.
+%  Det/Cost: build O(|Term|); insertion O(N) via ord_add_element/3. det; steadfast; pure w.r.t. Keys.
 %  Notes:
 %  - Id is a fresh logic var when inserted; otherwise reused. DCG form is a pure producer.
 add(Term, Id, In, Out) :-
@@ -187,6 +187,7 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; emit at most one triple per match.
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
+%  - If BC is absent from Index, the rule emits nothing.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
