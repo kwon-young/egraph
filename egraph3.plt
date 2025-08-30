@@ -492,7 +492,7 @@ test(rules_apply_order_reduce_eq, true(member(A=AB, Out))) :-
     phrase(egraph:rules(Rules, Index, (A+B)-AB), Out).
 
 % Ensures output order is per-rule: comm outputs precede reduce outputs
-test(rules_output_order_prefix, true((Out = [K1, Eq1, Eq2 | _], K1 = (B+A)-_, Eq1 = AB=BA, Eq2 = A=AB))) :-
+test(rules_output_order_prefix, true((Out = [K1, Eq1, Eq2 | _], K1 = (B+A)-_, Eq1 = (AB=BA), Eq2 = (A=AB)))) :-
     A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
     Rules = [comm, reduce],
@@ -522,7 +522,7 @@ test(rule_wrapper_reduce_eq, true(member(A=AB, Out))) :-
     phrase(egraph:rule(Index, (A+B)-AB, reduce), Out).
 
 % Ensures comm rule emits node before equality in its output list
-test(rule_comm_output_order, true((Out = [K1, Eq1], K1 = (B+A)-_, Eq1 = AB=BA))) :-
+test(rule_comm_output_order, true((Out = [K1, Eq1], K1 = (B+A)-_, Eq1 = (AB=BA)))) :-
     A = _, B = _,
     phrase(egraph:rule(_Index, (A+B)-AB, comm), Out).
 
@@ -568,7 +568,7 @@ test(match_comm_eq, true(member(AB=_BA, Matches))) :-
     egraph:match([comm], Work, Index, Matches).
 
 % Ensures match preserves rule output order for a single work item
-test(match_comm_order_prefix, true((Matches = [K1, Eq1 | _], K1 = B+A-_, Eq1 = AB=BA))) :-
+test(match_comm_order_prefix, true((Matches = [K1, Eq1 | _], K1 = B+A-_, Eq1 = (AB=BA)))) :-
     A = _, B = _, AB = _,
     Work = [(A+B)-AB],
     ord_list_to_rbtree([], Index),
@@ -646,15 +646,22 @@ test(rebuild_noop_on_empty_matches, true(Out == In)) :-
 % saturate//1
 :- begin_tests(saturate_dcg_1).
 
-% Portability: On SWI-Prolog, saturate//1 uses MaxSteps=inf which is not evaluable in arithmetic; calling it should raise a type_error(evaluable,inf).
-% Assert that calling saturate//1 raises the expected error.
-test(saturate1_errors_on_swi, [error(type_error(evaluable, _))]) :-
+% Ensures saturate//1 adds exactly one new node for comm and reaches fixpoint
+test(saturate1_fixpoint_adds_one, true(L2 is L1 + 1)) :-
     phrase(egraph:add(1+2, _), [], G0),
-    phrase(egraph:saturate([comm]), G0, _).
+    length(G0, L1),
+    phrase(egraph:saturate([comm]), G0, G2),
+    length(G2, L2).
 
-% Portability: Ensure the wrapper exists and also raises on empty graph input on this platform.
-test(saturate1_wrapper_exists_errors, [error(type_error(evaluable, _))]) :-
-    phrase(egraph:saturate([comm]), [], _).
+% Ensures saturate//1 result contains the commuted node
+test(saturate1_contains_commuted, true(member((2+1)-_, G2))) :-
+    phrase(egraph:add(1+2, _), [], G0),
+    phrase(egraph:saturate([comm]), G0, G2).
+
+% Ensures saturate//1 retains the original node
+test(saturate1_contains_original, true(member((1+2)-_, G2))) :-
+    phrase(egraph:add(1+2, _), [], G0),
+    phrase(egraph:saturate([comm]), G0, G2).
 
 :- end_tests(saturate_dcg_1).
 
