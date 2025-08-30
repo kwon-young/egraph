@@ -59,7 +59,7 @@ Notes
 %  Read-only lookup in a canonical ordset of Key-Id pairs.
 %  - Complexity: O(N) worst case.
 %  - Key must be nonvar. Prunes by standard order, then confirms with (==) to preserve variable identity.
-%  - Pure: only binds Val; does not touch Key, Ids, or Pairs. Fails if Key is absent.
+%  - Pure: only binds Val; does not touch Key or Pairs and never unifies/instantiates Ids. Fails if Key is absent.
 %  - Pairs must be a strictly ordered ordset (from merge_nodes/2 or sort/2).
 %  Note: Ids are fresh logic variables (class Ids); never unify/inspect them here. At most one match by construction.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
@@ -95,7 +95,7 @@ lookup(Item-V, [X1-V1]) :-
 %  - Compound: Key = F(ChildIds), collecting ChildIds left-to-right (congruence).
 %  - Atom/var: Key = Term (preserves variable identity; no variant-normalization).
 %  - Pure producer: no unification/canonicalization; duplicates may appear (merged later).
-%  - DCG variant threads a difference list; add/4 is the worker (uses foldl/5 with an extra accumulator for ChildIds).
+%  - DCG variant threads a difference list; add/4 is the worker (uses foldl to accumulate ChildIds).
 %  Effects: allocates a fresh Id only when Key is new. Aliasing Ids elsewhere may instantiate variables inside Keys; run merge_nodes/2 afterwards.
 %  Note: Ids are logic variables used as mutable class identifiers; never compare by print-name.
 add(Term, Id, In, Out) :-
@@ -112,7 +112,7 @@ add(Term, Id, In, Out) :-
 %  Ensure Key Node has a class Id; reuse if present, else insert Node-Id with a fresh Id.
 %  - In/Out are ordsets of Key-Id pairs; prune by standard order, confirm equality with (==).
 %  - No unification/canonicalization here; run merge_nodes/2 after any Id aliasing elsewhere.
-%  Effects: allocates a fresh Id only when Node is new; pure w.r.t. Keys.
+%  Effects: allocates a fresh Id only when Node is new; Out=In when Node already exists; pure w.r.t. Keys.
 %  Note: ord_add_element/3 requires In to be an ordset. Ids are logic variables; never compare by print-name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -141,7 +141,7 @@ union(A, B, In, Out) :-
 %  - Iterate to a fixpoint because Id aliasing may instantiate variables inside Keys and reveal new duplicates.
 %  - Complexity: O(N log N) per pass; repeats only when aliasing exposes new merges.
 %  Effects: unifies Id variables only; Keys are never unified. Equality preserves variable identity via (==) after ordering.
-%  Note: Do not compare Ids by print-name; only unification relates classes.
+%  Note: Do not compare Ids by print-name; only unification relates classes. The foldl/5 'Changed' flag causes recursion only if any merge occurred.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -206,7 +206,7 @@ reduce(_, _) --> [].
 %! constant_folding(+Node, +Index)// is nondet.
 %  Fold ground numeric sums (integers/floats) into a single constant.
 %  - Shrinks the search space by canonicalizing ground arithmetic; introduces C and preserves AB via C=AB.
-%  Note: Evaluation uses is/2. Emits nodes/equalities only; unification is deferred to rebuild//1.
+%  Note: Evaluation uses is/2 (integers/floats as in Prolog); preserves the type produced by is/2. Emits nodes/equalities only; unification is deferred to rebuild//1.
 constant_folding((A+B)-AB, Index) -->
    !,
    { rb_lookup(A, ANodes, Index) },
@@ -282,7 +282,7 @@ match(Rules, Worklist, Index, Matches) :-
 %  Append List to the end of the DCG output in O(1) via difference lists.
 %  - Scheduling only; no deduplication and no unification.
 %  - Use with ordset-like streams; canonicalization happens in merge_nodes/2.
-%  Note: This is a DCG helper; it does not inspect or touch Ids.
+%  Note: DCG-only helper; does not inspect or touch Ids.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
 %  Apply Matches (Key-Id items and (=)/2 equalities) and canonicalize:
