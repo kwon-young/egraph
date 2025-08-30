@@ -336,11 +336,12 @@ test(assoc_emits_eq, true(member(ABC=_ABC_, Out))) :-
     phrase(egraph:assoc((A+BC)-ABC, Index), Out).
 
 % BUG: Due to a cut in assoc//2, when BC is absent from the Index the rule fails instead of emitting nothing.
-% This test encodes the intended behavior (no output) and currently fails.
+% This test encodes the intended behavior (no output); we expect it to fail to demonstrate the bug.
 test(assoc_nomap_empty, [fail]) :-
     A = _, BC = _, ABC = _,
     ord_list_to_rbtree([], Index),
-    phrase(egraph:assoc((A+BC)-ABC, Index), _Out).
+    phrase(egraph:assoc((A+BC)-ABC, Index), Out),
+    Out == [].
 
 :- end_tests(assoc).
 
