@@ -704,9 +704,11 @@ test(example1_contains_f4a, true(member(f(f(f(f(a))))-_Id, G))) :-
     egraph:example1(G).
 
 % Aliases the Id for 'a' with the Id for f(f(a)) via union/2
+% Follow the chain a-A, f(A)-FA, then f(FA)-FFA to disambiguate the correct f/1 node.
 test(example1_ids_aliased_by_union, true(A==FFA)) :-
     egraph:example1(G),
     member(a-A, G),
+    member(f(A)-FA, G),
     member(f(FA)-FFA, G).
 
 :- end_tests(example1).
