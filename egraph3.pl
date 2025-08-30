@@ -274,6 +274,7 @@ rule(Index, Node, Rule) -->
 %  - Pre: Nodes are canonical (use merge_nodes/2 first).
 %  - Rebuild after any Id aliasing (Ids are the map keys).
 %  Ids: logic variables as mutable class ids; the variable itself is the key. Never compare by print-name.
+%  Note: rbtree keys use standard order; since keys here are variables, variable identity (not print-name) is used.
 %  Complexity: O(N log N). Det; pure; steadfast.
 %  Note: Uses transpose_pairs/2 to flip Key-Id into Id-Key; Keys are stored as-is.
 make_index(In, Index) :-
@@ -312,7 +313,7 @@ rebuild(Matches) -->
 %! saturate(+Rules)// is det.
 %  Run Rules to a length-based fixpoint: repeat until the length is unchanged after rebuild/merge.
 %  Determinism: det. Rules must be pure producers (only emit nodes/equalities). Alias-only steps do not count as progress.
-%  Portability: Calls saturate/2 with MaxSteps=inf. On systems where 'inf' is not numeric (e.g., SWI‑Prolog), use saturate(Rules, MaxSteps) with a large integer to avoid a (>)/2 type error.
+%  Portability: Calls saturate/2 with MaxSteps=inf. On systems where atoms are not comparable with numbers in arithmetic comparisons (e.g., SWI‑Prolog), pass a large integer instead to avoid a type error in (>)/2.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
