@@ -35,6 +35,7 @@ Implementation predicates (internal)
 - unif/1 (semidet, impure by design): True for Eq=(A=B); performs the unification. Used only via exclude/3 inside rebuild//1; not for user rules.
 - comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): Example rules/helpers. Emit only nodes and equalities; no direct unification (rebuild//1 handles aliasing).
 - extract/2, extract_node/1 (semidet, aliases Ids): Validation helpers for extract//0. Intentionally alias Ids via member/2; use only for validation and discard any bindings.
+- DCG bridging: DCG nonterminals are implemented by same-name predicates with DCG state arguments; in particular, merge_nodes//0 is provided by merge_nodes/2 and is called as merge_nodes(S0,S) after DCG expansion.
 
 Notes on mutable class Ids
 - Class Ids are fresh logic variables that act as mutable, unique class identifiers. They alias via unification only; never compare them by name.
@@ -141,6 +142,7 @@ union(A, B, In, Out) :-
 
 %! merge_nodes//0 is det.
 %  DCG wrapper for merge_nodes/2.
+%  DCG bridging: merge_nodes//0 is provided implicitly by merge_nodes/2 (same name, arity 2) via DCG expansion as merge_nodes(S0,S).
 %  Determinism: det.
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize to one Key-Id per Key and return a sorted ordset.
@@ -268,6 +270,7 @@ constant_folding_b([], _, _, _) --> [].
 %  - Appends outputs to the DCG stream; rebuild//1 consumes them.
 %  - Iteration uses sequence/2 (library(dcg/high_order)).
 %  Determinism: nondet over Rules; each Rule runs once per Node (node order, then rule order).
+%  Steadfast; pure producer (emits items/equalities only).
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
@@ -277,6 +280,7 @@ rules(Rules, Index, Node) -->
 %  - Rule must not unify; only emit nodes and (=)/2 items.
 %  Notes: Called by rules//3; keep pure and do not inspect or modify Ids.
 %  Determinism: as Rule//2.
+%  Steadfast; pure producer (must not inspect or bind Ids).
 rule(Index, Node, Rule) -->
    call(Rule, Node, Index).
 
@@ -302,6 +306,7 @@ make_index(In, Index) :-
 %  - Output order: Worklist order, then per-node rule order.
 %  Notes: Implemented via foldl/4 with rules//3; purely accumulative and steadfast.
 %  Determinism: det; produces a concrete list; no mutation or Id unification here.
+%  Steadfast; pure accumulator.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
 %! push_back(+List)// is det.
@@ -318,7 +323,7 @@ push_back(L), L --> [].
 %    - merge_nodes: canonicalize the graph (dedupe and unify Ids per group).
 %  Effect: only Id aliasing via (=)/2 (logical/backtrackable). Equalities are consumed; deduplication happens in merge_nodes/2.
 %  Notes:
-%  - The only place where (=)/2 is executed (via unif/1 and exclude/3).
+%  - The only place where (=)/2 is executed (via unif/1 and exclude/3), and thus the only place where Id variables unify.
 %  - Unifying Ids may instantiate variables inside Keys; always follow with merge_nodes/2.
 %  Determinism: det.
 rebuild(Matches) -->
