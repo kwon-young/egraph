@@ -277,7 +277,7 @@ Do not inspect, compare by name, or print Id variables in user code or rules.
 %  Find Id for Key in a canonical ordset of Key-Id pairs using (==) on Keys.
 %  - Pre: Pairs canonical (run merge_nodes/2 after aliasing).
 %  - Method: prune by standard order; confirm Key identity with (==); only binds Id.
-%  - Det/Big-O: semidet, steadfast; O(N); no choicepoints on success.
+%  - Det/Big-O: semidet, steadfast; O(N); no choicepoints.
 %  Notes:
 %  - Non-canonical input may fail by design (precondition is canonical).
 %  - Ids are logic variables; compare with (==) only.
@@ -577,8 +577,8 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  Portability: uses MaxSteps=inf as a sentinel and may not be portable.
-%  On systems where inf is not a number, prefer saturate//2 with a large bound.
+%  Note: uses MaxSteps=inf as a sentinel and may be non-portable.
+%  Prefer saturate//2 with a large integer bound on systems without inf.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
