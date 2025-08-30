@@ -349,28 +349,28 @@ rebuild(Matches) -->
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Run Rules to a length-based fixpoint: repeat until length is unchanged after rebuild/merge.
-%  Determinism: det. Rules must be pure producers (only emit nodes/equalities). Alias-only steps do not count as progress.
-%  Portability: Delegates to saturate/2 with MaxSteps=inf. On systems where atoms and numbers cannot be compared arithmetically, use a large integer instead.
+%  Run Rules until the number of Key-Id pairs is unchanged after rebuild/merge.
+%  Determinism: det. Rules must be pure producers (only emit Key-Id and (=)/2). Alias-only steps do not count as progress.
+%  Portability: delegates to saturate//2 with MaxSteps=inf. On SWI-Prolog (and systems where inf>0 is a type error), pass a large integer instead.
 %  Notes:
-%  - The fixpoint ignores pure aliasing steps that do not add/remove pairs.
+%  - The fixpoint is length-based and ignores alias-only steps that do not add/remove pairs.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
-%  Run up to MaxSteps iterations.
-%  - MaxSteps: integer >= 0. 'inf' allowed only if it compares with numbers on your Prolog; otherwise pass a large integer.
-%  - Stop when length is unchanged after rebuild/merge. Alias-only steps don't change length.
+%  Run up to MaxSteps iterations (length-based stopping).
+%  - MaxSteps: integer >= 0. The atom inf is accepted only on Prologs where inf > 0 succeeds; otherwise pass a large integer.
+%  - Stop when the number of pairs is unchanged after rebuild/merge. Alias-only steps do not count as progress.
 %  Determinism: det.
 %  Notes:
-%  - Use a large integer instead of 'inf' where atoms and numbers are not arithmetically comparable.
+%  - On SWI-Prolog, do not use inf here; prefer a large integer.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
-%  Driver: rebuild the Id->Keys index each iteration; stop on stable length or when MaxSteps runs out.
-%  - Rules must be pure producers; unification happens only in rebuild//1 and merge_nodes/2.
+%  Driver: per iteration, rebuild Id->Keys, run Rules over the current canonical Nodes, apply Matches in rebuild//1, then merge.
+%  - Rules must be pure producers; only rebuild//1 and merge_nodes/2 perform Id unification.
 %  - Ids are logic vars; rebuild the index after aliasing; never compare by print-name.
-%  - If MaxSteps='inf', the guard (N > 0) requires a Prolog where 'inf' compares with numbers; otherwise use a large integer.
+%  - MaxSteps: integer >= 0. The atom inf is portable only if N > 0 holds for inf; on SWI-Prolog prefer a large integer.
 %  Determinism: det driver; nondet only from Rules.
 %  Notes:
-%  - Progress metric is length only; pure aliasing steps are invisible to the stop test.
+%  - Progress metric is length only; alias-only steps are invisible to the stop test.
 %  - Worklist per step is the current canonical Nodes (Index is rebuilt every iteration).
 %  - Ids are mutable only via unification; treat them as opaque identity tokens.
 saturate(Rules, N, In, Out) :-
@@ -393,7 +393,7 @@ saturate(Rules, N, In, Out) :-
 
 %! unif(+Eq) is semidet.
 %  True for Eq = (A=B); performs that unification as a side-effect.
-%  Intended only for rebuild//1 via exclude/3.
+%  Only for rebuild//1 via exclude/3; do not call from rules or user code.
 %  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
 %  - Only Id variables should appear here; Keys must not be unified.
 %  Determinism: semidet; deliberately impure (Id unification). Do not call from rewrite rules.
