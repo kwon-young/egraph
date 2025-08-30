@@ -22,18 +22,18 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 Implementation predicates (internal)
-- lookup/2: read-only search in an ordset of Key-Id; preserves variable identity via (==); O(N) linear scan.
-- add/4: worker behind add//2; constructs Keys as F(ChildIds) and appends nodes; no unification.
+- lookup/2: O(N) read-only search in an ordset of Key-Id; preserves variable identity via (==); binds Val only.
+- add/4: worker behind add//2; builds Keys as F(ChildIds) (congruence) and appends nodes; no unification.
 - add_node/4, add_node/3: ensure a Key has a class Id; reuse existing; no unification.
-- merge_nodes//0, merge_nodes/2: canonicalize to exactly one Key-Id per Key; iterate to a fixpoint.
+- merge_nodes//0, merge_nodes/2: canonicalize to one Key-Id per Key and iterate to a fixpoint after aliasing.
 - merge_group/4: unify all Ids in a Key-group into the first; reports whether any merge happened.
 - make_index/2: build rbtree Id -> [Keys] from a canonicalized ordset.
-- rules//3, rule//3: run DCG rules over a node with Index; rules are pure producers (only emit items and A=B).
-- match/4: collect rule outputs over the current worklist given an Index; no mutation.
+- rules//3, rule//3: run DCG rules over a node with Index; rules only emit items and A=B.
+- match/4: collect rule outputs over the current worklist given an Index; pure (no mutation).
 - push_back//1: append a list to the DCG output (difference-list scheduler).
 - rebuild//1: apply (=)/2 equalities (alias Ids), enqueue new nodes, then canonicalize; the only place where unification happens.
 - unif/1: recognize and execute (=)/2 on class Ids (used only via exclude/3).
-- assoc_//3, constant_folding_a//4, constant_folding_b//4: internal helpers for example rules; pure producers.
+- assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4: internal example rules/helpers; pure producers.
 
 Equality and identity
 - Key equality is determined after standard ordering and confirmed with (==), preserving variable identity.
@@ -49,12 +49,12 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only search in an ordset of Key-Val (standard order).
+%  Read-only search in an ordset of Key-Id (standard order).
 %  - Requires: Pairs strictly ordered; Key nonvar.
-%  - Equality check: prune by standard order, then confirm with (==) to preserve variable identity in Keys.
+%  - Equality: prune by standard order, then confirm with (==) to preserve variable identity in Keys.
 %  - Complexity: O(N) linear scan (4-way unrolled). Pure: never binds Keys; binds Val on success.
 %  Notes:
-%    - O(N) is deliberate (simple, cache‑friendly); no mutation; backtrack‑safe.
+%    - O(N) is deliberate (simple, cache-friendly); no mutation; backtrack-safe.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -131,7 +131,7 @@ union(A, B, In, Out) :-
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG alias of merge_nodes/2.
+%  DCG alias that threads the state through merge_nodes/2.
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize to exactly one Key-Id per Key:
 %  sort by Key, group equal Keys, unify all Ids in each group into the first; iterate to a fixpoint.
@@ -141,6 +141,7 @@ union(A, B, In, Out) :-
 %    - Variable identity in Keys is preserved (uses (==) after ordering).
 %    - Another pass runs if any group had >1 Id or resorting reveals new duplicates.
 %    - Terminates: each pass either unifies at least one pair of Ids or leaves the set unchanged; the set is finite.
+%    - Note: merge_nodes//0 is referenced by rebuild//1; it must call merge_nodes/2 on the DCG state.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -343,6 +344,7 @@ saturate(Rules, N, In, Out) :-
 %  Notes:
 %    - Deliberately impure; only used by rebuild//1.
 %    - Non-(=)/2 items fail here and are retained by exclude/3.
+%    - Uses (=)/2 (no occurs-check); safe here because only fresh, acyclic Id variables are unified.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is det.
