@@ -57,13 +57,12 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Look up Id for Key in a canonical ordset (from merge_nodes/2).
-%  - Pairs: sorted, exactly one Key-Id per Key.
+%  Retrieve Id for Key from a canonical ordset (one Key-Id per Key).
+%  - Pairs is sorted and canonical (output of merge_nodes/2).
 %  - Prunes by standard order; confirms identity with (==) to preserve variable identity.
-%  - Binds only Id; no mutation; fails if Key is absent.
-%  Precondition: Pairs is canonical.
-%  Notes: Ids are fresh logic vars used as class ids; never compare by name.
-%  Complexity: O(N) worst-case over |Pairs|; prunes branches via compare/3.
+%  - Binds only Id; fails if Key is absent; no side effects.
+%  Ids: fresh logic variables (mutable class identifiers via unification only); never compare by name.
+%  Complexity: O(N) worst-case over |Pairs|; prunes via compare/3.
 %  Determinism: semidet; steadfast; pure.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -94,14 +93,14 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id; reuse Id if Key already exists.
-%  - Compound: build Key=F(ChildIds) left-to-right (stable arg order ⇒ congruence).
-%  - Atom/var: Key=Term; preserves variable identity (no variant/alpha-renaming).
-%  - Pure producer: emits only Key-Id items; no Id unification; duplicates removed by merge_nodes/2.
+%  Insert Term and obtain its class Id; reuse existing Id if Key already exists.
+%  - Compound: build Key = F(ChildIds) left-to-right (stable arg order ⇒ congruence).
+%  - Atom/var: Key = Term; preserves variable identity (no variant/alpha-renaming).
+%  - Emits only Key-Id items; never unifies Ids; duplicates removed by merge_nodes/2.
 %  Precondition (add/4): In is an ordset.
-%  Notes: Ids are opaque logic variables (class ids). Canonicalize after any aliasing elsewhere.
-%  Complexity: O(|Term|) to build; ordset insertion O(N); dedup later via merge_nodes/2.
-%  Determinism: det; steadfast.
+%  Ids: fresh logic variables (class ids); alias only by unification elsewhere. Never compare by name.
+%  Complexity: O(|Term|) to build; insertion into ordset O(N).
+%  Determinism: det; steadfast; pure w.r.t. Keys.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -117,9 +116,9 @@ add(Term, Id, In, Out) :-
 %  - In/Out are ordsets; prune by standard order; confirm with (==) to preserve variable identity.
 %  - No unification/canonicalization here; ord_add_element/3 preserves order and set semantics.
 %  Precondition: In is an ordset.
-%  Effect: fresh, unbound Id variable only when Node is new; Out=In if Node already exists.
-%  Notes: Ids are logic variables (class ids); never compare by name.
-%  Complexity: O(N) worst-case over |In| due to list-based ordset operations.
+%  Effect: fresh, unbound Id only when Node is new; Out=In if Node already exists.
+%  Ids: logic variables acting as class ids; alias only via unification elsewhere; never compare by name.
+%  Complexity: O(N) worst-case over |In|.
 %  Determinism: det; quasi-pure (no Id unification).
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -135,7 +134,7 @@ add_node(Node, Id, In, Out) :-
 %  - IdA/IdB must be class Ids from this e-graph.
 %  - Uses (=)/2 (no occurs-check); safe (Ids are fresh, acyclic vars).
 %  Effect: Id aliasing only; Keys never unify; effects backtrackable.
-%  Notes: Id aliasing may instantiate variables inside Keys; merge_nodes/2 collapses any new duplicates.
+%  Ids: logic variables used as class identifiers; never compare by name; alias only via unification.
 %  Determinism: det; logical effects (Id aliasing only).
 union(A, B, In, Out) :-
    A = B,
@@ -145,12 +144,12 @@ union(A, B, In, Out) :-
 %  DCG wrapper for merge_nodes/2.
 %  Determinism: det; steadfast.
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize to one Key-Id per Key, repeating until stable.
+%  Canonicalize to one Key-Id per Key; repeat until no new Id unifications arise.
 %  - Algorithm: sort/2 → group_pairs_by_key/2 → unify each group’s Ids with the first.
-%  - Repeats because unifying Ids can instantiate variables inside Keys and expose duplicates.
-%  Complexity: O(N log N) per pass; may require multiple passes.
+%  - Unifying Ids can instantiate variables inside Keys; a new pass may then collapse duplicates.
+%  Complexity: O(N log N) per pass; multiple passes possible.
 %  Effect: only Id variables unify; Keys never do.
-%  Termination: finite; each pass reduces (or preserves) the number of distinct Id vars; only finitely many exist.
+%  Termination: finite (each pass can only reduce the number of distinct Id vars); effects are backtrackable.
 %  Determinism: det; logical effects (Id unification only).
 merge_nodes(In, Out) :-
    sort(In, Sort),
@@ -160,10 +159,10 @@ merge_nodes(In, Out) :-
    ;  Sort = Out
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
-%  For Key-[H|T], unify all Ids in T with H; report whether any unification occurred.
+%  For Key-[H|T], unify all Ids in T with H; set Changed=true iff T is nonempty.
 %  Effect: Keys never unify; only Id vars.
-%  Notes: Unification may instantiate variables inside Keys; the next merge_nodes/2 pass collapses collisions.
-%  Complexity: O(|T|) for the unifications.
+%  Note: Unification may instantiate variables inside Keys; the next merge_nodes/2 pass collapses collisions.
+%  Complexity: O(|T|).
 %  Determinism: det; logical effects (Id unification).
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
@@ -267,7 +266,7 @@ rule(Index, Node, Rule) -->
 %! make_index(+Nodes, -Index) is det.
 %  Build rbtree Index mapping Id -> [Keys] from canonical Nodes.
 %  - Rebuild after any Id aliasing (Ids are the rbtree keys).
-%  Notes: Ids are logic vars acting as class ids; the variable itself is the key. Never compare by name.
+%  Ids: logic variables acting as class ids; the variable itself is the key. Never compare by name.
 %  Complexity: O(N log N).
 %  Determinism: det; pure; steadfast.
 make_index(In, Index) :-
@@ -278,7 +277,7 @@ make_index(In, Index) :-
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
 %  Run Rules over Worklist using Index to produce Matches (nodes and (=)/2).
 %  - Output order: worklist order, then per-node rule order.
-%  Notes: Uses foldl/4 with rules//3; steadfast accumulator; does not inspect or bind Ids.
+%  Notes: Uses foldl/4 with rules//3; steadfast accumulator; rules must not inspect/bind Ids.
 %  Complexity: O(|Worklist|*|Rules| + |Matches|) plus per-Rule cost over Index.
 %  Determinism: det; produces a concrete list; no mutation or Id unification.
 match(Rules, Worklist, Index, Matches) :-
@@ -295,7 +294,7 @@ push_back(L), L --> [].
 %    - push_back(NewNodes): enqueue Key-Id items.
 %    - merge_nodes: dedupe and unify Id classes.
 %  Effect: only Id aliasing via (=)/2; backtrackable.
-%  Notes: Id unification may instantiate variables in Keys; merge_nodes/2 repeats until stable. No other side effects.
+%  Ids: logic variables used as class identifiers; alias via unification may instantiate variables inside Keys.
 %  Determinism: det; logical effects (Id unification only).
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
@@ -303,23 +302,23 @@ rebuild(Matches) -->
    merge_nodes.
 %! saturate(+Rules)// is det.
 %  Run Rules to a length-based fixpoint (no new Key-Id pairs or equalities).
-%  SWI note: passing inf hits the (N > 0) guard in saturate/4 and raises a type_error; use saturate//2 with a non-negative integer, or patch the guard to (N==inf ; N>0). Alias-only steps are invisible unless later rule outputs change size.
+%  SWI note: prefer a non-negative integer MaxSteps; 'inf' will fail under the (N > 0) guard.
 %  Determinism: det; Rules must be pure producers (emit only nodes/equalities).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
-%  Run at most MaxSteps iterations (integer >= 0; inf intended but see SWI note).
+%  Run at most MaxSteps iterations (integer >= 0).
 %  - Fixpoint: compare lengths before/after rebuild (post merge_nodes/2).
 %  - Alias-only steps do not change length; progress must add/remove pairs.
-%  SWI note: passing inf triggers a type_error under guard (N > 0); either patch the guard to (N==inf ; N>0) or use a non-negative integer. Rules must be pure producers (no unification).
+%  SWI note: 'inf' is not a number; with the (N > 0) guard it raises a type_error. Use a non-negative integer or patch the guard.
 %  Determinism: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker that threads the e-graph explicitly.
 %  - Rebuild Id->Keys index each iteration (Ids may alias).
 %  - Stop when length is stable or MaxSteps exhausted.
 %  - Rules must be pure producers (emit nodes/equalities only). Unification happens only via rebuild//1.
-%  Notes: Ids are mutable logic variables used as class ids; never compare by name. Always rebuild the index after aliasing.
-%  SWI note: MaxSteps=inf errors under guard (N > 0); patch the guard to (N==inf ; N>0) or use a non-negative integer.
+%  Ids: mutable logic variables as class ids; never compare by name. Always rebuild the index after aliasing.
+%  SWI note: MaxSteps must be an integer; 'inf' with (N > 0) raises a type_error.
 %  Determinism: det driver; nondet only from Rules.
 saturate(Rules, N, In, Out) :-
    (  N > 0
@@ -343,7 +342,7 @@ saturate(Rules, N, In, Out) :-
 %  True for Eq = (A=B); performs that unification as a side-effect.
 %  - Intended only for rebuild//1 via exclude/3.
 %  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic variables.
-%  Notes: Only Id variables should appear here; Keys must not be unified. No occurs-check needed due to freshness/acyclicity.
+%  Ids: only Id variables should appear here; Keys must not be unified.
 %  Determinism: semidet; impure by design (Id unification).
 unif(A=B) :- A=B.
 
@@ -351,7 +350,7 @@ unif(A=B) :- A=B.
 %  Validate and return Nodes.
 %  Warning: aliases class Id variables via member/2; use for validation only.
 %  To inspect without aliasing, use the node list directly.
-%  Notes: Ids are logic variables; avoid using any bindings made here. Never compare Ids by name.
+%  Ids: logic variables; discard any bindings made here; never compare Ids by name.
 %  Determinism: semidet; aliases Ids.
 extract(Nodes) :-
    extract(Nodes, Nodes).
