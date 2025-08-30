@@ -50,13 +50,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only lookup in an ordset of Key-Id pairs (standard order).
-%  - Pairs is a strictly ordered ordset; Key is nonvar.
-%  - Equality: first prunes by standard order, then confirms with (==) to preserve variable identity in Keys.
-%  - Complexity: O(N) linear scan (4-way unrolled).
+%  Read-only lookup in an ordset Nodes of Key-Id pairs (standard order).
+%  - Pairs/Nodes is a strictly ordered ordset; Key is nonvar.
+%  - Equality: prunes by standard order, then confirms with (==) to preserve variable identity in Keys.
+%  - Complexity: O(N) scan (manually unrolled by 4).
 %  - Effects: binds only Val; never touches Keys or Pairs.
 %  Notes:
-%    - Ids are opaque logic variables (class identifiers). Do not unify or inspect them here.
+%    - Ids are opaque logic variables (class Ids). Do not unify or inspect them here.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -89,7 +89,7 @@ lookup(Item-V, [X1-V1]) :-
 %  Insert Term and return its class Id; reuse the existing Id if the Key already exists.
 %  - Compound: add subterms left-to-right; Key = F(ChildIds) (congruence).
 %  - Atomic/var: Key = Term. Variable identity is part of the Key (no alpha/variant normalization).
-%  - No canonicalization; duplicates may be introduced. Call merge_nodes/2 after aliasing to collapse.
+%  - No canonicalization or unification here; duplicates may be introduced. Call merge_nodes/2 after any aliasing to collapse.
 %  Notes:
 %    - Id is a fresh logic variable (class Id). Unifying Ids may instantiate variables inside Keys; effects are logical and backtrackable.
 %    - DCG state is an ordset of Key-Id pairs (standard order). Rules must not unify; equalities are consumed only in rebuild//1.
@@ -156,7 +156,7 @@ merge_nodes(In, Out) :-
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
 %  Unify all Ids in a Key-group into the first; set Changed=true iff the group had >1 Id.
 %  Result: Rep is the first Id; each tail Id is unified with it.
-%  Drives the outer fixpoint in merge_nodes/2.
+%  Changed threads into the outer fixpoint in merge_nodes/2.
 %  Notes:
 %    - Unifying Ids can instantiate variables inside Keys; a subsequent sort may reveal new duplicates.
 %  Determinism: det.
