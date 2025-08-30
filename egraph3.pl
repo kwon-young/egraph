@@ -319,7 +319,7 @@ saturate(Rules) -->
 %  - Stop when length is stable or MaxSteps exhausted.
 %  - Rules must be pure producers (emit nodes/equalities only). Unification happens only via rebuild//1.
 %  Notes: Ids are mutable logic variables used as class ids; never compare by name. Always rebuild the index after aliasing.
-%  Warning: Passing inf for MaxSteps currently raises a type_error at (N > 0) in SWI-Prolog; use a non-negative integer until the guard handles inf.
+%  Warning: On SWI, MaxSteps=inf errors at (N > 0); use a non-negative integer unless you patch the guard.
 %  Determinism: det driver; nondet only from Rules.
 saturate(Rules, N, In, Out) :-
    (  N > 0
