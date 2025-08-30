@@ -191,7 +191,7 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - BUG: If BC is absent in Index the cut (!) prevents fallback; the rule fails instead of emitting [] (intended no-output). Known issue.
+%  - BUG: If BC is absent in Index the cut (!) prevents fallback; the rule fails instead of emitting no output ([]). Tests document the intended behavior.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -345,7 +345,7 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  - Portability: uses MaxSteps=inf here; on systems that disallow atom/integer comparison in arithmetic (e.g., SWI‑Prolog), prefer saturate//2 with a large integer bound.
+%  - Portability: uses MaxSteps=inf here; on SWI‑Prolog N>0 with N=inf in arithmetic throws error(type_error(evaluable,inf),_). Use saturate//2 with a large integer bound instead.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -397,7 +397,7 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extract/1. Aliases Ids to materialize one concrete term per class; this is the last standard step (stop rewriting/saturation after this).
+%  DCG wrapper for extract/1; last standard step: aliases Ids to materialize one concrete term per class (stop rewriting/saturation after this).
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
