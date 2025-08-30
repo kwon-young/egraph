@@ -16,7 +16,7 @@ Execution
 Caveats
 - The fixpoint in saturate//2 is length-based; alias-only steps (A=B with no new pairs) do not change the length and are invisible to the stop test.
 - Never serialize or compare Ids by print-name; treat them as opaque logic variables.
-- extract//0 uses member/2 and can alias Ids; prefer extract/1 in user code.
+- extract//0 and extract/1 use member/2 and may alias Ids; both are for validation only. To inspect the graph without aliasing Ids, use the Nodes list directly.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
@@ -339,10 +339,10 @@ saturate(Rules, N, In, Out) :-
 %  Note: Deliberately impure and used only by rebuild//1. Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables. Never call from user rules.
 unif(A=B) :- A=B.
 
-%! extract(-Nodes) is det.
-%  Return the current nodes (no validation).
-%  Prefer in user code to avoid Id aliasing during validation.
-%  Note: Simple alias for extract/2 that returns its input (no checks, no unification).
+%! extract(-Nodes) is semidet.
+%  Validate and return Nodes.
+%  Warning: aliases Ids via member/2 (through extract/2); use for validation only.
+%  To inspect without aliasing, use the node list directly.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
