@@ -394,29 +394,32 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Final extraction: unify each class Id with one of its Keys to obtain concrete Prolog terms.
-%  This is the last standard step when using an e-graph.
-%  Side effects: aliases Ids (on purpose). Discard these bindings to continue analysis; to inspect without aliasing, look at Nodes directly.
+%  Extract concrete Prolog terms: unify each class Id with one of its Keys (materialize representatives).
+%  Goal: the last standard step when using an e-graph; do this only at the end.
+%  Side effects: aliases Ids (by unification). Discard these bindings to continue analysis; to inspect without aliasing, look at Nodes directly.
 %  Determinism: semidet.
+%  Note: Only Id variables unify here; Keys themselves are never unified against each other.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extraction (aliases Ids). This is the last standard step to obtain concrete terms.
+%  DCG wrapper for extraction (aliases Ids). Goal: extract concrete Prolog terms; last standard step.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  Implementation of extract//0: for each Id->[Keys], unify Id with one Key to materialize a concrete representative.
-%  This is the last standard step; it aliases Ids. Do not continue rewriting with these bindings.
+%  Implementation of extract//0: for each Id->[Keys], unify the Id with one Key (choose a concrete representative).
+%  Last standard step; it aliases Ids. Do not continue rewriting with these bindings.
 %  Determinism: semidet. Fails only if a class has no Keys (should not happen after merge_nodes/2).
+%  Note: Only Id variables unify; Keys are never unified against each other.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
    extract_node(Groups).
 %! extract_node(+Groups) is semidet.
-%  For each Id->[Keys] group, unify Id with one of its Keys; fails on an empty group.
+%  For each Id->[Keys] group, unify the Id with one of its Keys; fails on empty groups.
 %  Chooses concrete representatives (aliases Ids); core of extraction.
 %  With Groups from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
 %  Determinism: semidet; aliases Ids. Perform extraction only as the final step.
+%  Note: Uses member/2 to pick a Key; Keys do not unify with each other.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
