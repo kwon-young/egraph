@@ -349,7 +349,7 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  Portability: calls saturate//2 with MaxSteps=inf. On systems where N>0 over atoms errors (e.g., SWI‑Prolog), call saturate//2 with a large integer bound instead.
+%  - Portability: this calls saturate//2 with MaxSteps=inf. On systems where N>0 over atoms errors (e.g., SWI‑Prolog), prefer saturate//2 with a large finite bound; avoid saturate//1 there.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -392,7 +392,7 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract concrete Prolog terms: for each equivalence class, unify its Id with one of its Keys (a representative), yielding exactly one concrete term per class.
+%  Extract one concrete Prolog term per class by unifying each class Id with one of its Keys (a representative).
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, inspect Nodes directly.
 %  Det: semidet; fails only if some class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
@@ -403,7 +403,7 @@ extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
 %  DCG wrapper for extract/1; aliases Ids to materialize exactly one concrete term per class.
-%  Last standard step; do not continue rewriting after this.
+%  This is the last standard step of using an e-graph; stop rewriting/saturation after this.
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
