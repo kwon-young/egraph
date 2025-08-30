@@ -409,7 +409,7 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - Limitation: if BC is absent from Index, a cut (!) causes this rule to fail instead of emitting no output ([]). Intended behavior is “no output”.
+%  - Limitation: if BC is absent from Index, a cut (!) causes this rule to fail instead of emitting no output ([]). Intended behavior is 'no output'.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
