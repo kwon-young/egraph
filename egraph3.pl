@@ -399,8 +399,8 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract one concrete Prolog term per equivalence class by unifying each class Id with one of its Keys.
-%  This is the final standard step when using an e-graph; it materializes concrete representatives.
+%  Extract exactly one concrete Prolog term per equivalence class by unifying each class Id with one of its Keys.
+%  Final, standard step of using an e-graph: materializes concrete representatives for output or subsequent non-rewriting use.
 %  Effects: aliases Id variables via unification (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
 %  Determinism: semidet (fails only if some class has no Keys; should not happen after merge_nodes/2).
 %  Notes:
@@ -409,12 +409,12 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for the final extraction step (aliases Ids).
+%  DCG wrapper for the final extraction step (aliases Ids). Use only at the end.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  For each Id->[Keys], unify the Id with one Key (choose a concrete representative).
-%  Final step: this aliases Ids; do not continue rewriting with these bindings.
+%  For each Id->[Keys], unify the Id with one of its Keys (choose a concrete representative).
+%  Final, standard step: aliases Ids; do not continue rewriting/saturation after this.
 %  Determinism: semidet (fails only if a class has no Keys; should not happen after merge_nodes/2).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
