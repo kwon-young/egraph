@@ -19,7 +19,7 @@ Caveats
 - extract//0 and extract/1 alias Ids via member/2 to choose a concrete representative term per class; use them as the final step of an e-graph pipeline. To inspect without aliasing, examine the Nodes list directly.
 
 Public API
-- add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
+- add//2, union//2, saturate//1, saturate//2, extract/1, extract//0 (final extraction step; produces concrete Prolog terms).
 
 Implementation predicates (quick reference)
 - lookup/2 (semidet, pure, steadfast): On canonical Pairs, find Id for Key by standard-order pruning then (==) confirmation. Binds Id only; never constructs/unifies Keys or allocates Ids. Pre: canonical (merge_nodes/2). Cost: O(N).
@@ -350,6 +350,7 @@ rebuild(Matches) -->
 %  - Rules are pure producers (emit only Key-Id and (=)/2).
 %  - Alias-only steps are ignored (no change in length).
 %  Portability: wraps saturate//2 with MaxSteps=inf; if inf is unsupported, call saturate//2 with a large integer.
+%  Note: In this implementation MaxSteps=inf is an atom; the driver compares MaxSteps arithmetically, so passing inf may raise. Use a large integer if needed.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -357,6 +358,7 @@ saturate(Rules) -->
 %  - MaxSteps: integer >= 0 (or inf where supported).
 %  - Alias-only steps do not count as progress.
 %  Determinism: det.
+%  Note: The driver compares MaxSteps arithmetically; non-numeric atoms like inf may raise. Use a large integer if necessary.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Driver. Each iteration: build Index, apply Rules to Nodes, rebuild (aliases Ids), then merge.
 %  - Only rebuild//1 and merge_nodes/2 may unify Ids.
@@ -366,6 +368,7 @@ saturate(Rules) -->
 %  Notes:
 %  - Progress is measured by list length; alias-only steps are ignored.
 %  - Worklist per step is the current canonical Nodes.
+%  - MaxSteps is compared arithmetically (>); passing a non-numeric atom (e.g., inf) will raise in this driver. Use a large integer if needed.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -397,7 +400,7 @@ unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
 %  Extract exactly one concrete Prolog term per class by unifying each class Id with one of its Keys.
-%  Goal: extract is the last standard step of using an e-graph to obtain concrete Prolog terms.
+%  Goal: extract a concrete Prolog term per class; this is the last standard step when using an e-graph.
 %  Effects: aliases Id variables via unification (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
 %  Determinism: semidet (fails only if some class has no Keys; should not happen after merge_nodes/2).
 %  Notes:
@@ -406,7 +409,7 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extraction (aliases Ids). This is the last standard step to obtain concrete terms from the e-graph.
+%  DCG wrapper for the final extraction step (aliases Ids).
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
