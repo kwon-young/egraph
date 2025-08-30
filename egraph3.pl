@@ -280,7 +280,7 @@ be non-portable across Prolog systems.
 %  Find Id for Key in a canonical ordset of Key-Id pairs using (==) on Keys.
 %  - Pre: Pairs canonical (run merge_nodes/2 after aliasing).
 %  - Method: prune by standard order; confirm Key identity with (==); only binds Id.
-%  - Det/Big-O: semidet, steadfast; O(N); no choice points.
+%  - Determinism/Complexity: semidet; steadfast; O(N); no choice points.
 %  Notes:
 %  - Non-canonical input may fail by design (precondition is canonical).
 %  - Ids are logic variables; compare with (==) only.
@@ -419,6 +419,7 @@ comm(_, _) --> [].
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
 %  - BUG: a cut commits before rb_lookup/3 and causes failure when BC is absent
 %    from Index; the intended behavior is to emit no output.
+%  - Note: When BC is missing in Index, this predicate should emit no output.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
