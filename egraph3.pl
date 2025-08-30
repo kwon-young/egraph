@@ -347,7 +347,7 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Rules are pure producers (emit only Key-Id and (=)/2).
 %  - Alias-only steps are ignored (no change in length).
-%  Portability: wraps saturate//2 with MaxSteps=inf; if your system lacks inf, call saturate//2 with a large integer.
+%  Portability: wraps saturate//2 with MaxSteps=inf; if inf is unsupported, call saturate//2 with a large integer.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -356,7 +356,7 @@ saturate(Rules) -->
 %  - Alias-only steps do not count as progress.
 %  Determinism: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
-%  Driver. Each iteration: build Index, apply Rules over Nodes, rebuild (aliases Ids), then merge.
+%  Driver. Each iteration: build Index, apply Rules to Nodes, rebuild (aliases Ids), then merge.
 %  - Only rebuild//1 and merge_nodes/2 may unify Ids.
 %  - Ids are logic vars (mutable); rebuild Index after aliasing; never compare by name/print-name.
 %  - MaxSteps: integer >= 0; use a large integer if inf is unsupported.
