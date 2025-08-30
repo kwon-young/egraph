@@ -555,7 +555,8 @@ test(make_index_class_b_key, true(KeysB == [z])) :-
 :- begin_tests(match).
 
 % Runs comm over worklist: contains commuted node
-test(match_comm_node, true(member((b+a)-_, Matches))) :-
+% Ensures the commuted node B+A appears (use variables, not atoms)
+test(match_comm_node, true(member((B+A)-_, Matches))) :-
     A = _, B = _, AB = _,
     Work = [(A+B)-AB],
     ord_list_to_rbtree([], Index),
@@ -1478,5 +1479,50 @@ test(pair_compound_diff_id_not_removed, true(R == [f(X)-I])) :-
 test(pair_ids_aliased_then_removed, true(R == [])) :-
     I = _, J = _, I = J,
     ord_subtract([a-I], [a-J], R).
+
+% Variable-only ordset: removing middle variable preserves order of remaining endpoints
+% Build canonical [X1, X2, X3] and subtract [X2] -> [X1, X3]
+test(vars_three_remove_middle, true(R == [X1, X3])) :-
+    X1 = _, X2 = _, X3 = _,
+    ord_add_element([], X1, S1),
+    ord_add_element(S1, X2, S2),
+    ord_add_element(S2, X3, S),
+    ord_subtract(S, [X2], R).
+
+% Variable aliasing: subtracting [Y] removes [X2] when X2==Y in [X1, X2, X3]
+test(vars_three_alias_then_remove, true(R == [X1, X3])) :-
+    X1 = _, X2 = _, X3 = _, Y = _,
+    X2 = Y,
+    ord_add_element([], X1, S1),
+    ord_add_element(S1, X2, S2),
+    ord_add_element(S2, X3, S),
+    ord_subtract(S, [Y], R).
+
+% Node-Id pair: Key variable equal, Ids differ -> not removed
+test(pair_var_key_diff_id_not_removed, true(R == [K-I])) :-
+    K = _, I = _, J = _, I \== J,
+    ord_subtract([K-I], [K-J], R).
+
+% Node-Id pair: Key variables aliased and Ids identical -> removed
+test(pair_var_key_aliased_removed, true(R == [])) :-
+    K1 = _, K2 = _, I = _,
+    K1 = K2,
+    ord_subtract([K1-I], [K2-I], R).
+
+% Deep compound with same variable in both positions: exact identity -> removed
+test(deep_compound_two_occ_same_var_removed, true(R == [])) :-
+    X = _,
+    ord_subtract([g(X,X)], [g(X,X)], R).
+
+% Deep compound with swapped distinct variables: not identical -> not removed
+test(deep_compound_two_occ_variant_not_removed, true(R == [g(X,Y)])) :-
+    X = _, Y = _, X \== Y,
+    ord_subtract([g(X,Y)], [g(Y,X)], R).
+
+% Compound Key inside pair with inner variable aliasing and identical Id -> removed
+test(pair_compound_key_inner_var_aliased_removed, true(R == [])) :-
+    X = _, Y = _, I = _,
+    X = Y,
+    ord_subtract([f(g(X))-I], [f(g(Y))-I], R).
 
 :- end_tests(ordsets_ord_subtract_even_more).
