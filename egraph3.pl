@@ -376,7 +376,8 @@ union(A, B, In, Out) :-
 %  - Out canonical (sorted; one Key-Id per Key).
 %  - Terminates: each merge strictly decreases the number of distinct Id variables.
 %  - Representative Id is the first after sorting; do not rely on it across backtracking.
-%  - Rebuild any Id→[Keys] index after this (Ids are the map keys).
+%  - sort/2 and grouping use standard order and preserve variable identity.
+%  - Rebuild any Id->[Keys] index after this (Ids are the map keys).
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -417,9 +418,8 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - BUG: a cut commits before rb_lookup/3; when BC is absent in Index the
-%    rule fails, but the intended behavior is to emit no output.
-%  - Note: When BC is missing in Index, this predicate should emit no output.
+%  - BUG: A cut commits before rb_lookup/3 and absent BC causes failure.
+%  - Intended: emit no output when BC is absent in Index (see tests).
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -538,6 +538,7 @@ rule(Index, Node, Rule) -->
 %  Impl: transpose_pairs/2 flips Key-Id to Id-Key; Keys are stored as-is (no unification).
 %  Notes:
 %  - Uses transpose_pairs/2 and group_pairs_by_key/2 (autoloaded from library(pairs)).
+%  - Sorting and grouping use standard order and preserve variable identity.
 %  - Result is rbtree(Id->[Keys]) with nonempty value lists; rebuild after any Id aliasing.
 %  - Intended for the current iteration only; discard and rebuild after each rebuild//1 or merge.
 make_index(In, Index) :-
@@ -588,7 +589,8 @@ saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run up to MaxSteps iterations; stop early when length stabilizes (after rebuild/merge).
-%  - MaxSteps: integer >= 0 (prefer a large integer over 'inf' on systems without arithmetic over inf).
+%  - MaxSteps: integer >= 0.
+%  - Prefer a large integer over 'inf' on systems without arithmetic over inf.
 %  - Alias-only steps are ignored (no new Key-Id pairs).
 %  Det: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
@@ -678,7 +680,9 @@ example1(G) :-
 
 
 %! add_expr(+N, -Expr) is det.
-%  Build left-associated sum 1+2+...+N as a +(A,B) chain: ((1+2)+3)+... . N >= 1.
+%  Build left-associated sum 1+2+...+N as a +(A,B) chain.
+%  Domain: N >= 1.
+%  Note: Fails when N < 1 because numlist/3 fails with low > high.
 add_expr(N, Add) :-
    numlist(1, N, L), L = [H|T], foldl([B, A, A+B]>>true, T, H, Add).
 
