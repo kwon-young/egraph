@@ -58,10 +58,10 @@ Notes
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
 %  Read-only Id lookup in a canonical ordset (exactly one Key-Id per Key).
-%  - Pairs must be canonical (output of merge_nodes/2).
-%  - Prunes by standard order; confirms with (==) to preserve variable identity.
-%  - Binds only Id; fails (no exception) if Key is absent. No allocation; never unifies Keys or Ids.
-%  Ids: fresh logic vars used as mutable class identifiers; never compare by name.
+%  - Pre: Pairs is canonical (output of merge_nodes/2).
+%  - Uses standard order to prune; confirms identity with (==) to preserve variable identity.
+%  - Binds only Id; fails quietly if Key is absent. No allocation; never unifies Keys or Ids.
+%  Ids: fresh logic variables used as mutable class identifiers; never compare by name.
 %  Complexity: O(N) worst-case with pruning via compare/3.
 %  Det: semidet; steadfast; pure.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
@@ -98,7 +98,7 @@ lookup(Item-V, [X1-V1]) :-
 %  - Atom/var: Key = Term; preserves variable identity (no variant/alpha-renaming).
 %  - Emits only Key-Id pairs; never unifies Ids; duplicates removed later by merge_nodes/2.
 %  Pre: In is an ordset.
-%  Ids: fresh logic vars as mutable class ids; alias only via unification; never compare by name.
+%  Ids: fresh logic variables as mutable class ids; alias only via unification; never compare by name.
 %  Complexity: build O(|Term|); insert O(N).
 %  Det: det; steadfast; pure w.r.t. Keys.
 add(Term, Id, In, Out) :-
@@ -117,7 +117,7 @@ add(Term, Id, In, Out) :-
 %  - No unification/canonicalization here; ord_add_element/3 preserves set semantics.
 %  Pre: In is an ordset.
 %  Effect: fresh Id only when Node is new; Out=In if Node already exists.
-%  Ids: logic vars as mutable class ids; alias only via unification; never compare by name.
+%  Ids: logic variables as mutable class ids; alias only via unification; never compare by name.
 %  Complexity: O(N) over |In|.
 %  Det: det; quasi-pure (no Id unification).
 add_node(Node-Id, In, Out) :-
@@ -135,7 +135,7 @@ add_node(Node, Id, In, Out) :-
 %  - Uses (=)/2 (no occurs-check); safe here (Ids are fresh, acyclic).
 %  - Unification may instantiate variables inside Keys; the following merge collapses collisions.
 %  Effect: only Id variables unify; Keys never do. Backtrackable.
-%  Ids: logic vars as mutable class ids; never compare by name.
+%  Ids: logic variables as mutable class ids; never compare by name.
 %  Det: det; logical effect (Id aliasing).
 union(A, B, In, Out) :-
    A = B,
@@ -146,11 +146,12 @@ union(A, B, In, Out) :-
 %  Det: det; steadfast.
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize to one Key-Id per Key; repeat until no further Id aliasing arises.
+%  Out is a canonical ordset (sorted, one entry per Key).
 %  - sort/2 → group_pairs_by_key/2 → unify Ids within each group with the first.
-%  - Id unification may instantiate vars inside Keys; the next pass collapses new collisions.
+%  - Id unification may instantiate variables inside Keys; the next pass collapses new collisions.
 %  Cost: O(N log N) per pass; multiple passes possible.
-%  Effect: only Id vars unify; Keys never do. Backtrackable.
-%  Termination: guaranteed (distinct Id vars strictly decrease).
+%  Effect: only Id variables unify; Keys never do. Backtrackable.
+%  Termination: guaranteed (the number of distinct Id variables strictly decreases).
 %  Det: det; logical effects (Id unification only).
 merge_nodes(In, Out) :-
    sort(In, Sort),
@@ -161,8 +162,8 @@ merge_nodes(In, Out) :-
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
 %  For Key-[H|T], unify each Id in T with H; Changed=true iff T is nonempty.
-%  Effect: Keys never unify; only Id vars.
-%  Note: Id unification may instantiate vars inside Keys; next merge pass collapses collisions.
+%  Effect: Keys never unify; only Id variables.
+%  Note: Id unification may instantiate variables inside Keys; next merge pass collapses collisions.
 %  Cost: O(|T|).
 %  Det: det; logical effects (Id unification).
 merge_group(Node-[H | T], Node-H, In, Out) :-
@@ -273,7 +274,7 @@ rule(Index, Node, Rule) -->
 %  Build rbtree Index mapping Id -> [Keys] from canonical Nodes.
 %  - Pre: Nodes are canonical (use merge_nodes/2 first).
 %  - Rebuild after any Id aliasing (Ids are the map keys).
-%  Ids: logic vars as mutable class ids; the variable itself is the key. Never compare by name.
+%  Ids: logic variables as mutable class ids; the variable itself is the key. Never compare by name.
 %  Cost: O(N log N).
 %  Det: det; pure; steadfast.
 make_index(In, Index) :-
@@ -301,7 +302,7 @@ push_back(L), L --> [].
 %    - push_back(NewNodes): enqueue Key-Id items.
 %    - merge_nodes: dedupe and unify Id classes.
 %  Effect: only Id aliasing via (=)/2; backtrackable.
-%  Ids: logic vars as mutable class ids; aliasing may instantiate vars inside Keys.
+%  Ids: logic variables as mutable class ids; aliasing may instantiate vars inside Keys.
 %  Det: det; logical effects (Id unification only).
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
@@ -309,7 +310,7 @@ rebuild(Matches) -->
    merge_nodes.
 %! saturate(+Rules)// is det.
 %  Run Rules to a length-based fixpoint (no new Key-Id pairs or equalities).
-%  SWI note: This calls saturate//2 with MaxSteps=inf. On SWI, 'inf' is not numeric and (N > 0) in saturate/4 raises type_error. Prefer saturate(Rules, Max) with a large integer on SWI, or adjust the guard.
+%  SWI-Prolog note: Calls saturate//2 with MaxSteps=inf. On SWI-Prolog, 'inf' is not numeric; the guard (N > 0) in saturate/4 raises type_error. Prefer saturate(Rules, LargeInteger) or adjust the guard.
 %  Det: det; Rules must be pure producers (emit only nodes/equalities).
 saturate(Rules) -->
    saturate(Rules, inf).
@@ -317,7 +318,7 @@ saturate(Rules) -->
 %  Run at most MaxSteps iterations (integer >= 0).
 %  - Fixpoint: compare lengths before/after rebuild (after merge_nodes/2).
 %  - Alias-only steps do not change length; progress requires adding/removing pairs.
-%  SWI note: MaxSteps must be an integer on SWI; 'inf' would make (N > 0) raise type_error.
+%  SWI-Prolog note: MaxSteps must be an integer; 'inf' makes (N > 0) raise type_error.
 %  Det: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker that threads the e-graph explicitly.
@@ -325,7 +326,7 @@ saturate(Rules) -->
 %  - Stop when length is stable or MaxSteps is exhausted.
 %  - Rules must be pure producers (emit nodes/equalities only). Unification happens only via rebuild//1.
 %  Ids: logic variables as mutable class ids; never compare by name. Always rebuild the index after aliasing.
-%  SWI note: MaxSteps must be an integer on SWI; 'inf' with (N > 0) raises type_error.
+%  SWI-Prolog note: MaxSteps must be an integer; 'inf' with (N > 0) raises type_error.
 %  Det: det driver; nondet only from Rules.
 saturate(Rules, N, In, Out) :-
    (  N > 0
