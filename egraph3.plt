@@ -1026,7 +1026,6 @@ test(sub_empty_minuend, true(R == [])) :-
 
 % Identical sets: subtracting a set from itself yields []
 test(sub_identical_sets, true(R == [])) :-
-    X = _, Y = _,
     S = [a, b, c],
     ord_subtract(S, S, R).
 
@@ -1110,7 +1109,7 @@ test(found_two_elems_second, true(V == Y)) :-
     egraph:lookup(b-V, [a-X, b-Y]).
 
 % Finds the Id in a 4-element canonical list when the key is the second (exercises X2 branch)
-test(found_four_elems_second, true(V == Y)) :-
+test(found_four_elems_second, true(V == X)) :-
     W = _, X = _, Y = _, Z = _,
     egraph:lookup(b-V, [a-W, b-X, c-Y, d-Z]).
 
