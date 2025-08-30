@@ -58,14 +58,14 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Read-only lookup of Id for Key in a canonical ordset (one Key-Id per Key).
+%  Read-only lookup of the Id for Key in a canonical ordset (exactly one Key-Id per Key).
 %  Pre: Pairs must be canonical (sorted, deduplicated) as produced by merge_nodes/2.
-%  Method: prune by standard order; confirm identity with (==) to preserve variable identity.
-%  Effects: binds only Id; fails if Key absent; never unifies Keys or Ids; no allocation.
+%  Method: prunes by standard order; confirms identity with (==) to preserve variable identity.
+%  Effects: binds only Id; fails if Key is absent; never unifies Keys or Ids; does not allocate.
 %  Ids: fresh logic variables (mutable, backtrackable class identifiers); never compare by name.
-%  Complexity: O(N) worst case (with pruning).
+%  Complexity: O(N) worst-case (with pruning).
 %  Determinism: semidet; steadfast; pure.
-%  Note: Non-canonical inputs can miss or misidentify matches; call merge_nodes/2 first.
+%  Note: Non-canonical inputs can misidentify matches; call merge_nodes/2 first. Does not insert; use add_node/3 to create entries.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -261,17 +261,18 @@ constant_folding_b([VB | BNodes], VA, AB, Index) -->
 constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
-%  Apply each Rule(Node,Index)// to Node using Index; append outputs.
+%  Apply each Rule(Node,Index)// to Node using Index; append outputs in rule order.
+%  Rules is a list of callable DCG nonterminals of the form Rule(+Node,+Index)//.
 %  Node is Key-Id; Rules may only emit Key-Id and (=)/2 items.
 %  Implementation: uses library(dcg/high_order):sequence//2.
 %  Index: rbtree Id -> [Keys]; rebuilt after any Id aliasing; read-only within rules.
-%  Notes: Pure producer; steadfast; must not inspect or bind Ids.
+%  Notes: Pure producer; steadfast; must not inspect or bind Ids (treat Ids as opaque).
 %  Determinism: nondet over Rules; each Rule runs once per Node (node order, then rule order). No side effects.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
 %  Call a single DCG rule Rule(Node,Index)// on Node.
-%  Notes: Pure producer; must not inspect or bind Ids. Steadfast.
+%  Notes: Pure producer; steadfast; must not inspect or bind Ids (Ids are opaque class variables).
 %  Determinism: as Rule//2. No side effects.
 rule(Index, Node, Rule) -->
    call(Rule, Node, Index).
@@ -283,7 +284,7 @@ rule(Index, Node, Rule) -->
 %  Ids: logic variables as mutable class ids; the variable itself is the key. Never compare by name.
 %  Cost: O(N log N).
 %  Determinism: det; pure; steadfast.
-%  Note: Index must not escape across aliasing without rebuild, as Id variables may have unified.
+%  Note: Do not reuse across aliasing; rebuild immediately after any (=)/2 on Ids (e.g., via rebuild//1 or merge_nodes/2).
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -317,9 +318,9 @@ rebuild(Matches) -->
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Run Rules to a length-based fixpoint (no new pairs/equalities).
+%  Run Rules to a length-based fixpoint: repeat until rebuild/merge does not change list length.
 %  SWI note: 'inf' is not numeric; on SWI call saturate(Rules, LargeInteger) or adjust the guard to accept 'inf'.
-%  Determinism: det; Rules must be pure producers (emit only nodes/equalities).
+%  Determinism: det; Rules must be pure producers (emit only nodes/equalities). Alias-only steps do not count as progress.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
