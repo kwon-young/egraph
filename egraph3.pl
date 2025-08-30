@@ -44,6 +44,7 @@ saturation.
 Notes.
 The use of logic variables as mutable class identifiers is subtle and requires
 strict separation of concerns where only rebuild//1 and merge_nodes/2 unify Ids.
+Ids are logic variables, not predicate symbols, and not atoms or numbers.
 Do not inspect, compare by name, or print Id variables in user code or rules.
 */
 
@@ -277,7 +278,7 @@ Do not inspect, compare by name, or print Id variables in user code or rules.
 %  Find Id for Key in a canonical ordset of Key-Id pairs using (==) on Keys.
 %  - Pre: Pairs canonical (run merge_nodes/2 after aliasing).
 %  - Method: prune by standard order; confirm Key identity with (==); only binds Id.
-%  - Det/Big-O: semidet, steadfast; O(N); no choicepoints.
+%  - Det/Big-O: semidet, steadfast; O(N); no choice points.
 %  Notes:
 %  - Non-canonical input may fail by design (precondition is canonical).
 %  - Ids are logic variables; compare with (==) only.
