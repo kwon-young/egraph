@@ -1201,3 +1201,282 @@ test(pair_variant_key_var_not_removed, true(R == [f(X)-Id])) :-
     ord_subtract([f(X)-Id], [f(Y)-Id], R).
 
 :- end_tests(ordsets_ord_subtract_more).
+
+
+% lookup/2 (even more 2)
+:- begin_tests(lookup_even_more2).
+
+% Finds the Id in a 4-element canonical list when the key is the first (X1 branch via R4(<), then R2(<))
+test(found_four_elems_first, true(V == W)) :-
+    W = _, X = _, Y = _, Z = _,
+    egraph:lookup(a-V, [a-W, b-X, c-Y, d-Z]).
+
+% Finds the Id in a 4-element canonical list when the key is the fourth (X4 direct match)
+test(found_four_elems_fourth, true(V == Z)) :-
+    W = _, X = _, Y = _, Z = _,
+    egraph:lookup(d-V, [a-W, b-X, c-Y, d-Z]).
+
+% Finds the Id in a 3-element canonical list when the key is the first
+test(found_three_elems_first, true(V == X)) :-
+    X = _, Y = _, Z = _,
+    egraph:lookup(a-V, [a-X, b-Y, c-Z]).
+
+% Finds the Id in a 3-element canonical list when the key is the second
+test(found_three_elems_second, true(V == Y)) :-
+    X = _, Y = _, Z = _,
+    egraph:lookup(b-V, [a-X, b-Y, c-Z]).
+
+% Finds the Id in a 3-element canonical list when the key is the third
+test(found_three_elems_third, true(V == Z)) :-
+    X = _, Y = _, Z = _,
+    egraph:lookup(c-V, [a-X, b-Y, c-Z]).
+
+% Fails when Key is absent from a 2-element canonical list
+test(fail_two_elems_absent, fail) :-
+    X = _, Y = _,
+    egraph:lookup(c-_, [a-X, b-Y]).
+
+:- end_tests(lookup_even_more2).
+
+
+% add/4 (more 2)
+:- begin_tests(add_4_more2).
+
+% Re-adding the same compound term reuses the same Id
+test(readd_compound_reuse_id, true(Id2==Id)) :-
+    egraph:add(f(a,b), Id, [], Out1),
+    egraph:add(f(a,b), Id2, Out1, _Out2).
+
+% Re-adding the same compound term does not change the set
+test(readd_compound_no_set_change, true(Out2==Out1)) :-
+    egraph:add(f(a,b), _Id, [], Out1),
+    egraph:add(f(a,b), _Id2, Out1, Out2).
+
+% Adding compound with variables preserves variable identity in Key
+test(compound_with_vars_identity_preserved, true((member(f(V1)-_, Out), member(f(V2)-_, Out), V1\==V2))) :-
+    V1 = _, V2 = _, V1 \== V2,
+    egraph:add(f(V1), _Id1, [], T),
+    egraph:add(f(V2), _Id2, T, Out).
+
+:- end_tests(add_4_more2).
+
+
+% add//2 (more 2)
+:- begin_tests(add_dcg_2_more2).
+
+% Re-adding the same compound via DCG is idempotent (second call reuses and does not add)
+test(dcg_readd_compound_idempotent, true(length(Out,3))) :-
+    % First add of f(a,b) yields a-A, b-B, f(A,B)-Id (3 nodes)
+    phrase((egraph:add(f(a,b), _), egraph:add(f(a,b), _)), [], Out).
+
+% DCG on compound preserves child Id reuse consistently across separate calls
+test(dcg_compound_child_id_reuse, true((member(a-A, Out), member(b-B, Out), member(f(A,B)-_, Out)))) :-
+    phrase(egraph:add(f(a,b), _), [], Out).
+
+:- end_tests(add_dcg_2_more2).
+
+
+% add_node/3 (more 2)
+:- begin_tests(add_node_3_more2).
+
+% Insert a compound Node key directly; treated as a Key and inserted
+test(insert_compound_key, true(member(f(x)-Id, Out))) :-
+    egraph:add_node(f(x), Id, [], Out).
+
+% Variable identity in compound Key: f(X) and f(Y) with X\==Y both kept
+test(insert_compound_var_identity, true((member(f(X)-_, Out), member(f(Y)-_, Out), X\==Y))) :-
+    X = _, Y = _, X \== Y,
+    egraph:add_node(f(X), _Id1, [], T),
+    egraph:add_node(f(Y), _Id2, T, Out).
+
+:- end_tests(add_node_3_more2).
+
+
+% merge_group/4 (more 2)
+:- begin_tests(merge_group_more2).
+
+% When Changed0 is already true and group is non-trivial, Changed remains true
+test(changed_flag_sticky_true, true(Changed)) :-
+    A = _, B = _,
+    egraph:merge_group(x-[A,B], _Rep, true, Changed).
+
+:- end_tests(merge_group_more2).
+
+
+% comm//2 (more)
+:- begin_tests(comm_more).
+
+% The equality uses the same AB variable as provided in input node
+test(eq_uses_input_ab, true(member(AB=_, Out))) :-
+    A = _, B = _, AB = _,
+    phrase(egraph:comm((A+B)-AB, _Index), Out).
+
+:- end_tests(comm_more).
+
+
+% assoc//2 (more 2)
+:- begin_tests(assoc_more2).
+
+% Non-match for nodes not of form (A+BC)-ABC yields no output
+test(nonmatch_empty, true(Out == [])) :-
+    ord_list_to_rbtree([], Index),
+    phrase(egraph:assoc(foo-_, Index), Out).
+
+:- end_tests(assoc_more2).
+
+
+% rule//3 (more 2)
+:- begin_tests(rule_more2).
+
+% Reduce rule emits nothing when class(B) lacks 0 (Index does not contain B or lacks 0)
+test(reduce_emits_nothing_when_no_zero, true(Out == [])) :-
+    A = _, B = _,
+    ord_list_to_rbtree([B-[1,2]], Index),
+    phrase(egraph:rule(Index, (A+B)-_AB, reduce), Out).
+
+:- end_tests(rule_more2).
+
+
+% make_index/2 (more 2)
+:- begin_tests(make_index_more2).
+
+% rb_lookup/3 fails when Id not present in index
+test(rb_lookup_missing_fails, fail) :-
+    A = _, B = _,
+    Nodes = [x-A, y-A, z-B],
+    egraph:make_index(Nodes, Index),
+    C = _,
+    rb_lookup(C, _Keys, Index).
+
+:- end_tests(make_index_more2).
+
+
+% match/4 (more 2)
+:- begin_tests(match_more2).
+
+% With two rules [comm, reduce], outputs start with comm node then comm eq then reduce eq
+test(order_comm_then_reduce, true((Matches = [K1, Eq1, Eq2 | _], K1 = (B+A)-_, Eq1 = (AB=_), Eq2 = (A=AB)))) :-
+    A = _, B = _, AB = _,
+    Work = [(A+B)-AB],
+    ord_list_to_rbtree([B-[0]], Index),
+    egraph:match([comm, reduce], Work, Index, Matches).
+
+:- end_tests(match_more2).
+
+
+% rebuild//1 (more 2)
+:- begin_tests(rebuild_more2).
+
+% Duplicate Key-Id pairs scheduled via Matches are deduplicated and Ids unified
+test(duplicates_in_matches_dedup_and_unify, true((Out == [x-A], A==B))) :-
+    A = _, B = _,
+    In = [],
+    Matches = [x-A, x-B],
+    phrase(egraph:rebuild(Matches), In, Out).
+
+% No equalities: rebuild still canonicalizes and sorts the accumulated nodes
+test(no_equalities_canonicalizes, true(Out == [a-A, b-B])) :-
+    A = _, B = _,
+    In = [b-B],
+    Matches = [a-A],
+    phrase(egraph:rebuild(Matches), In, Out).
+
+:- end_tests(rebuild_more2).
+
+
+% saturate//1 (more 2)
+:- begin_tests(saturate_dcg_1_more2).
+
+% With no rules, saturate//1 leaves the graph unchanged
+test(no_rules_no_change, true(G2 == G0)) :-
+    phrase(egraph:add(1+2, _), [], G0),
+    phrase(egraph:saturate([]), G0, G2).
+
+:- end_tests(saturate_dcg_1_more2).
+
+
+% saturate/4 (more 2)
+:- begin_tests(saturate_4_more2).
+
+% Alias-only steps (reduce) do not change length after one iteration
+test(alias_only_no_growth, true(L1 == L0)) :-
+    phrase(egraph:add(1+0, _), [], G0),
+    length(G0, L0),
+    egraph:saturate([reduce], 1, G0, G1),
+    length(G1, L1).
+
+:- end_tests(saturate_4_more2).
+
+
+% extract/1 (more 2)
+:- begin_tests(extract_more2).
+
+% Backtracks over representative choices: collects both x and y
+test(backtracks_two_reps, true(Sorted == [x,y])) :-
+    A = _,
+    Nodes = [x-A, y-A],
+    findall(AVal, (egraph:extract(Nodes), AVal=A), AVals),
+    sort(AVals, Sorted).
+
+:- end_tests(extract_more2).
+
+
+% add_expr/2 (more 2)
+:- begin_tests(add_expr_more2).
+
+% N < 1 (e.g., -1) is outside domain; predicate should fail
+test(nneg_out_of_domain, fail) :-
+    egraph:add_expr(-1, _).
+
+:- end_tests(add_expr_more2).
+
+
+% ordsets: ord_add_element/3 (more 2)
+:- begin_tests(ordsets_ord_add_element_more2).
+
+% Inserting two pairs with the same Key but different Id vars keeps both and preserves order
+test(same_key_diff_ids_kept_and_ordered, true(Out == [a-X, a-Y])) :-
+    X = _, Y = _, X \== Y,
+    ord_add_element([], a-X, S),
+    ord_add_element(S, a-Y, Out).
+
+:- end_tests(ordsets_ord_add_element_more2).
+
+
+% ordsets: ord_subtract/3 (even more)
+:- begin_tests(ordsets_ord_subtract_even_more).
+
+% Subtracting a superset yields empty set
+test(sub_superset_empty, true(R == [])) :-
+    ord_subtract([a,b], [a,b,c], R).
+
+% Subtracting a subset from a larger set yields the remaining elements
+test(sub_subset_remaining, true(R == [c])) :-
+    ord_subtract([a,b,c], [a,b], R).
+
+% Compound with aliased variable identity: f(X) removed by f(Z) after X=Z
+test(compound_alias_then_remove, true(R == [])) :-
+    X = _, Z = _, X = Z,
+    ord_subtract([f(X)], [f(Z)], R).
+
+% Deep compound with non-identical variables: g(h(X),X) not removed by g(h(X),Y) when X\==Y
+test(deep_compound_variant_not_removed, true(R == [g(h(X),X)])) :-
+    X = _, Y = _, X \== Y,
+    ord_subtract([g(h(X),X)], [g(h(X),Y)], R).
+
+% Pair subtraction: removing two existing pairs leaves only the remaining pair
+test(pair_subtract_two, true(R == [c-Z])) :-
+    X = _, Y = _, Z = _,
+    ord_subtract([a-X, b-Y, c-Z], [a-X, b-Y], R).
+
+% Pair subtraction with compound Keys and aliased Ids: [f(X)-I] removed by [f(X)-J] only if I==J; here I\==J so not removed
+test(pair_compound_diff_id_not_removed, true(R == [f(X)-I])) :-
+    X = _, I = _, J = _, I \== J,
+    ord_subtract([f(X)-I], [f(X)-J], R).
+
+% Pair subtraction with aliased Ids: [a-I] is removed by [a-J] after I=J
+test(pair_ids_aliased_then_removed, true(R == [])) :-
+    I = _, J = _, I = J,
+    ord_subtract([a-I], [a-J], R).
+
+:- end_tests(ordsets_ord_subtract_even_more).
