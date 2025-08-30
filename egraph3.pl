@@ -151,6 +151,7 @@ union(A, B, In, Out) :-
 
 %! merge_nodes//0 is det.
 %  DCG shim for merge_nodes/2; emits nothing; only canonicalizes.
+%  Note: rebuild//1 calls this DCG form; ensure a shim exists that delegates to merge_nodes/2.
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize to one Key-Id per Key; iterate to a fixpoint under Id aliasing.
 %  - sort/2 → group_pairs_by_key/2 → unify each group's Ids with the first; repeat while any group has length > 1.
@@ -344,6 +345,7 @@ push_back(L), L --> [].
 %  - Always follow Id aliasing with merge_nodes/2 to rebuild representatives (done here).
 %  - Never include Key=Key or Key=Id equalities; only class Ids may appear in (=)/2.
 %  - Rebuild any Id→[Keys] index after this step (see make_index/2).
+%  - Requires merge_nodes//0 shim delegating to merge_nodes/2.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
