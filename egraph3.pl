@@ -5,16 +5,16 @@ E-graphs with congruence closure for Prolog terms.
 
 Core model
 - Nodes: ordset of Key-Id pairs (standard order). A Key is an atom/var or a term F(ChildIds). Variable identity is part of the Key (no alpha/variant normalization).
-- Class Ids: fresh logic variables act as mutable, backtrackable class identifiers. The only mutation is aliasing classes by unifying Id variables with (=)/2.
-- Canonicalization: merge_nodes/2 collapses duplicates so there is at most one Key-Id per Key; after each canonicalization, an Id→Keys index is rebuilt.
+- Class Ids: fresh logic variables are the mutable, backtrackable class identifiers. Mutation is only by aliasing classes via (=)/2 on Id variables.
+- Canonicalization: merge_nodes/2 collapses duplicates to a single Key-Id per Key; after each pass, an Id→Keys index is rebuilt.
 
 Execution
-- DCGs thread the node set as a difference list. Rules only emit Key-Id items and equalities A=B; they never unify themselves.
-- rebuild//1 consumes equalities (unifies Ids), appends new items to the worklist, and calls merge_nodes/2.
-- Unifying Ids may instantiate variables inside Keys; merge_nodes/2 iterates until no further merges appear.
+- DCGs thread the node set as a difference list. Rules only emit Key-Id items and equalities A=B; they never perform unification themselves.
+- rebuild//1 consumes equalities (unifies Ids), enqueues new items, then calls merge_nodes/2.
+- Unifying Ids can instantiate variables inside Keys; merge_nodes/2 repeats until no further merges appear.
 
 Caveats
-- Fixpoint in saturate//2 is length-based; alias-only steps (A=B with no new pairs) are invisible to the stop condition.
+- The fixpoint in saturate//2 is length-based; alias-only steps (A=B with no new pairs) do not change the length and are invisible to the stop test.
 - Never serialize or compare Ids by print-name; treat them as opaque logic variables.
 - extract//0 uses member/2 and can alias Ids; prefer extract/1 in user code.
 
@@ -22,7 +22,7 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 Implementation predicates (internal)
-- lookup/2: O(N) read-only search in an ordset of Key-Id; preserves variable identity via (==); binds Val only.
+- lookup/2: O(N) read-only search in an ordset of Key-Id; preserves variable identity via (==); binds only the value.
 - add/4: worker behind add//2; builds Keys as F(ChildIds) (congruence) and appends nodes; no unification.
 - add_node/4, add_node/3: ensure a Key has a class Id; reuse existing; no unification.
 - merge_nodes//0, merge_nodes/2: canonicalize to one Key-Id per Key and iterate to a fixpoint after aliasing.
@@ -31,7 +31,7 @@ Implementation predicates (internal)
 - rules//3, rule//3: run DCG rules over a node with Index; rules only emit items and A=B.
 - match/4: collect rule outputs over the current worklist given an Index; pure (no mutation).
 - push_back//1: append a list to the DCG output (difference-list scheduler).
-- rebuild//1: apply (=)/2 equalities (alias Ids), enqueue new nodes, then canonicalize; the only place where unification happens.
+- rebuild//1: apply (=)/2 equalities (alias Ids), enqueue new nodes, then canonicalize; the only place where unification of Ids happens.
 - unif/1: recognize and execute (=)/2 on class Ids (used only via exclude/3).
 - comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4: internal example rules/helpers; pure producers.
 
@@ -40,7 +40,8 @@ Equality and identity
 - All effects are logical and backtrackable. Only Id variables unify; no occurs-check is needed because Ids are fresh, acyclic logic variables.
 
 Notes
-- Using logic variables as class Ids is intentional: unification is the only mutating operation and is backtrackable. This can instantiate variables embedded inside Keys; always follow Id aliasing with merge_nodes/2.
+- Logic variables as class Ids are intentional: unification is the only mutating operation and is backtrackable. This can instantiate variables embedded in Keys; always follow Id aliasing with merge_nodes/2.
+- Internal predicates are pure w.r.t. Keys; only Id variables may be unified, and only in rebuild//1 and merge_nodes/2.
 */
 
 
