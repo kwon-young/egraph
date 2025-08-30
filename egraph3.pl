@@ -1,13 +1,13 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms using logic variables as mutable unique identifiers.
-Each class is keyed by a fresh Id variable that may only be aliased via (=)/2.
+E-graphs for Prolog terms with logic variables as mutable unique identifiers.
+Each class is keyed by an Id variable that may only be aliased via (=)/2.
 Compare Id variables by identity with (==) and never by name or print-name.
 
 Nodes are an ordset of Key-Id pairs where Key is an atom, a var, or F(ChildIds).
 Keys preserve variable identity and are never alpha-renamed or normalized.
-Ids are opaque logic variables and must never be inspected or compared by name.
+Ids are opaque logic variables and must not be inspected or compared by name.
 Canonicalization keeps at most one Key-Id per Key and is performed by
 merge_nodes/2 after any aliasing.
 
@@ -27,26 +27,28 @@ saturate iterates make_index, match, rebuild, and merge until the node count
 stabilizes, and alias-only steps do not count as progress.
 
 Ids are compared by identity with (==) and never by name or print-name.
-Unifying Ids may instantiate variables inside Keys, and the next merge collapses
-any resulting collisions.
-lookup/2 expects canonicalized input and non-canonical sets may fail spuriously.
+Unifying Ids may instantiate variables inside Keys, and the next merge
+collapses any resulting collisions.
+lookup/2 expects canonicalized input and non-canonical sets may fail
+spuriously.
 
-Keys are variable-identity sensitive and variant-equal Keys with distinct vars
-are different by design.
-BUG: assoc//2 contains a cut that commits before rb_lookup/3 and fails when BC
-is absent from the Index; the intended behavior is to emit no output.
+Keys are variable-identity sensitive and variant-equal Keys with distinct
+variables are different by design.
+BUG: assoc//2 has a cut that commits before rb_lookup/3 and fails when BC is
+absent from the Index.
+The intended behavior is to emit no output when BC is absent.
 
-The goal of extract is to obtain a concrete Prolog term per class by unifying
+The goal of extract is to extract a concrete Prolog term per class by unifying
 each class Id with a representative Key.
 Extract is the last standard step and should not be followed by rewriting or
 saturation.
 
 Notes.
-Use Id variables as mutable identifiers but keep unification restricted to
-rebuild//1 and merge_nodes/2.
+Use Id variables as mutable unique identifiers but keep unification restricted
+to rebuild//1 and merge_nodes/2.
 Do not inspect, print, or compare Id variables by name in user code or rules.
-Portability note: using the atom inf as an unbounded step in saturate//2 may be
-non-portable across Prolog systems.
+Portability note: using the atom inf as an unbounded step in saturate//2 may
+be non-portable across Prolog systems.
 */
 
 /* ----------------------------------------------------------------------
