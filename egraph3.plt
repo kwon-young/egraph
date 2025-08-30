@@ -24,6 +24,23 @@ test(lookup_fail_absent, fail) :-
     X = _, Y = _, Z = _,
     egraph:lookup(d-_, [a-X, b-Y, c-Z]).
 
+% Finds the Id when Key is the first element in a canonical list
+test(lookup_found_first, true(V == X)) :-
+    X = _, Y = _, Z = _,
+    egraph:lookup(a-V, [a-X, b-Y, c-Z]).
+
+% Finds the Id when Key is the last element in a canonical list
+test(lookup_found_last, true(V == Z)) :-
+    X = _, Y = _, Z = _,
+    egraph:lookup(c-V, [a-X, b-Y, c-Z]).
+
+% BUG: Keys are variable-identity sensitive; variant-equal keys with different variables are not identical and should not be found.
+% Demonstrates that lookup/2 does not match f(V2) against existing f(V1) when V1 \== V2.
+test(lookup_variant_key_identity, [fail]) :-
+    V1 = _, V2 = _,
+    V1 \== V2,
+    egraph:lookup(f(V2)-_, [f(V1)-_Id]).
+
 :- end_tests(lookup).
 
 
@@ -93,6 +110,11 @@ test(add_node_reuse_noop, true(Out==In)) :-
     In = [x-X],
     egraph:add_node(x, _Id, In, Out).
 
+% Preserves canonical order when inserting into a non-empty canonical set
+test(add_node_insert_sorted_order, true(Out == [a-A, b-B])) :-
+    B = _,
+    egraph:add_node(a, A, [b-B], Out).
+
 :- end_tests(add_node_3).
 
 % add_node/4
@@ -102,6 +124,12 @@ test(add_node_reuse_noop, true(Out==In)) :-
 test(add_node_pair_form_member, true(member(y-Y, Out))) :-
     X = _,
     egraph:add_node(y-Y, [x-X], Out).
+
+% Uses the provided Id in the pair form
+test(add_node_pair_uses_provided_id, true(Y2==Y)) :-
+    X = _,
+    egraph:add_node(y-Y, [x-X], Out),
+    member(y-Y2, Out).
 
 :- end_tests(add_node_4).
 
@@ -130,6 +158,11 @@ test(union_same_id_noop_dcg, true(Out == [x-A])) :-
     A = _,
     phrase(egraph:union(A, A), [x-A], Out).
 
+% Ensures resulting set is canonical-sorted after aliasing
+test(union_dcg_sorted_after_alias, true(Out == [a-A, b-A])) :-
+    A = _, B = _,
+    phrase(egraph:union(A, B), [b-B, a-A], Out).
+
 :- end_tests(union_dcg_2).
 
 % union/4
@@ -149,6 +182,11 @@ test(union_keeps_both_keys_4, true((member(x-A, Out), member(y-A, Out)))) :-
 test(union_same_id_noop_4, true(Out == [x-A])) :-
     A = _,
     egraph:union(A, A, [x-A], Out).
+
+% Ensures resulting set is canonical-sorted after aliasing (pair order normalized)
+test(union_sorted_after_alias_4, true(Out == [a-A, b-A])) :-
+    A = _, B = _,
+    egraph:union(A, B, [b-B, a-A], Out).
 
 :- end_tests(union_4).
 
@@ -186,6 +224,11 @@ test(merge_nodes_alias_instantiates_keys_ids_equal, true(FB==FA)) :-
     A = B,
     egraph:merge_nodes(In, Out),
     _ = Out.
+
+% Sorts output into canonical order
+test(merge_nodes_sorts_canonical, true(Out == [a-A, b-B])) :-
+    A = _, B = _,
+    egraph:merge_nodes([b-B, a-A], Out).
 
 :- end_tests(merge_nodes_2).
 
@@ -261,6 +304,11 @@ test(comm_ids_are_vars, true((member(AB=BA, Out), var(AB), var(BA)))) :-
 % Non-match produces no output
 test(comm_nomatch_empty, true(Out == [])) :-
     phrase(egraph:comm(foo-_, _Idx), [], Out).
+
+% Emits exactly two outputs: the commuted node and the equality
+test(comm_emits_exactly_two, true(length(Out,2))) :-
+    A = _, B = _,
+    phrase(egraph:comm((A+B)-_AB, _Index), Out).
 
 :- end_tests(comm).
 
@@ -362,6 +410,12 @@ test(const_fold_skips_non_numeric_B, true(Out == [])) :-
     ord_list_to_rbtree([A-[2], B-[foo]], Index),
     phrase(egraph:constant_folding((A+B)-_AB, Index), Out).
 
+% Emits exactly one value pair and one equality for numeric A and B
+test(const_fold_emits_pair_and_eq_count, true(length(Out, 2))) :-
+    A = _, B = _,
+    ord_list_to_rbtree([A-[2], B-[3]], Index),
+    phrase(egraph:constant_folding((A+B)-_AB, Index), Out).
+
 :- end_tests(constant_folding).
 
 
@@ -437,6 +491,13 @@ test(rules_apply_order_reduce_eq, true(member(A=AB, Out))) :-
     Rules = [comm, reduce],
     phrase(egraph:rules(Rules, Index, (A+B)-AB), Out).
 
+% Ensures output order is per-rule: comm outputs precede reduce outputs
+test(rules_output_order_prefix, true((Out = [K1, Eq1, Eq2 | _], K1 = B+A-_, Eq1 = AB=BA, Eq2 = A=AB))) :-
+    A = _, B = _,
+    ord_list_to_rbtree([B-[0]], Index),
+    Rules = [comm, reduce],
+    phrase(egraph:rules(Rules, Index, (A+B)-AB), Out).
+
 :- end_tests(rules).
 
 
@@ -459,6 +520,11 @@ test(rule_wrapper_reduce_eq, true(member(A=AB, Out))) :-
     A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
     phrase(egraph:rule(Index, (A+B)-AB, reduce), Out).
+
+% Ensures comm rule emits node before equality in its output list
+test(rule_comm_output_order, true((Out = [K1, Eq1], K1 = B+A-_, Eq1 = AB=BA))) :-
+    A = _, B = _,
+    phrase(egraph:rule(_Index, (A+B)-AB, comm), Out).
 
 :- end_tests(rule).
 
@@ -496,6 +562,13 @@ test(match_comm_node, true(member(b+a-_BA, Matches))) :-
 
 % Runs comm over worklist: contains equality
 test(match_comm_eq, true(member(AB=_BA, Matches))) :-
+    A = _, B = _, AB = _,
+    Work = [(A+B)-AB],
+    ord_list_to_rbtree([], Index),
+    egraph:match([comm], Work, Index, Matches).
+
+% Ensures match preserves rule output order for a single work item
+test(match_comm_order_prefix, true((Matches = [K1, Eq1 | _], K1 = B+A-_, Eq1 = AB=BA))) :-
     A = _, B = _, AB = _,
     Work = [(A+B)-AB],
     ord_list_to_rbtree([], Index),
@@ -552,6 +625,12 @@ test(rebuild_drops_equalities, true(\+ member(_=_ , Out))) :-
     In = [x-A, y-B],
     Matches = [A=B, z-C],
     phrase(egraph:rebuild(Matches), In, Out).
+
+% No-op when there are no matches: set remains unchanged and canonical
+test(rebuild_noop_on_empty_matches, true(Out == In)) :-
+    A = _,
+    In = [x-A],
+    phrase(egraph:rebuild([]), In, Out).
 
 :- end_tests(rebuild).
 
@@ -625,6 +704,10 @@ test(extract_aliases_ids_to_member, true(once((A==x ; A==y)))) :-
     Nodes = [x-A, y-A],
     once(egraph:extract(Nodes)).
 
+% Trivial success for empty node set (no classes to extract)
+test(extract_empty_trivial) :-
+    egraph:extract([]).
+
 :- end_tests(extract).
 
 
@@ -688,6 +771,10 @@ test(add_expr_right_assoc, [fail]) :-
 % N=1 yields 1
 test(add_expr_n1_is_1, true(Expr == 1)) :-
     egraph:add_expr(1, Expr).
+
+% N=0 is outside the domain (N >= 1); the predicate should fail
+test(add_expr_n0_fails, fail) :-
+    egraph:add_expr(0, _).
 
 :- end_tests(add_expr).
 
