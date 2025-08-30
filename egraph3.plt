@@ -249,9 +249,9 @@ test(comm_emits_commuted_node, true((member(K-_BA, Out), K = B+A))) :-
     phrase(egraph:comm((A+B)-_AB, _Index), Out).
 
 % Emits equality AB=BA indicating the commuted form is equated to the original
-test(comm_emits_equality, true(member(_AB=_BA, Out))) :-
+test(comm_emits_equality, true(member(AB=BA, Out))) :-
     A = _, B = _,
-    phrase(egraph:comm((A+B)-_AB, _Index), Out).
+    phrase(egraph:comm((A+B)-AB, _Index), Out).
 
 % The emitted Ids BA and AB are variables
 test(comm_ids_are_vars, true((member(AB=BA, Out), var(AB), var(BA)))) :-
@@ -707,7 +707,7 @@ test(example1_contains_f4a, true(member(f(f(f(f(a))))-_Id, G))) :-
 test(example1_ids_aliased_by_union, true(A==FFA)) :-
     egraph:example1(G),
     member(a-A, G),
-    member(f(f(a))-FFA, G).
+    member(f(FA)-FFA, G).
 
 :- end_tests(example1).
 
