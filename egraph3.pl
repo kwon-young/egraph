@@ -59,14 +59,14 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Find Id for Key in a canonical ordset of Key-Id pairs (Pairs).
-%  - Pre: Nodes are canonical (call merge_nodes/2 first).
-%  - Method: prune by standard order; confirm equality with (==). Binds Id only; never constructs/unifies Keys.
-%  - Det/Cost: semidet, O(N); steadfast; leaves no choicepoints on success.
+%  Lookup Id for Key in a canonical ordset Pairs of Key-Id.
+%  - Pre: Pairs canonical (run merge_nodes/2 first).
+%  - Algo: prune by standard order; confirm with (==). Binds Id only; never builds/unifies Keys.
+%  - Det/Cost: semidet, O(N); steadfast; no choicepoints on success.
 %  Notes:
-%  - Non-canonical input violates the precondition and can fail spuriously.
-%  - Ids are logic variables used as mutable class ids; compare by identity (==), never by name.
-%  - Keys come from add/4; variable identity is part of the Key.
+%  - Non-canonical input can fail spuriously.
+%  - Ids are logic vars (mutable class ids): compare by identity (==), never by name/print-name.
+%  - Keys are built by add/4; variable identity is part of the Key.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -299,11 +299,11 @@ rule(Index, Node, Rule) -->
 %  Build rbtree Index mapping Id -> [Keys] from canonical Nodes.
 %  - Pre: Nodes canonical (merge_nodes/2).
 %  - Rebuild after any Id aliasing (Ids are the map keys).
-%  - Ids are logic vars (mutable class ids); keyed by variable identity, not by name.
+%  - Ids are logic vars (mutable class ids); keyed by variable identity (==), not by name.
 %  Cost: O(N log N). det; pure; steadfast.
 %  Impl: transpose_pairs/2 flips Key-Id to Id-Key; Keys are stored as-is (no unification).
 %  Notes:
-%  - Result is an rbtree(Id->[Keys]) with nonempty value lists; rebuild after any Id aliasing.
+%  - Result is rbtree(Id->[Keys]) with nonempty value lists; rebuild after any Id aliasing.
 %  - Intended for the current iteration only; discard and rebuild after each rebuild//1 or merge.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
@@ -341,7 +341,7 @@ push_back(L), L --> [].
 %  Notes:
 %  - Always follow Id aliasing with merge_nodes/2 (done here).
 %  - Never include Key=Key or Key=Id; only class Ids may appear in (=)/2.
-%  - Rebuild any Id→[Keys] index after this step (see make_index/2).
+%  - Rebuild any Id->[Keys] index after this step (see make_index/2).
 %  - Mutable Ids: aliasing happens here and in merge_nodes/2 only.
 %  - DCG call merge_nodes expands to merge_nodes/2; no extra shim required.
 rebuild(Matches) -->
@@ -349,21 +349,21 @@ rebuild(Matches) -->
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Iterate rules to a length fixpoint (after rebuild/merge).
+%  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Rules are pure producers (emit only Key-Id and (=)/2).
 %  - Alias-only steps are ignored (no change in length).
-%  Portability: wraps saturate//2 with MaxSteps=inf; on systems where inf is not comparable, call saturate//2 with a large integer.
+%  Portability: wraps saturate//2 with MaxSteps=inf; if your system lacks inf, call saturate//2 with a large integer.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run up to MaxSteps iterations; stop early when length stabilizes after rebuild/merge.
-%  - MaxSteps: integer >= 0. Some systems accept inf; otherwise pass a large integer.
+%  - MaxSteps: integer >= 0 (or inf on systems that support it).
 %  - Alias-only steps do not count as progress.
 %  Det: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Driver. Each iteration: build Index, run Rules over Nodes, apply Matches with rebuild//1 (aliases Ids), then merge.
 %  - Only rebuild//1 and merge_nodes/2 may unify Ids.
-%  - Ids are logic vars (mutable); rebuild Index after aliasing; never compare by name.
+%  - Ids are logic vars (mutable); rebuild Index after aliasing; never compare by name/print-name.
 %  - MaxSteps: integer >= 0; use a large integer if your system lacks inf.
 %  Det: det. Nondet comes only from Rules.
 %  Notes:
@@ -388,11 +388,11 @@ saturate(Rules, N, In, Out) :-
    ).
 
 %! unif(+Eq) is semidet.
-%  True for Eq = (A=B); performs that unification as a side-effect.
+%  True for Eq=(A=B); performs that unification as a side-effect.
 %  Only for rebuild//1 (via exclude/3); do not call from rules or user code.
 %  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
 %  - Only Id variables should appear here; Keys must not be unified.
-%  Det: semidet; deliberately impure (Id unification). Do not call from rewrite rules.
+%  Det: semidet; intentionally impure (Id unification). Do not call from rewrite rules.
 %  Notes:
 %  - The only place outside merge_nodes/2 where Ids are explicitly unified on purpose.
 %  - Mutable Ids: aliasing happens here or in merge_nodes/2 only. Keep Keys as pure data.
