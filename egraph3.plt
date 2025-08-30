@@ -1558,3 +1558,59 @@ test(var_vs_compound_not_removed, true(R == [f(X)])) :-
     ord_subtract([f(X)], [X], R).
 
 :- end_tests(ordsets_ord_subtract_edge).
+
+
+% constant_folding//2 (even more)
+:- begin_tests(constant_folding_even_more).
+
+% Emits 8 outputs (4 value pairs + 4 equalities) for two numeric members in class(A) and two in class(B)
+% Combinations: (1,10), (1,20), (2,10), (2,20) -> 4 sums and 4 equalities.
+test(cf_two_by_two_count, true(length(Out,8))) :-
+    A = _, B = _,
+    ord_list_to_rbtree([A-[1,2], B-[10,20]], Index),
+    phrase(egraph:constant_folding((A+B)-_AB, Index), Out).
+
+% Contains all expected folded numeric sums: 11, 21, 12, and 22 as value pairs
+% Checks that each expected sum appears as a Key-C pair in the outputs.
+test(cf_two_by_two_contains_sums, true((member(11-_,Out), member(21-_,Out), member(12-_,Out), member(22-_,Out)))) :-
+    A = _, B = _,
+    ord_list_to_rbtree([A-[1,2], B-[10,20]], Index),
+    phrase(egraph:constant_folding((A+B)-_AB, Index), Out).
+
+:- end_tests(constant_folding_even_more).
+
+
+% ordsets: ord_subtract/3 (pathological variable-heavy cases)
+:- begin_tests(ordsets_ord_subtract_pathological).
+
+% Removing the first variable from a canonical [X,Y,Z] leaves [Y,Z]
+% Builds a canonical variable ordset via ord_add_element/3 to respect standard order.
+test(sub_vars_remove_first, true(R == [Y,Z])) :-
+    X = _, Y = _, Z = _,
+    ord_add_element([], X, S1),
+    ord_add_element(S1, Y, S2),
+    ord_add_element(S2, Z, S),
+    ord_subtract(S, [X], R).
+
+% Removing the last variable from a canonical [X,Y,Z] leaves [X,Y]
+% Ensures ord_subtract handles removal at the tail correctly with variables.
+test(sub_vars_remove_last, true(R == [X,Y])) :-
+    X = _, Y = _, Z = _,
+    ord_add_element([], X, S1),
+    ord_add_element(S1, Y, S2),
+    ord_add_element(S2, Z, S),
+    ord_subtract(S, [Z], R).
+
+% Compound terms sharing a variable: removing g(X) from [f(X), g(X)] leaves [f(X)]
+% Confirms identity-based subtraction with shared variables inside different functors.
+test(sub_compound_sharing_var, true(R == [f(X)])) :-
+    X = _,
+    ord_subtract([f(X), g(X)], [g(X)], R).
+
+% Pair with variable Key vs. ground Key: [K-I] subtract [a-I] does not remove since K \== a
+% Ensures differing Keys (var vs. atom) are not considered identical.
+test(sub_pair_var_key_vs_atom_key, true(R == [K-I])) :-
+    K = _, I = _,
+    ord_subtract([K-I], [a-I], R).
+
+:- end_tests(ordsets_ord_subtract_pathological).
