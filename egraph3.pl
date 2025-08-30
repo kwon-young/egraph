@@ -32,7 +32,8 @@ lookup/2 expects canonicalized input and non-canonical sets may fail spuriously.
 Keys are variable-identity sensitive and variant-equal Keys with distinct
 variables are intentionally treated as different Keys.
 
-BUG: assoc//2 commits before rb_lookup/3 and fails when BC is absent in Index.
+BUG: assoc//2 commits before rb_lookup/3 so when BC is absent the rule fails
+instead of emitting nothing.
 Intended behavior is to emit no output when BC is absent.
 
 The goal of extract is to extract a concrete prolog term per class by
@@ -46,10 +47,12 @@ rebuild//1 and merge_nodes/2.
 Do not inspect, print, or compare Id variables by name in user code or rules.
 Portability note: the atom inf as an unbounded step in saturate//2 may be
 non-portable across Prolog systems.
+On such systems prefer a large integer bound passed to saturate//2.
 
-Unknowns.
-DCG wrappers for //2 nonterminals rely on SWI-Prolog expansion that maps them
-to their +(2) counterparts and other systems may require explicit wrappers.
+Portability.
+DCG wrappers for //2 nonterminals rely on SWI-Prolog DCG expansion that maps
+them to predicates with two extra list arguments.
+Other systems may require explicit wrappers for these DCG rules.
 */
 
 /* ----------------------------------------------------------------------
@@ -421,7 +424,8 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - BUG: A cut commits before rb_lookup/3 and absent BC causes failure.
+%  - BUG: A cut commits before rb_lookup/3, so when BC is absent the rule
+%    fails instead of emitting nothing.
 %  - Intended: emit no output when BC is absent in Index (see tests).
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
