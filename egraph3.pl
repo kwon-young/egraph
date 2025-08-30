@@ -39,8 +39,8 @@ Implementation predicates (internal)
 - DCG bridging: DCG nonterminals are pure producers. merge_nodes//0 must delegate to merge_nodes/2; rebuild//1 assumes this shim exists.
 
 Notes on mutable class Ids
-- Class Ids are fresh logic variables that act as mutable, unique class identifiers. They alias via unification only; never compare them by name.
-- Unifying Ids can instantiate variables embedded in Keys; always follow any aliasing with merge_nodes/2 (rebuild//1 already does this).
+- Class Ids are fresh logic variables (not predicate symbols) that act as mutable, unique class identifiers. They alias via unification only; never compare them by print-name.
+- Unifying Ids can instantiate variables embedded in Keys; always follow aliasing with merge_nodes/2 (rebuild//1 already does this).
 
 Equality and identity
 - Key equality is determined after standard ordering and confirmed with (==), preserving variable identity.
