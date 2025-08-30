@@ -22,21 +22,21 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 Implementation predicates (internal)
-- lookup/2 (semidet, pure, steadfast): Canonical ordset lookup of Id for Key. Prunes by standard order, then confirms identity with (==) to preserve variable identity. Binds only Id; fails if absent. No allocation; never unifies Keys or Ids. Pre: canonical ordset (output of merge_nodes/2). Complexity: O(N) worst case.
-- add//2, add/4 (det, pure w.r.t. Keys): Build Key = F(ChildIds) left-to-right (stable arg order ⇒ congruence). Emit only Key-Id items; no (=)/2, no Id unification. Duplicates are removed by merge_nodes/2. Uses two-accumulator foldl/5 to collect ChildIds and thread the ordset.
-- add_node/4, add_node/3 (det, quasi-pure): Ensure Node has a class Id. Reuse if present; otherwise insert Node-Id with a fresh unbound Id. In/Out are ordsets. No canonicalization; no Id unification. Effect: Out = In when Node already exists.
-- merge_nodes//0, merge_nodes/2 (det, logical effects): Canonicalize to exactly one Key-Id per Key via sort → group → unify-first; repeat until stable w.r.t. Id aliasing. Only Id vars unify; Keys never do. Termination: number of distinct Id vars strictly decreases. Invariant: Out is canonical.
-- merge_group/4 (det, logical effects): For Key-[H|T], unify each Id in T with H; Changed = true iff T is nonempty. Only Id vars unify; Keys never do.
-- make_index/2 (det, pure): Build rbtree Id -> [Keys] from canonical Nodes (the Id variable itself is the map key). Rebuild after any Id aliasing. Complexity: O(N log N).
-- rules//3, rule//3 (nondet, pure): Apply each DCG Rule(Node,Index)// to Node using Index. Rules may emit only Key-Id pairs and (=)/2; must not inspect or bind Ids. Output order: node order, then rule order.
-- match/4 (det, pure): Run Rules over the worklist using Index; collect concrete outputs (nodes and (=)/2). Output order: worklist order, then per-node rule order. No unification here; steadfast accumulator.
-- push_back//1 (det, pure): Append a list to the DCG output in O(1) via difference lists; scheduling only.
-- rebuild//1 (det, logical effects): Apply (=)/2 equalities (alias Ids), enqueue resulting Key-Id items, then canonicalize with merge_nodes//0. Only Id variables unify. Note: aliasing may instantiate variables embedded in Keys; the next merge pass collapses any collisions.
-- unif/1 (semidet, impure by design): True for Eq = (A=B); performs A=B (no occurs-check). Intended only for rebuild//1 via exclude/3; safe because Ids are fresh, acyclic logic variables. Never call from rules.
-- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): Example rewrite rules/helpers. Emit nodes/equalities only; avoid in-place rewrites; use Index to restrict search when possible. Must not inspect or bind Ids. Determinism as stated.
+- lookup/2 (semidet, pure, steadfast): Canonical ordset lookup of Id for Key. Prunes by standard order, confirms identity with (==) to preserve variable identity. Binds only Id; fails if absent. No allocation. Pre: canonical ordset (output of merge_nodes/2). O(N) worst case.
+- add//2, add/4 (det, pure w.r.t. Keys): Build Key=F(ChildIds) left-to-right (stable arg order ⇒ congruence). Emit Key-Id items only; never unify Ids. Duplicates removed later by merge_nodes/2. Uses foldl/5; steadfast.
+- add_node/4, add_node/3 (det, quasi-pure): Ensure Node has a class Id. Reuse if present; otherwise insert Node-Id with a fresh unbound Id. In/Out are ordsets. No canonicalization or Id unification. Out=In if Node already exists.
+- merge_nodes//0, merge_nodes/2 (det, logical effects): Canonicalize to one Key-Id per Key via sort → group → unify-first; repeat until stable under Id aliasing. Only Id vars unify; Keys never do. Terminates because the number of distinct Id vars strictly decreases. Out is canonical.
+- merge_group/4 (det, logical effects): For Key-[H|T], unify all Ids in T with H; Changed=true iff T is nonempty. Only Id vars unify; Keys never do.
+- make_index/2 (det, pure): Build rbtree Id->[Keys] from canonical Nodes using the Id variable as the map key. Rebuild after any Id aliasing. O(N log N).
+- rules//3, rule//3 (nondet, pure): Apply each DCG rule Rule(Node,Index)// to Node using Index. Rules may emit only Key-Id pairs and (=)/2; must not inspect or bind Ids. Output order: node order, then rule order.
+- match/4 (det, pure): Run Rules over the worklist using Index; collect concrete outputs (nodes and (=)/2). No unification here; steadfast accumulator. Output order: worklist order, then per-node rule order.
+- push_back//1 (det, pure): Append a list to DCG output in O(1) via difference lists; scheduling only.
+- rebuild//1 (det, logical effects): Apply (=)/2 equalities (alias Ids), enqueue resulting Key-Id items, then canonicalize with merge_nodes//0. Only Id vars unify. Aliasing may instantiate variables inside Keys; the next merge collapses any collisions.
+- unif/1 (semidet, impure by design): True for Eq=(A=B); performs A=B (no occurs-check). Intended only for rebuild//1 via exclude/3. Safe because Ids are fresh, acyclic logic variables.
+- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): Example rewrite rules/helpers. Emit nodes/equalities only; avoid in-place rewrites; use Index to restrict search when possible. Must not inspect or bind Ids.
 - extract/2, extract_node/1 (semidet, aliases Ids): Validation helpers used by extract//0. Intentionally alias Ids via member/2; validation only; discard any bindings afterwards.
-- saturate/3 (det, driver): Explicit worker saturating with a step bound; rebuilds the index each iteration; only Ids may unify (in rebuild/merge).
-- DCG bridging: Each DCG nonterminal compiles to an extra-args predicate; merge_nodes//0 reuses merge_nodes/2 as merge_nodes(S0,S). DCG forms must remain pure producers.
+- saturate/3 (det, driver): Worker that saturates with a step bound; rebuild index each iteration; only Ids may unify (in rebuild/merge). Fixpoint is length-based; alias-only steps do not count as progress.
+- DCG bridging: Each DCG nonterminal compiles to extra-args; DCG forms remain pure producers. merge_nodes//0 is a DCG shim over merge_nodes/2.
 
 Notes on mutable class Ids
 - Class Ids are fresh logic variables that act as mutable, unique class identifiers. They alias via unification only; never compare them by name.
@@ -317,26 +317,23 @@ rebuild(Matches) -->
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Run Rules to a length-based fixpoint (no new Key-Id pairs or equalities).
-%  Portability (SWI): Using MaxSteps=inf as a sentinel makes (N > 0) raise type_error on SWI (inf is not numeric). Prefer saturate(Rules, LargeInteger) on SWI or change the guard to allow 'inf'.
+%  Run Rules to a length-based fixpoint (no new pairs/equalities).
+%  SWI note: 'inf' is not numeric; on SWI call saturate(Rules, LargeInteger) or adjust the guard to accept 'inf'.
 %  Determinism: det; Rules must be pure producers (emit only nodes/equalities).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
-%  Run at most MaxSteps iterations (integer >= 0, or the atom inf on systems that permit it).
-%  Fixpoint test: compare lengths before/after rebuild (after merge_nodes/2).
-%  Alias-only steps (only A=B equalities) do not change length; progress requires adding/removing pairs.
-%  Portability (SWI): MaxSteps must be an integer; passing 'inf' makes (N > 0) raise type_error.
+%  Run up to MaxSteps iterations (integer >= 0, or 'inf' where supported).
+%  Fixpoint: stop when length is unchanged after rebuild/merge. Alias-only steps don't change length.
+%  SWI note: MaxSteps must be an integer; 'inf' triggers a type_error.
 %  Determinism: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
-%  Worker that threads the e-graph explicitly.
-%  Rebuild Id->Keys index each iteration (Ids may alias).
-%  Stop when length is stable or MaxSteps is exhausted.
-%  Rules must be pure producers (emit nodes/equalities only). Unification happens only in rebuild//1 and merge_nodes/2.
-%  Ids: logic variables as mutable class ids; never compare by name. Always rebuild the index after aliasing.
-%  Portability (SWI): MaxSteps must be an integer; using 'inf' triggers a type_error at (N > 0). Use a large integer on SWI or adjust the guard to handle the sentinel.
+%  Worker: rebuild Id->Keys index each iteration; stop on stable length or when MaxSteps runs out.
+%  Rules must be pure producers; unification happens only in rebuild//1 and merge_nodes/2.
+%  Ids: logic variables as mutable class ids; never compare by name; always rebuild the index after aliasing.
+%  SWI note: MaxSteps must be an integer; use a large integer or adjust the guard to accept 'inf'.
 %  Determinism: det driver; nondet only from Rules.
-%  Note: The length-based fixpoint ignores alias-only steps; this is intentional.
+%  Note: Alias-only steps do not change length (by design).
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
