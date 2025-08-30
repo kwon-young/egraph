@@ -63,7 +63,7 @@ Notes
 %  - Binds only Id; no mutation; fails if Key is absent.
 %  Precondition: Pairs is canonical.
 %  Notes: Ids are fresh logic vars used as class ids; never compare by name.
-%  Complexity: O(N) worst case with pruning via compare/3.
+%  Complexity: O(N) worst-case over |Pairs|; prunes branches via compare/3.
 %  Determinism: semidet; steadfast; pure.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -174,7 +174,7 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
 
 %! comm(+Node, +Index)// is nondet.
 %  Commutativity for +/2: from (A+B)-AB emit B+A-BA and AB=BA.
-%  - Model equality without in-place rewrite; emit once per match.
+%  - Model equality without in-place rewrite; emit exactly one commuted variant per match.
 %  Notes: BA is fresh; equality is consumed by rebuild//1. Rules must not inspect/bind Ids.
 comm((A+B)-AB, _Nodes) -->
    !,
@@ -302,16 +302,16 @@ rebuild(Matches) -->
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Apply Rules to a length-based fixpoint (no new Key-Id pairs/equalities).
-%  Note: On SWI, this form errors because it passes inf to saturate/4 whose guard uses (N > 0). Prefer saturate//2 with a non-negative integer or patch the guard. Alias-only steps are invisible unless later rule outputs change size.
+%  Run Rules to a length-based fixpoint (no new Key-Id pairs or equalities).
+%  SWI note: passing inf hits the (N > 0) guard in saturate/4 and raises a type_error; use saturate//2 with a non-negative integer, or patch the guard to (N==inf ; N>0). Alias-only steps are invisible unless later rule outputs change size.
 %  Determinism: det; Rules must be pure producers (emit only nodes/equalities).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
-%  Run at most MaxSteps iterations (non-negative integer; inf intended but see note).
+%  Run at most MaxSteps iterations (integer >= 0; inf intended but see SWI note).
 %  - Fixpoint: compare lengths before/after rebuild (post merge_nodes/2).
 %  - Alias-only steps do not change length; progress must add/remove pairs.
-%  Note: On SWI, passing inf raises a type_error due to (N > 0); use a non-negative integer unless the guard is patched. Rules must be pure producers (no unification).
+%  SWI note: passing inf triggers a type_error under guard (N > 0); either patch the guard to (N==inf ; N>0) or use a non-negative integer. Rules must be pure producers (no unification).
 %  Determinism: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker that threads the e-graph explicitly.
@@ -319,7 +319,7 @@ saturate(Rules) -->
 %  - Stop when length is stable or MaxSteps exhausted.
 %  - Rules must be pure producers (emit nodes/equalities only). Unification happens only via rebuild//1.
 %  Notes: Ids are mutable logic variables used as class ids; never compare by name. Always rebuild the index after aliasing.
-%  Warning: On SWI, MaxSteps=inf errors at (N > 0); use a non-negative integer unless you patch the guard.
+%  SWI note: MaxSteps=inf errors under guard (N > 0); patch the guard to (N==inf ; N>0) or use a non-negative integer.
 %  Determinism: det driver; nondet only from Rules.
 saturate(Rules, N, In, Out) :-
    (  N > 0
