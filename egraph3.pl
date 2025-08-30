@@ -1,36 +1,35 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms. Each equivalence class is identified by a fresh logic variable (an Id) that acts as a mutable, backtrackable unique identifier.
+E-graphs for Prolog terms. Each equivalence class is represented by a fresh logic variable (Id) used as a mutable, backtrackable unique identifier.
 
-Core concepts
-- Nodes: canonical ordset of Key-Id pairs. Key is an atom/var or a compound F(ChildIds).
-- Identity: Keys preserve variable identity; do not alpha/variant-normalize. Confirm equality with (==) after order pruning.
-- Ids: opaque logic variables; the only mutation is aliasing via (=)/2.
+Key ideas
+- Nodes: canonical ordset of Key-Id. Key is an atom/var or F(ChildIds); Keys preserve variable identity.
+- Ids: opaque logic variables; the only mutation is aliasing via (=)/2. Compare with (==) only.
 - Canonicalization: merge_nodes/2 keeps at most one Key-Id per Key; rerun after any Id aliasing.
 
 Execution model (DCG pipeline)
-- Rules are pure producers: they emit only Key-Id items and equalities A=B; they do not inspect or bind Ids.
-- Only rebuild//1 and merge_nodes/2 perform Id aliasing. rebuild//1 consumes A=B, enqueues items, then canonicalizes.
+- Rules are pure producers: they emit Key-Id pairs and equalities A=B; they must not inspect/bind Ids.
+- Only rebuild//1 and merge_nodes/2 alias Ids. rebuild//1 consumes A=B, enqueues pairs, then canonicalizes.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract//0, extract/1.
 
 Driver
-- saturate//1, saturate//2, saturate/4 iterate: make_index → match → rebuild → merge until the node count stabilizes. Alias-only steps (only A=B) do not count as progress.
-- Portability: saturate//1 uses MaxSteps=inf; on systems without arithmetic over 'inf', use saturate//2 with a large integer bound.
+- saturate iterates make_index → match → rebuild → merge until node-count stabilizes. Alias-only steps (only A=B) do not count as progress.
+- Portability: saturate//1 uses MaxSteps=inf; on systems without arithmetic over inf, use saturate//2 with a large integer bound.
 
-Id discipline
-- Compare Ids by identity (==); never by name/print-name; do not serialize them.
+Det/discipline
+- Ids are compared by identity (==); never by name/print-name; do not serialize them.
 - Unifying Ids may instantiate variables inside Keys; always re-merge (rebuild//1 handles this).
 - lookup/2 expects canonical input; non-canonical lists may fail spuriously.
 
 Known limitations
 - Keys are intentionally variable-identity sensitive; variant-equal keys with different variables are distinct.
-- BUG: assoc//2 has a cut; if BC is absent from the Index the rule fails instead of emitting no output. Tests document the intended behavior (“no output”).
+- BUG: assoc//2 contains a cut; if BC is absent from Index the rule fails instead of emitting []; intended “no output” is documented in tests.
 
-Notes
-- extract aliases each class Id with a representative Key to materialize a concrete Prolog term per class. It is the last standard step; do not perform rewriting after extraction.
+Note
+- extract unifies each class Id with a representative Key to obtain a concrete Prolog term per class. It is the last standard step; do not rewrite/saturate after extraction.
 */
 
 
@@ -66,16 +65,15 @@ Notes
 %% - The goal of extract is to obtain a concrete Prolog term per class; it is the last standard step—do not rewrite after extraction.
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Lookup Id for Key in a canonical ordset of Key-Id pairs (no Key construction).
-%  - Pre: Pairs is canonical (after merge_nodes/2).
-%  - Algo: prune by standard order, confirm with (==); binds Id only.
-%  - Determinism/Complexity: semidet, steadfast; O(N); no choicepoints on success.
+%  Find Id for Key in a canonical ordset of Key-Id pairs.
+%  - Pre: Pairs canonical (run merge_nodes/2 after aliasing).
+%  - Method: prune by standard order; confirm Key identity with (==); only binds Id.
+%  - Det/Big-O: semidet, steadfast; O(N); no choicepoints on success.
 %  Notes:
-%  - Non-canonical input may fail spuriously.
-%  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by name.
-%  - Keys preserve variable identity (no alpha/variant normalization).
-%  - Variant-equal keys with different variables are distinct and will not match (intentional); do not use =@=/2 here.
-%  - Note: This is by design; see test lookup_variant_key_identity in egraph3.plt.
+%  - Non-canonical input may fail.
+%  - Ids are logic variables; compare with (==) only.
+%  - Keys keep variable identity; do not alpha-normalize or use =@=/2.
+%  - Variant-equal but non-identical keys do not match (intended; see egraph3.plt).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -333,12 +331,11 @@ make_index(In, Index) :-
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
 %! push_back(+List)// is det.
-%  Append List to DCG output in O(1) (difference lists).
-%  - Scheduling only; merge_nodes/2 does canonicalization.
+%  Append List to DCG output in O(1) via difference lists.
+%  - Scheduling helper only; merge_nodes/2 handles canonicalization.
 %  Notes:
-%  - Defined via the DCG idiom: push_back(L), L --> [].
-%  - Scheduling helper only; does not perform canonicalization or aliasing.
-%  - Pure w.r.t. Keys/Ids; no side effects.
+%  - Implemented with the DCG idiom: push_back(L), L --> [].
+%  - Pure w.r.t. Keys/Ids; no aliasing or inspection of Ids.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
 %  Apply Matches (Key-Id items and (=)/2 between Ids), then canonicalize:
@@ -359,19 +356,19 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  - Portability: uses MaxSteps=inf here; on SWI‑Prolog N>0 with N=inf in arithmetic throws error(type_error(evaluable,inf),_). Use saturate//2 with a large integer bound instead.
+%  - Portability: uses MaxSteps=inf here; on systems where N=inf in arithmetic errors, use saturate//2 with a large integer bound.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run up to MaxSteps iterations; stop early when length stabilizes (after rebuild/merge).
-%  - MaxSteps: integer >= 0; choose a large integer instead of 'inf' on systems without atom/integer comparison in arithmetic.
+%  - MaxSteps: integer >= 0 (prefer a large integer over 'inf' on systems without arithmetic over inf).
 %  - Alias-only steps are ignored (no new Key-Id pairs).
 %  Det: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Driver. Each iteration: make_index/2, match/4, rebuild//1 (aliases Ids), merge_nodes/2.
 %  - Only rebuild//1 and merge_nodes/2 unify Ids.
-%  - Ids are logic variables (class IDs); rebuild Index after aliasing; never compare by name.
-%  - MaxSteps: integer >= 0; on systems where atom/integer comparison in arithmetic fails, pass a large integer (use saturate//2).
+%  - Ids are logic variables; rebuild Index after aliasing; never compare by name/print-name.
+%  - MaxSteps: integer >= 0; use saturate//2 to select the bound portably.
 %  Det: det.
 %  Notes:
 %  - Progress is measured by list length after merge; alias-only steps are ignored.
@@ -402,25 +399,26 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Goal: extract a concrete Prolog term per class from the e-graph by unifying each class Id with a representative Key. This is the last standard step of using an e-graph; do not run rewriting after this.
+%  Extract a concrete Prolog term per class by unifying each class Id with a representative Key.
+%  - This is the last standard step; do not run rewriting/saturation after extraction.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, read Nodes directly.
 %  Fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are logic variables used as mutable class identifiers; compare by identity (==), never by name/print-name.
+%  - Ids are logic variables; compare by identity (==), never by name/print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extract/1. Last standard step: alias Ids to materialize one concrete Prolog term per class (stop rewriting/saturation after this).
+%  DCG wrapper for extract/1. Final step: alias Ids to materialize one concrete Prolog term per class.
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Alias each class Id with one of its Keys (a representative) and return Nodes unchanged.
-%  Goal: extract a concrete Prolog term per class; this is the last standard step of using an e-graph; stop rewriting/saturation afterward.
+%  Goal: obtain a concrete Prolog term per class; this is the last standard step; stop rewriting/saturation afterward.
 %  Det: semidet; fails only if some class has no Keys; nondet over representative choice.
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
+%  - Ids are logic variables; compare by identity (==), never by print-name.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -431,7 +429,7 @@ extract(Nodes, Nodes) :-
 %  Det: semidet; nondet over representative choice.
 %  Notes:
 %  - Picks a representative via member/2; Keys do not unify with each other.
-%  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
+%  - Ids are logic variables; compare by identity (==), never by print-name.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
