@@ -209,28 +209,30 @@ be non-portable across Prolog systems.
 :- use_module(library(rbtrees)).
 
 %% Implementation reference (concise; one sentence per line).
-%% Ids are logic variables that serve as mutable unique class identifiers, and
-%% only (=)/2 may alias them (compare by identity with (==), never by name).
-%% Keys preserve variable identity and are compared with (==), not =@=/2 or =/2.
+%% Ids are logic variables used as mutable unique class identifiers.
+%% Only (=)/2 may alias Ids and they must be compared by identity with (==),
+%% never by name or print-name.
+%% Keys preserve variable identity and are compared with (==), not with =@=/2
+%% or =/2.
 %% lookup/2 finds the Id for a Key in a canonical ordset in O(N) time using
 %% (==) on Keys.
-%% add//2 and add/4 insert a term as nodes and emit Key-Id without aliasing,
-%% and compounds build child Ids left-to-right.
+%% add//2 and add/4 insert a term as nodes without aliasing and build compound
+%% child Ids left-to-right.
 %% add_node/3 and add_node/4 insert or reuse a Node-Id in a canonical set and
 %% reuse the existing Id if present.
-%% union//2 and union/4 alias two Ids with (=)/2 and then re-canonicalize with
+%% union//2 and union/4 alias Ids with (=)/2 and re-canonicalize with
 %% merge_nodes/2.
 %% merge_nodes//0 and merge_nodes/2 deduplicate by Key, unify duplicate Ids
 %% with the head, and repeat until stable.
-%% merge_group/4 unifies each tail Id with the head and reports whether any
-%% change occurred.
+%% merge_group/4 unifies tail Ids with the head and reports whether any change
+%% occurred.
 %% comm//2 emits +(B,A)-BA and AB=BA for +(A,B)-AB without inspecting Ids.
 %% assoc//2 emits (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_ for (A+(B+C))-ABC using
 %% class(BC) from the index.
-%% BUG: assoc//2 commits before rb_lookup/3 and fails when BC is absent; the
-%% intended behavior is to emit no output.
+%% BUG: assoc//2 currently commits before rb_lookup/3 and fails when BC is
+%% absent from the index; the intended behavior is to emit no output.
 %% assoc_//3 iterates class(BC) and emits at most one triple per +(B,C) member.
-%% reduce//2 emits A=AB when class(B) contains integer 0, and emits nothing
+%% reduce//2 emits A=AB when class(B) contains integer 0 and emits nothing
 %% otherwise (0.0 does not match).
 %% constant_folding//2 emits VC-C and C=AB for numeric VA in class(A) and VB in
 %% class(B) with VC is VA+VB.
@@ -238,10 +240,9 @@ be non-portable across Prolog systems.
 %% constant_folding_b//4.
 %% constant_folding_b//4 pairs numeric VB with VA, computes VC is VA+VB, and
 %% emits VC-C and C=AB.
-%% rules//3 applies a list of rules to Node in order using Index and
-%% concatenates their outputs.
-%% rule//3 invokes one rule for Node and Index and forwards its outputs
-%% unchanged.
+%% rules//3 applies a list of rules to a Node using Index and concatenates
+%% outputs in rule order.
+%% rule//3 invokes one rule for a Node and Index and forwards outputs unchanged.
 %% make_index/2 builds an rbtree Id->[Keys] from canonical Nodes and must be
 %% rebuilt after any aliasing.
 %% match/4 runs rules over a worklist and collects scheduled matches in a
@@ -249,7 +250,7 @@ be non-portable across Prolog systems.
 %% push_back//1 appends a list to DCG output in O(1) using difference lists.
 %% rebuild//1 applies (=)/2 equalities to alias Ids, enqueues Key-Id pairs, and
 %% merges to canonicalize.
-%% saturate//1 iterates until the node count reaches a fixpoint while ignoring
+%% saturate//1 iterates until the node count reaches a fixpoint and ignores
 %% alias-only steps.
 %% saturate//2 runs with a step bound and stops early when a fixpoint is
 %% reached.
@@ -264,18 +265,16 @@ be non-portable across Prolog systems.
 %% list unchanged.
 %% extract_node/1 chooses a representative Key per class and backtracks over
 %% choices and fails on empty groups.
-%% add_expr/2 builds the left-associated addition chain 1+2+...+N for N>=1.
+%% add_expr/2 builds the left-associated addition chain 1+2+...+N for N>=1
+%% without rewriting Keys.
 %% example1/1 builds a small graph, unions a with f(f(a)), adds f^4(a), and
 %% returns the nodes.
 %% example2/2 builds and saturates an addition chain and prints size sanity
 %% checks.
 %% example3/3 enumerates extracted results after saturation and removes
 %% duplicates.
-%% Notes.
-%% The goal of extract is to obtain one concrete Prolog term per class and it
-%% should be the last standard step.
-%% Only rebuild//1 and merge_nodes/2 may unify Ids and rules must not inspect
-%% or bind them.
+%% Notes: Only rebuild//1 and merge_nodes/2 may unify Ids and rules must not
+%% inspect or bind them.
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
 %  Find Id for Key in a canonical ordset of Key-Id pairs using (==) on Keys.
