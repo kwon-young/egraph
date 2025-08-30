@@ -2,23 +2,20 @@
 
 /** <module> egraph
 E-graphs for Prolog terms using logic variables as mutable unique identifiers.
-Each class is keyed by a fresh Id variable whose only mutation is aliasing via
-(=)/2 and whose equality must be tested with (==).
+Each class is keyed by a fresh Id variable, which may only be aliased via (=)/2
+and whose equality must be tested with (==).
 
-Key ideas.
 Nodes are an ordset of Key-Id pairs where Key is an atom, a var, or F(ChildIds).
 Keys preserve variable identity and are never alpha-renamed or normalized.
-Ids are opaque logic variables and must never be inspected or printed as names.
+Ids are opaque logic variables and must never be inspected or compared by name.
 Canonicalization keeps at most one Key-Id per Key and is performed by
 merge_nodes/2 after any aliasing.
 
-Execution model (DCG pipeline).
-Rules are pure producers that emit Key-Id pairs and equalities A=B and they must
-not inspect or bind Ids.
-Only rebuild//1 and merge_nodes/2 perform Id aliasing and they must be run
-after rules to propagate effects and re-canonicalize.
+Rules are pure producers that emit Key-Id pairs and equalities A=B, and rules
+must not inspect or bind Ids.
+Only rebuild//1 and merge_nodes/2 perform Id aliasing, and they must run after
+rules to propagate effects and re-canonicalize.
 
-Public API.
 add//2 inserts a term as nodes and returns its class Id via DCG.
 union//2 aliases two class Ids via DCG and re-canonicalizes.
 saturate//1 runs the fixed-point driver with an unbounded step budget.
@@ -26,61 +23,28 @@ saturate//2 runs the driver with a bounded step budget.
 extract//0 aliases each class Id to a representative Key via DCG.
 extract/1 aliases each class Id to a representative Key in place.
 
-Driver.
 saturate iterates make_index, match, rebuild, and merge until the node count
-stabilizes and alias-only steps do not count as progress.
+stabilizes, and alias-only steps do not count as progress.
 
-Determinism and discipline.
 Ids are compared by identity with (==) and never by name or print-name.
-Unifying Ids may instantiate variables inside Keys and a subsequent merge collapses
-any resulting collisions.
-lookup/2 expects canonicalized input and non-canonical sets may fail spuriously.
+Unifying Ids may instantiate variables inside Keys, and a subsequent merge
+collapses any resulting collisions.
+lookup/2 expects canonicalized input, and non-canonical sets may fail spuriously.
 
-Known limitations.
-Keys are variable-identity sensitive and variant-equal keys with distinct
+Keys are variable-identity sensitive, and variant-equal keys with distinct
 variables are different by design.
-BUG: assoc//2 contains a cut that commits before rb_lookup/3 and fails when
-BC is absent from the Index; the intended behavior is to emit no output.
+BUG: assoc//2 contains a cut that commits before rb_lookup/3 and fails when BC
+is absent from the Index; the intended behavior is to emit no output.
 
-Goal of extract.
-extract unifies each class Id with a representative Key to obtain one concrete
-Prolog term per class.
+The goal of extract is to obtain a concrete Prolog term per class by unifying
+each class Id with a representative Key.
 It is the last standard step and should not be followed by rewriting or
 saturation.
 
-Predicate index (concise).
-lookup/2 finds the Id for a Key in a canonical ordset in O(N) time.
-add//2 and add/4 build nodes for a term and emit Key-Id without aliasing.
-add_node/3 and add_node/4 insert or reuse a Node-Id in a canonical ordset.
-union//2 and union/4 alias two Ids and then re-canonicalize.
-merge_nodes//0 and merge_nodes/2 deduplicate by Key and unify duplicate Ids.
-merge_group/4 unifies the tail Ids with the head and reports if changes occurred.
-comm//2 emits the commuted +(B,A) node and AB=BA for +(A,B).
-assoc//2 emits AB, (AB+C), and ABC=ABC_ for (A+(B+C)) filtered by class(BC).
-assoc_//3 iterates the class of BC and emits at most one triple per +(B,C).
-reduce//2 emits A=AB when class(B) contains the integer 0.
-constant_folding//2 emits VC-C and C=AB for numeric VA in class(A) and VB in
-class(B) with VC is VA+VB.
-constant_folding_a//4 picks numeric VA from class(A) and delegates to _b.
-constant_folding_b//4 pairs numeric VB in class(B) with VA and emits folds.
-rules//3 applies a list of rules to a node in order using an Index.
-rule//3 is a thin wrapper that invokes one rule for a node and Index.
-make_index/2 builds an rbtree mapping Id to the Keys in its class.
-match/4 runs rules over a worklist and produces scheduled matches.
-push_back//1 appends a list to DCG output as a scheduling helper.
-rebuild//1 consumes equalities by aliasing Ids, enqueues pairs, and merges.
-saturate//1 and saturate//2 are DCG drivers and saturate/4 is the pure driver.
-unif/1 recognizes A=B and performs Id aliasing and is used by rebuild only.
-extract/1, extract//0, and extract/2 alias Ids to representatives for materialization.
-extract_node/1 chooses a representative per class and backtracks over choices.
-add_expr/2 builds a left-associated addition chain 1+2+...+N for N>=1.
-example1/1 builds a small graph, performs a union, and returns the nodes.
-example2/2 builds and saturates an addition chain and prints a size sanity check.
-example3/3 enumerates extracted results after saturation and removes duplicates.
-
 Notes.
 The use of logic variables as mutable class identifiers is subtle and requires
-strict separation of concerns where only rebuild and merge_nodes unify Ids.
+strict separation of concerns where only rebuild//1 and merge_nodes/2 unify Ids.
+Do not inspect, compare by name, or print Id variables in user code or rules.
 */
 
 /* ----------------------------------------------------------------------
