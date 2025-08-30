@@ -52,12 +52,15 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  Read-only O(N) lookup in a canonical ordset of Key-Id pairs.
-%  - Key must be nonvar. Prune via standard order, then confirm with (==) to preserve variable identity.
-%  - Binds Val only; Pairs is not modified. Fails if Key is absent.
+%  Read-only O(N) lookup in a canonical ordset of Key-Id pairs (pure: no allocation, no mutation).
+%  Preconditions:
+%  - Key must be nonvar. Uses standard order to prune, then confirms with (==) to preserve variable identity.
+%  Effects:
+%  - Binds Val only. Pairs is read-only. Fails if Key is absent.
 %  Notes:
-%    - Ids are opaque class identifiers (fresh logic variables). Do not unify or inspect them here.
-%    - Pairs must be a strictly ordered ordset.
+%  - Ids are opaque class identifiers (fresh logic variables); never unify or inspect them here.
+%  - Pairs must be a strictly ordered ordset (as produced by merge_nodes/2 or sort/2).
+%  Determinism: semidet; succeeds at most once.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -87,14 +90,14 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id; reuse an existing Id if the Key already exists.
-%  - Compound: Key = F(ChildIds) built left-to-right (congruence).
-%  - Atomic/var: Key = Term (variable identity preserved; no alpha/variant normalization).
-%  - Pure producer: no canonicalization/unification; duplicates may appear. Run merge_nodes/2 after any aliasing.
+%  Insert Term and return its class Id; reuse the existing Id if the Key already exists.
+%  - Compound: builds Key = F(ChildIds) left-to-right (congruence).
+%  - Atomic/var: Key = Term (preserves variable identity; no alpha/variant normalization).
+%  - Pure producer: does not canonicalize or unify; duplicates may appear (run merge_nodes/2 after aliasing).
 %  - DCG form threads nodes via difference lists; add/4 is the worker.
-%  Effects: allocate fresh Ids only; Keys are never unified here.
+%  Effects: allocates a fresh Id only when the Key is new; never unifies Keys here.
 %  Notes:
-%    - Id is a fresh logic variable (mutable class Id). Aliasing Ids may instantiate variables embedded in Keys; effects are logical and backtrackable.
+%    - Id is a fresh logic variable (mutable class Id). Later aliasing of Ids may instantiate variables embedded in Keys; effects are logical and backtrackable.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -107,10 +110,12 @@ add(Term, Id, In, Out) :-
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
 %  Ensure Key Node has a class Id; reuse if present, else insert Node-Id with a fresh Id.
-%  - In/Out are ordsets of Key-Id; equality prunes by order then confirms with (==) to preserve variable identity.
+%  - In/Out are ordsets of Key-Id; prune by standard order, then confirm with (==) to preserve variable identity.
 %  - No unification/canonicalization; run merge_nodes/2 after any Id aliasing.
-%  Effects: only allocates a fresh Id when Node is new.
-%  Notes: ord_add_element/3 assumes In is an ordset; callers must preserve this invariant.
+%  Effects: only allocates a fresh Id when Node is new; pure w.r.t. Keys.
+%  Notes:
+%    - ord_add_element/3 assumes In is an ordset; callers must preserve this invariant.
+%    - Ids are logic variables (mutable class identifiers); never compare by print-name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
