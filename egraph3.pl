@@ -155,11 +155,8 @@ merge_nodes(In, Out) :-
    ;  Sort = Out
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
-%  Map a group to Key-Rep and report whether any unification occurred.
-%  - Rep is the first Id; unify each tail Id with Rep; Changed=true iff the group has >1 Id.
-%  - Used by foldl/5 in merge_nodes/2 to map groups and OR-accumulate Changed.
-%  Notes:
-%  - Unifying Ids can instantiate variables inside Keys; later passes may expose duplicates.
+%  Map a group to Key-Rep and indicate whether any unification occurred.
+%  - Rep = first Id; unify each tail Id with Rep; Changed=true iff group has >1 Id.
 %  Determinism: det; logical effects (Id unification only).
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
