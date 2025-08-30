@@ -37,15 +37,16 @@ any resulting collisions.
 lookup/2 expects canonicalized input and non-canonical sets may fail spuriously.
 
 Known limitations.
-Keys are intentionally variable-identity sensitive so variant-equal Keys with
-distinct variables are different.
-assoc//2 contains a cut and fails when BC is absent from the Index while the
-intended behavior is to emit no output.
+Keys are variable-identity sensitive and variant-equal keys with distinct
+variables are different by design.
+assoc//2 contains a cut and fails when BC is absent from the Index, but the
+intended behavior is to emit no output (an empty list).
 
 Goal of extract.
-The goal of extract is to unify each class Id with a representative Key in order
-to obtain a concrete Prolog term per class and it is the last standard step of
-using an e-graph and should not be followed by rewriting or saturation.
+extract unifies each class Id with a representative Key to obtain one concrete
+Prolog term per class.
+It is the last standard step and should not be followed by rewriting or
+saturation.
 
 Predicate index (concise).
 lookup/2 finds the Id for a Key in a canonical ordset in O(N) time.
@@ -430,8 +431,11 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
 %  Commutativity of +/2: from (A+B)-AB emit B+A-BA and AB=BA.
 %  - Models equality without in-place rewrite; at most one commuted variant per match.
 %  Notes:
-%  - BA is fresh; equality is consumed by rebuild//1 (Id aliasing only).
-%  - Rules must not inspect or bind Ids; only emit nodes and (=)/2 between Ids.
+%  - BA is fresh and AB is the original Id.
+%  - The equality is consumed by rebuild//1 (Id aliasing only).
+%  - Emits exactly two outputs per match: the commuted node and one equality.
+%  - Rules must not inspect or bind Ids.
+%  - Rules may only emit nodes and (=)/2.
 comm((A+B)-AB, _Nodes) -->
    !,
    [B+A-BA, AB=BA].
@@ -440,7 +444,8 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - Limitation: if BC is absent from Index, a cut (!) causes this rule to fail instead of emitting no output ([]). Intended behavior is 'no output'.
+%  - Limitation: a cut (!) makes the rule fail when BC is absent from Index.
+%  - Intended behavior is to emit no output (an empty list).
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -513,8 +518,9 @@ constant_folding_a([], _, _, _) --> [].
 %  Notes:
 %  - number/1 guards ensured by constant_folding_a//4.
 %  - Supports mixed numeric types; result type follows is/2 semantics.
-%  - Pure producer; unification deferred to rebuild//1 (Ids only); must not
-%    inspect or bind Ids.
+%  - Emits exactly two outputs per numeric pair: VC-C and C=AB.
+%  - Pure producer; unification is deferred to rebuild//1 (Ids only).
+%  - Rules must not inspect or bind Ids.
 %  Determinism: nondet over numeric members of class(B); no side effects.
 %  The emitted VC-C is a new Key-Id pair; equality C=AB is consumed by
 %  rebuild//1.
@@ -599,9 +605,8 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  Portability: uses MaxSteps=inf for convenience.
-%  On systems where inf in arithmetic raises an error, use saturate//2 with a
-%  large integer bound.
+%  Portability: uses MaxSteps=inf as a sentinel and may not be portable.
+%  On systems where inf is not a number, prefer saturate//2 with a large bound.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -700,7 +705,7 @@ add_expr(N, Add) :-
 %! example2(+N, -Expr) is det.
 %  Build an addition chain and saturate with comm/assoc; prints counts to current output.
 %  Sanity-check size growth vs. the closed form.
-%  Note: if calling outside a DCG, use phrase/3 to run saturate//2.
+%  Note: on systems without saturate/3, call saturate/4 with an explicit bound.
 example2(N, Expr) :-
    add_expr(N, Expr),
    phrase(add(Expr, _), [], G),
