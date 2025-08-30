@@ -59,14 +59,14 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Lookup Id for Key in a canonical ordset of Key-Id pairs.
-%  - Pre: Pairs must be canonical (merge_nodes/2).
-%  - Method: prune by standard order; confirm with (==). Binds Id only; does not allocate or unify Keys.
+%  Find Id for Key in a canonical ordset of Key-Id.
+%  - Pre: Pairs canonical (merge_nodes/2).
+%  - Method: prune by standard order, confirm with (==). Binds Id only; never allocates or unifies Keys.
 %  - Det/Complexity: semidet; steadfast; O(N). No choicepoints on success.
 %  Notes:
-%  - On non-canonical input, behavior is undefined (may fail spuriously).
-%  - Ids are logic vars used as mutable class identifiers; compare by identity (==) only.
-%  - Keys preserve variable identity (constructed by add/4).
+%  - Non-canonical input may fail spuriously.
+%  - Ids are logic variables (mutable class ids); compare by identity (==), never by print‑name.
+%  - Keys preserve variable identity (built by add/4; no alpha‑renaming).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -124,7 +124,7 @@ add(Term, Id, In, Out) :-
 %  Det/Complexity: det; O(N). Quasi‑pure (may allocate one fresh Id).
 %  Notes:
 %  - Out remains canonical.
-%  - Compare Ids by identity (==) only.
+%  - Ids are logic variables (mutable class ids); compare by identity (==) only; never by print‑name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -383,33 +383,33 @@ saturate(Rules, N, In, Out) :-
    ).
 
 %! unif(+Eq) is semidet.
-%  True for Eq=(A=B) and performs that unification (side effect).
-%  Only called from rebuild//1 via exclude/3; never call from rules or user code.
-%  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
-%  - Only Id variables should appear here; Keys must not be unified.
+%  True for Eq=(A=B); performs that unification (side effect).
+%  Only used by rebuild//1 via exclude/3; never call from rules or user code.
+%  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id variables.
+%  - Only Id variables may appear; Keys must not.
 %  Determinism: semidet; intentionally impure (Id unification).
 %  Notes:
-%  - The only place outside merge_nodes/2 where Ids are explicitly unified on purpose.
-%  - Mutable Ids are logic variables (not predicate symbols); aliasing happens here or in merge_nodes/2 only.
+%  - The only explicit Id unification point outside merge_nodes/2.
+%  - Ids are logic variables (mutable unique identifiers), not predicate symbols.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract concrete Prolog terms: unify each class Id with one of its Keys (materialize representatives).
-%  Goal: last standard step of using an e-graph; do this only at the end to obtain concrete terms.
-%  Side effects: aliases Ids (by unification). Discard these bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
+%  Extract concrete Prolog terms by unifying each class Id with one of its Keys.
+%  Goal: extract a concrete Prolog term for each class; this is the last standard step of using an e‑graph.
+%  Side effects: aliases Ids via unification. Discard these bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
 %  Determinism: semidet.
-%  Note: Only Id variables unify here; Keys themselves are never unified against each other.
+%  Note: Only Id variables unify; Keys never unify with each other.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extraction (aliases Ids). Goal: extract concrete Prolog terms; last standard step.
+%  DCG wrapper for extraction (aliases Ids). Extracts concrete Prolog terms; final standard step.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  Implementation of extract//0: for each Id->[Keys], unify the Id with one Key (choose a concrete representative).
-%  Last standard step; it aliases Ids. Do not continue rewriting with these bindings.
+%  For each Id->[Keys], unify the Id with one Key (choose a concrete representative).
+%  Final step: this aliases Ids; do not continue rewriting with these bindings.
 %  Determinism: semidet. Fails only if a class has no Keys (should not happen after merge_nodes/2).
-%  Note: Only Id variables unify; Keys are never unified against each other.
+%  Note: Only Id variables unify; Keys never unify with each other.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -419,7 +419,7 @@ extract(Nodes, Nodes) :-
 %  Chooses concrete representatives (aliases Ids); core of extraction.
 %  With Groups from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
 %  Determinism: semidet; aliases Ids. Perform extraction only as the final step.
-%  Note: Uses member/2 to pick a Key; Keys do not unify with each other.
+%  Note: Uses member/2 to pick a Key; Keys never unify with each other.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
