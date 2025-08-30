@@ -210,9 +210,9 @@ constant_folding((A+B)-AB, Index) -->
 constant_folding(_, _) --> [].
 %! constant_folding_a(+ClassA, +B, -AB, +Index)// is nondet.
 %  Helper: pick numeric VA in class(A), then search class(B) for numeric VB.
-%  Staged search avoids building pairs eagerly.
-%  - Emits nodes/equalities only; unification happens in rebuild//1.
-%  Determinism: nondet over numeric members of class(A) and class(B); emits one pair per numeric combination.
+%  - Staged search avoids building pairs eagerly.
+%  - Emits nodes/equalities only; unification is deferred to rebuild//1.
+%  Determinism: nondet over numeric members of class(A) and class(B); one pair per numeric combination.
 constant_folding_a([VA | ANodes], B, AB, Index) -->
    (  {number(VA)}
    -> {rb_lookup(B, BNodes, Index)},
