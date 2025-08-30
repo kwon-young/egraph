@@ -59,13 +59,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Find Id for Key in a canonical ordset Key-Id.
+%  Find Id for Key in a canonical ordset of Key-Id pairs.
 %  - Pre: Pairs is canonical (after merge_nodes/2).
-%  - Algorithm: prune by standard order, confirm with (==); binds Id only; never constructs Keys.
-%  - Det/Big-O: semidet, steadfast; O(N); no choicepoints on success.
+%  - Algo: prune by standard order, confirm with (==); binds Id only; never constructs or binds Keys.
+%  - Det/Complexity: semidet, steadfast; O(N); no choicepoints on success.
 %  Notes:
 %  - Non-canonical input may fail spuriously.
-%  - Ids are fresh logic variables used as mutable class ids; compare by identity (==) only.
+%  - Ids are logic variables acting as mutable class IDs; compare by identity (==) only.
 %  - Keys preserve variable identity (no alpha/variant normalization).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -97,13 +97,13 @@ lookup(Item-V, [X1-V1]) :-
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
 %  Ensure a node for Term exists; return its class Id (fresh or reused).
-%  - Compound: Key=F(ChildIds) built left-to-right (stable congruence).
-%  - Atom/var:  Key=Term (variable identity is part of the Key).
-%  - Emits Key-Id only; no Id aliasing (dedup later via merge_nodes/2).
-%  Pre: In is an ordset (preferably canonical).
+%  - Compound: Key = F(ChildIds) built left-to-right (stable congruence).
+%  - Atom/var:  Key = Term (variable identity is part of the Key).
+%  - Emits Key-Id only; never aliases Ids (dedup via merge_nodes/2).
+%  Pre: In is an ordset (canonical preferred).
 %  Det/Complexity: det; steadfast. Build O(|Term|); insert O(N) via ord_add_element/3.
 %  Notes:
-%  - Allocates at most one fresh Id (logic var) if absent.
+%  - Allocates at most one fresh Id (logic variable) if absent.
 %  - DCG form is a pure producer (no Id aliasing).
 add(Term, Id, In, Out) :-
    (  compound(Term)
@@ -117,13 +117,13 @@ add(Term, Id, In, Out) :-
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
 %  Insert Node-Id into canonical ordset In if absent; Out is canonical.
-%  - If present: reuse Id, Out=In; else: insert with a fresh Id var.
-%  - Uses standard order and (==) on Keys; no re-sorting needed here.
+%  - If present: reuse Id, Out=In; else: insert with a fresh Id variable.
+%  - Uses standard order and (==) on Keys; no re-sorting needed.
 %  - Never unifies Ids; ord_add_element/3 enforces set semantics.
 %  Pre: In canonical.
 %  Det/Complexity: det; O(N). Quasi-pure (may allocate one fresh Id).
 %  Notes:
-%  - Ids are logic variables (mutable class ids); compare by identity (==), never by name.
+%  - Ids are logic variables (mutable class IDs); compare by identity (==), never by name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -134,12 +134,12 @@ add_node(Node, Id, In, Out) :-
 
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
-%  Alias classes by unifying IdA with IdB, then merge_nodes/2 to re-canonicalize.
-%  - Only Id vars unify; Keys never do. Variables inside Keys may instantiate; the next merge collapses collisions.
+%  Alias classes by unifying IdA with IdB; then merge_nodes/2 to re-canonicalize.
+%  - Only Id variables unify; Keys never do. Unifying Ids can instantiate variables inside Keys; the next merge collapses collisions.
 %  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Ids; backtrackable.
 %  Det/Effects: det; effect is Id aliasing only (backtrackable).
 %  Notes:
-%  - Ids are fresh logic variables acting as mutable unique ids; compare by identity (==), never by name.
+%  - Ids are logic variables acting as mutable unique IDs; compare by identity (==), never by name.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -148,13 +148,13 @@ union(A, B, In, Out) :-
 %  DCG wrapper for merge_nodes/2; emits nothing. Pure producer.
 %  Note: On SWI-Prolog, DCG expansion calls merge_nodes/2 directly.
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize Nodes to at most one Key-Id per Key; repeat until no merges.
+%  Canonicalize Nodes to at most one Key-Id per Key; repeat while any group merges.
 %  - Steps: sort -> group -> unify all Ids in each group with the first (representative).
-%  - Only Id vars unify; Keys never do. Aliasing may instantiate variables inside Keys; a subsequent pass collapses collisions.
+%  - Only Id variables unify; Keys never do. Aliasing may instantiate variables inside Keys; the next pass collapses collisions.
 %  Complexity: O(N log N) per pass; repeats while merges occur.
 %  Notes:
 %  - Out canonical (sorted; one Key-Id per Key).
-%  - Terminates: each merge strictly decreases the number of distinct Id vars.
+%  - Terminates: each merge strictly decreases the number of distinct Id variables.
 %  - Representative Id is the first after sorting; do not rely on it across backtracking.
 %  - Rebuild any Id→[Keys] index after this (Ids are the map keys).
 merge_nodes(In, Out) :-
@@ -166,7 +166,7 @@ merge_nodes(In, Out) :-
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
 %  For Key-[H|T], unify all Ids in T with H; Changed=true iff T \= [].
-%  - Only Id vars unify; Keys unchanged. Representative Id is H.
+%  - Only Id variables unify; Keys unchanged. Representative Id is H.
 %  Complexity: O(|T|). det.
 %  Notes:
 %  - Id unification may instantiate variables inside Keys (collapsed next pass).
@@ -300,7 +300,7 @@ rule(Index, Node, Rule) -->
 %  Build rbtree Index mapping Id -> [Keys] from canonical Nodes.
 %  - Pre: Nodes canonical (merge_nodes/2).
 %  - Rebuild after any Id aliasing (Ids are the map keys).
-%  - Ids are logic vars (mutable class ids); keyed by variable identity (==), not by name/print-name.
+%  - Ids are logic variables (mutable class IDs); keyed by variable identity (==), not by name/print-name.
 %  Complexity/Determinism: O(N log N); det; pure; steadfast.
 %  Impl: transpose_pairs/2 flips Key-Id to Id-Key; Keys are stored as-is (no unification).
 %  Notes:
@@ -338,7 +338,7 @@ push_back(L), L --> [].
 %  Det: det. Equalities must be between Ids (A and B are Id vars).
 %  Notes:
 %  - Rebuild any Id->[Keys] index after this (Ids are the map keys).
-%  - Keys must never appear on the left/right of (=)/2 here.
+%  - Keys must never appear on the left/right of (=)/2.
 %  - DCG call to merge_nodes//0 expands to merge_nodes/2.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
@@ -348,23 +348,23 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  - Portability: calls saturate//2 with MaxSteps=inf (an atom). On SWI‑Prolog this raises a type error in N>0; use saturate//2 with a large finite integer instead.
+%  - Portability: some systems cannot compare atoms with integers; prefer saturate//2 with a large finite integer there.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run up to MaxSteps iterations; stop early when length stabilizes (after rebuild/merge).
-%  - MaxSteps: integer >= 0. Some systems do not support comparing atoms (e.g., inf) with integers; prefer a large integer on those (e.g., SWI‑Prolog).
+%  - MaxSteps: integer >= 0 (or a large finite integer on systems without atom/integer comparison).
 %  - Alias-only steps are ignored (no new Key-Id pairs).
 %  Det: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Driver. Each iteration: make_index/2, match/4, rebuild//1 (aliases Ids), merge_nodes/2.
 %  - Only rebuild//1 and merge_nodes/2 unify Ids.
-%  - Ids are logic variables (class ids); rebuild Index after aliasing; never compare by name.
-%  - MaxSteps: integer >= 0 (use a large integer if inf is unsupported).
+%  - Ids are logic variables (class IDs); rebuild Index after aliasing; never compare by name.
+%  - MaxSteps: integer >= 0 (use a large integer if 'inf' is unsupported).
 %  Det: det. Notes:
 %  - Progress is measured by list length after merge; alias-only steps are ignored.
 %  - Worklist is the current canonical Nodes.
-%  - N is compared arithmetically (N > 0); non-numeric MaxSteps (e.g., the atom inf) will error on SWI‑Prolog; supply a large integer there.
+%  - N is compared arithmetically (N > 0); non-numeric MaxSteps (e.g., the atom 'inf') will error on some systems; supply a large integer there.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -385,24 +385,24 @@ saturate(Rules, N, In, Out) :-
 
 %! unif(+Eq) is semidet.
 %  Recognize Eq=(A=B) and perform A=B (Id aliasing). Only called by rebuild//1; never call from rules or user code.
-%  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id vars; effect is backtrackable.
-%  - Only class Id vars may appear on either side; Keys must not.
+%  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id variables; effect is backtrackable.
+%  - Only class Id variables may appear on either side; Keys must not.
 %  Det: semidet; intentionally impure. Note: this is the only explicit Id unification outside merge_nodes/2.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
 %  Materialize exactly one concrete Prolog term per equivalence class by unifying each class Id with one of its Keys (a representative).
-%  This is the last standard step of using an e‑graph; call only after you are done adding/saturating.
+%  Goal: extract a concrete Prolog term per class; this is the last standard step of using an e‑graph.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, inspect Nodes directly.
 %  Det: semidet; fails only if some class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are fresh logic variables used as mutable class identifiers; compare by identity (==), never by name/print-name.
+%  - Ids are logic variables used as mutable class identifiers; compare by identity (==), never by name/print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
 %  DCG wrapper for extract/1; aliases Ids to materialize exactly one concrete term per class.
-%  This is the last standard step of using an e‑graph; stop rewriting/saturation after this.
+%  Last standard step of using an e‑graph; stop rewriting/saturation after this.
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
