@@ -1099,3 +1099,106 @@ test(sub_canonical_inputs_ok, true(R == [a-X, b-Y])) :-
     ord_subtract(S2, T1, R).
 
 :- end_tests(ordsets_ord_subtract).
+
+
+% lookup (even more edge cases on list sizes/positions)
+:- begin_tests(lookup_even_more).
+
+% Finds the Id in a 2-element canonical list when the key is the second element
+test(found_two_elems_second, true(V == Y)) :-
+    X = _, Y = _,
+    egraph:lookup(b-V, [a-X, b-Y]).
+
+% Finds the Id in a 4-element canonical list when the key is the second (exercises X2 branch)
+test(found_four_elems_second, true(V == Y)) :-
+    W = _, X = _, Y = _, Z = _,
+    egraph:lookup(b-V, [a-W, b-X, c-Y, d-Z]).
+
+% Finds the Id in a 4-element canonical list when the key is the third (exercises X3 branch)
+test(found_four_elems_third, true(V == Y)) :-
+    W = _, X = _, Y = _, Z = _,
+    egraph:lookup(c-V, [a-W, b-X, c-Y, d-Z]).
+
+:- end_tests(lookup_even_more).
+
+
+% merge_nodes/2 (more)
+:- begin_tests(merge_nodes_2_more).
+
+% Three duplicate keys are deduplicated and all Ids are aliased to the head
+test(triple_dedup_alias_all, true((Out == [x-A], A==B, A==C))) :-
+    A = _, B = _, C = _,
+    egraph:merge_nodes([x-A, x-B, x-C], Out).
+
+:- end_tests(merge_nodes_2_more).
+
+
+% reduce//2 (even more)
+:- begin_tests(reduce_even_more).
+
+% Emits at most one equality even if class(B) contains multiple zeros (once/1 guard)
+test(once_emits_one_equality, true(length(Out, 1))) :-
+    A = _, B = _,
+    ord_list_to_rbtree([B-[0, 0, 1]], Index),
+    phrase(egraph:reduce((A+B)-_, Index), Out).
+
+:- end_tests(reduce_even_more).
+
+
+% extract_node/1 (more)
+:- begin_tests(extract_node_more).
+
+% Backtracks over representative choices in the first group: yields two solutions {x,y}
+test(backtracks_two_choices, true(Sorted == [x,y])) :-
+    findall(AV,
+            ( A = _, B = _,
+              egraph:extract_node([A-[x,y], B-[z]]),
+              AV = A
+            ),
+            As),
+    sort(As, Sorted).
+
+:- end_tests(extract_node_more).
+
+
+% ordsets: ord_subtract/3 (more with variables and pairs)
+:- begin_tests(ordsets_ord_subtract_more).
+
+% Variables aliased before subtraction: subtracting [Z] removes [X] when X==Z
+test(var_aliasing_removes, true(R == [Y])) :-
+    X = _, Y = _, Z = _,
+    X = Z,
+    ord_subtract([X, Y], [Z], R).
+
+% Order preserved after removing a middle variable from a 3-variable ordset
+test(var_remove_middle_preserves_order, true(R == [X, Z])) :-
+    X = _, Y = _, Z = _,
+    % Build canonical [X,Y,Z] using ordsets to respect standard order
+    ord_add_element([], X, S1),
+    ord_add_element(S1, Y, S2),
+    ord_add_element(S2, Z, S),
+    ord_subtract(S, [Y], R).
+
+% Compound with same variable identity: f(X) is removed by f(X)
+test(compound_same_var_removed, true(R == [g(X)])) :-
+    X = _,
+    ord_subtract([f(X), g(X)], [f(X)], R).
+
+% Compound with variant-equal but non-identical variable: f(X) is NOT removed by f(Y)
+test(compound_variant_var_not_removed, true(R == [f(X), g(X)])) :-
+    X = _, Y = _, X \== Y,
+    ord_subtract([f(X), g(X)], [f(Y)], R).
+
+% Node-Id pair with aliased Id variables: removing [a-Z] after X=Z removes [a-X]
+test(pair_id_vars_aliased_removed, true(R == [b-Y])) :-
+    X = _, Y = _, Z = _,
+    X = Z,
+    ord_subtract([a-X, b-Y], [a-Z], R).
+
+% Node-Id pair with variant-equal but non-identical variable in the Key is not removed
+test(pair_variant_key_var_not_removed, true(R == [f(X)-Id])) :-
+    X = _, Y = _, Id = _,
+    X \== Y,
+    ord_subtract([f(X)-Id], [f(Y)-Id], R).
+
+:- end_tests(ordsets_ord_subtract_more).
