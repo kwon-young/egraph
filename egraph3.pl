@@ -277,7 +277,7 @@ constant_folding_b([VB | BNodes], VA, AB, Index) -->
 constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
-%  Apply each Rule(Node,Index)// in Rules (list of DCG nonterminals) to Node using Index; append outputs in rule order.
+%  Apply Rules to Node using Index; append outputs in rule order. Each Rule is a DCG nonterminal Rule(Node,Index)//.
 %  - Node is Key-Id; rules may emit only Key-Id items and (=)/2 between Ids.
 %  - Uses sequence//2 from library(dcg/high_order). Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
@@ -287,7 +287,7 @@ constant_folding_b([], _, _, _) --> [].
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
-%  Call a single DCG rule Rule(Node,Index)// on Node.
+%  Invoke Rule(Node,Index)// on Node.
 %  Notes:
 %  - Pure producer; steadfast; Ids are opaque (do not inspect/bind).
 %  - Determinism follows Rule//2. Kept separate for clarity with sequence//2.
@@ -315,7 +315,7 @@ make_index(In, Index) :-
 %  - Output order: worklist, then per-node rule order.
 %  Impl: foldl/4 with rules//3.
 %  Complexity: O(|Worklist|*|Rules| + |Matches|) plus per-Rule Index work.
-%  Determinism: det; pure (no Id unification here).
+%  Determinism: det; pure; steadfast (no Id unification here).
 %  Notes:
 %  - Rebuild Index after rebuild//1 (Ids may alias).
 %  - Worklist is typically the current canonical Nodes.
@@ -383,32 +383,31 @@ saturate(Rules, N, In, Out) :-
    ).
 
 %! unif(+Eq) is semidet.
-%  True for Eq=(A=B); performs that unification as a side effect.
-%  Only called from rebuild//1 via exclude/3; do not call from rules or user code.
+%  Succeeds for Eq=(A=B) and performs that unification (side effect).
+%  Only called from rebuild//1 via exclude/3; never call from rules or user code.
 %  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
 %  - Only Id variables should appear here; Keys must not be unified.
 %  Determinism: semidet; intentionally impure (Id unification).
 %  Notes:
 %  - The only place outside merge_nodes/2 where Ids are explicitly unified on purpose.
-%  - Mutable Ids: aliasing happens here or in merge_nodes/2 only. Keep Keys as pure data.
+%  - Mutable Ids are logic variables (not predicate symbols); aliasing happens here or in merge_nodes/2 only.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
 %  Extract one concrete Prolog representative per class by unifying each class Id with one of its Keys.
-%  This is the last standard step of using an e-graph to obtain concrete terms.
-%  Side effects: aliases Ids; discard these bindings if you need to continue rewriting.
+%  Final standard step to obtain concrete terms from an e-graph.
+%  Side effects: aliases Ids; discard these bindings to continue analysis/rewrite.
 %  To inspect without aliasing, examine Nodes directly.
 %  Determinism: semidet. Ids are logic variables; aliasing here is intentional.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extraction (aliases Ids). Last standard e-graph step.
+%  DCG wrapper for extraction (aliases Ids). Final standard step to obtain concrete terms.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  DCG implementation of extract//0: for each Id->[Keys] group, unify Id with one Key.
-%  Purpose: obtain concrete Prolog terms; use only as the final step after saturation/merges.
-%  Side effects: aliases Ids; do not continue rewriting with these bindings.
+%  Implementation of extract//0: for each Id->[Keys], unify Id with one Key.
+%  Final step; aliases Ids. Do not continue rewriting with these bindings.
 %  Determinism: semidet. Fails only if a class has no Keys (should not happen after merge_nodes/2).
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
