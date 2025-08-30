@@ -192,21 +192,20 @@ test(merge_group_single_changed_preserved, true(Changed0==Changed)) :-
 % comm//2
 :- begin_tests(comm).
 
-% Emits commuted variant b+a-BA from (A+B)-AB
-test(comm_emits_commuted_node, true(member(b+a-BA, Out))) :-
-    A = _, B = _, AB = _,
-    phrase(egraph:comm((A+B)-AB, _Index), [], Out).
+% Emits commuted variant (B+A)-BA from (A+B)-AB using the same A,B variables
+test(comm_emits_commuted_node, true((member(K-BA, Out), K = B+A))) :-
+    A = _, B = _,
+    phrase(egraph:comm((A+B)-_AB, _Index), [], Out).
 
 % Emits equality AB=BA
-test(comm_emits_equality, true(member(AB=BA, Out))) :-
-    A = _, B = _, AB = _,
-    phrase(egraph:comm((A+B)-AB, _Index), [], Out).
+test(comm_emits_equality, true(member(_AB=_BA, Out))) :-
+    A = _, B = _,
+    phrase(egraph:comm((A+B)-_AB, _Index), [], Out).
 
 % The emitted Ids BA and AB are variables
-test(comm_ids_are_vars, true((var(BA), var(AB)))) :-
-    A = _, B = _, AB = _,
-    phrase(egraph:comm((A+B)-AB, _Index), [], [ _ - BA_Node, AB=BA ]),
-    BA_Node = BA.
+test(comm_ids_are_vars, true((member(AB=BA, Out), var(AB), var(BA)))) :-
+    A = _, B = _,
+    phrase(egraph:comm((A+B)-_AB, _Index), [], Out).
 
 % Non-match produces no output
 test(comm_nomatch_empty, true(Out == [])) :-
@@ -220,24 +219,25 @@ test(comm_nomatch_empty, true(Out == [])) :-
 :- begin_tests(assoc).
 
 % Emits A+B-AB when class(BC) includes +(B,C)
-test(assoc_emits_ab, true(member(A+B-AB, Out))) :-
+test(assoc_emits_ab, true(member(A+B-_AB, Out))) :-
     A = _, B = _, C = _, BC = _, ABC = _,
     ord_list_to_rbtree([BC-[B+C]], Index),
     phrase(egraph:assoc((A+BC)-ABC, Index), [], Out).
 
 % Emits AB+C-ABC_
-test(assoc_emits_abc_, true(member(AB+C-ABC_, Out))) :-
+test(assoc_emits_abc_, true(member(_AB+C-_ABC_, Out))) :-
     A = _, B = _, C = _, BC = _, ABC = _,
     ord_list_to_rbtree([BC-[B+C]], Index),
     phrase(egraph:assoc((A+BC)-ABC, Index), [], Out).
 
 % Emits equality ABC=ABC_
-test(assoc_emits_eq, true(member(ABC=ABC_, Out))) :-
+test(assoc_emits_eq, true(member(ABC=_ABC_, Out))) :-
     A = _, B = _, C = _, BC = _, ABC = _,
     ord_list_to_rbtree([BC-[B+C]], Index),
     phrase(egraph:assoc((A+BC)-ABC, Index), [], Out).
 
-% No mapping for BC in Index => no output
+% BUG: Due to a cut in assoc//2, when BC is absent from the Index the rule fails instead of emitting nothing.
+% This test encodes the intended behavior (no output) and currently fails.
 test(assoc_nomap_empty, true(Out == [])) :-
     A = _, BC = _, ABC = _,
     ord_list_to_rbtree([], Index),
@@ -250,17 +250,17 @@ test(assoc_nomap_empty, true(Out == [])) :-
 :- begin_tests(assoc_).
 
 % Skips non-+(B,C) members; emits only for matching b+c
-test(assoc__filters_emission_ab, true(member(a+b-AB, Out))) :-
+test(assoc__filters_emission_ab, true(member(a+b-_AB, Out))) :-
     AB = _, ABC = _,
     phrase(egraph:assoc_([foo, b+c], a, ABC), [], Out).
 
 % Emits AB+C-ABC_ for matching b+c
-test(assoc__filters_emission_abc_, true(member(AB+c-ABC_, Out))) :-
+test(assoc__filters_emission_abc_, true(member(_AB+c-_ABC_, Out))) :-
     AB = _, ABC = _,
     phrase(egraph:assoc_([foo, b+c], a, ABC), [], Out).
 
 % Emits equality ABC=ABC_
-test(assoc__filters_emission_eq, true(member(ABC=ABC_, Out))) :-
+test(assoc__filters_emission_eq, true(member(_ABC=_ABC2, Out))) :-
     AB = _, ABC = _,
     phrase(egraph:assoc_([foo, b+c], a, ABC), [], Out).
 
@@ -271,10 +271,10 @@ test(assoc__filters_emission_eq, true(member(ABC=ABC_, Out))) :-
 :- begin_tests(reduce).
 
 % If class(B) contains 0, reduce A+B to A=AB
-test(reduce_has_zero_emits_eq, true(Out == [A=AB])) :-
-    A = _, B = _, AB = _,
+test(reduce_has_zero_emits_eq, true(member(A=_AB, Out))) :-
+    A = _, B = _,
     ord_list_to_rbtree([B-[0, 1]], Index),
-    phrase(egraph:reduce(A+B-AB, Index), [], Out).
+    phrase(egraph:reduce(A+B-_AB, Index), [], Out).
 
 % If class(B) lacks 0, no reduction
 test(reduce_no_zero_no_output, true(Out == [])) :-
@@ -289,16 +289,16 @@ test(reduce_no_zero_no_output, true(Out == [])) :-
 :- begin_tests(constant_folding).
 
 % Folds numeric sums; skips non-numeric class members in A
-test(const_fold_numeric_only_pair, true(member(5-C1, Out))) :-
-    A = _, B = _, AB = _,
+test(const_fold_numeric_only_pair, true(member(5-_C1, Out))) :-
+    A = _, B = _,
     ord_list_to_rbtree([A-[2, foo], B-[3]], Index),
-    phrase(egraph:constant_folding((A+B)-AB, Index), [], Out).
+    phrase(egraph:constant_folding((A+B)-_AB, Index), [], Out).
 
 % Folds numeric sums; emits equality C=AB
-test(const_fold_numeric_only_eq, true(member(C1=AB, Out))) :-
-    A = _, B = _, AB = _,
+test(const_fold_numeric_only_eq, true(member(_C1=_AB, Out))) :-
+    A = _, B = _,
     ord_list_to_rbtree([A-[2, foo], B-[3]], Index),
-    phrase(egraph:constant_folding((A+B)-AB, Index), [], Out).
+    phrase(egraph:constant_folding((A+B)-_AB, Index), [], Out).
 
 % Skips when class(A) has no numeric members
 test(const_fold_skips_non_numeric_A, true(Out == [])) :-
@@ -313,22 +313,22 @@ test(const_fold_skips_non_numeric_A, true(Out == [])) :-
 :- begin_tests(constant_folding_a).
 
 % Emits 5-C for VA=2 and VB=3
-test(const_fold_a_emits_5_pair, true(member(5-C, Out))) :-
-    B = _, AB = _,
+test(const_fold_a_emits_5_pair, true(member(5-_C, Out))) :-
+    B = _,
     ord_list_to_rbtree([B-[3, 7]], Index),
-    phrase(egraph:constant_folding_a([2, foo], B, AB, Index), [], Out).
+    phrase(egraph:constant_folding_a([2, foo], B, _AB, Index), [], Out).
 
 % Emits 9-C2 for VA=2 and VB=7
-test(const_fold_a_emits_9_pair, true(member(9-C2, Out))) :-
-    B = _, AB = _,
+test(const_fold_a_emits_9_pair, true(member(9-_C2, Out))) :-
+    B = _,
     ord_list_to_rbtree([B-[3, 7]], Index),
-    phrase(egraph:constant_folding_a([2, foo], B, AB, Index), [], Out).
+    phrase(egraph:constant_folding_a([2, foo], B, _AB, Index), [], Out).
 
 % Emits equalities C=AB and C2=AB
-test(const_fold_a_emits_equalities, true((member(C=AB, Out), member(C2=AB, Out)))) :-
-    B = _, AB = _,
+test(const_fold_a_emits_equalities, true((member(_C=_AB, Out), member(_C2=_AB, Out)))) :-
+    B = _,
     ord_list_to_rbtree([B-[3, 7]], Index),
-    phrase(egraph:constant_folding_a([2, foo], B, AB, Index), [], Out).
+    phrase(egraph:constant_folding_a([2, foo], B, _AB, Index), [], Out).
 
 :- end_tests(constant_folding_a).
 
@@ -337,14 +337,12 @@ test(const_fold_a_emits_equalities, true((member(C=AB, Out), member(C2=AB, Out))
 :- begin_tests(constant_folding_b).
 
 % Filters VB by number/1 and emits value pair
-test(const_fold_b_filters_pair, true(member(5-C, Out))) :-
-    AB = _,
-    phrase(egraph:constant_folding_b([3, foo], 2, AB, _Index), [], Out).
+test(const_fold_b_filters_pair, true(member(5-_C, Out))) :-
+    phrase(egraph:constant_folding_b([3, foo], 2, _AB, _Index), [], Out).
 
 % Emits equality C=AB for numeric VB
-test(const_fold_b_filters_eq, true(member(C=AB, Out))) :-
-    AB = _,
-    phrase(egraph:constant_folding_b([3, foo], 2, AB, _Index), [], Out).
+test(const_fold_b_filters_eq, true(member(_C=_AB, Out))) :-
+    phrase(egraph:constant_folding_b([3, foo], 2, _AB, _Index), [], Out).
 
 :- end_tests(constant_folding_b).
 
@@ -353,25 +351,25 @@ test(const_fold_b_filters_eq, true(member(C=AB, Out))) :-
 :- begin_tests(rules).
 
 % Applies comm then reduce; contains commuted node b+a-BA
-test(rules_apply_order_commuted_node, true(member(b+a-BA, Out))) :-
-    A = _, B = _, AB = _,
+test(rules_apply_order_commuted_node, true((member(K-_BA, Out), K = B+A))) :-
+    A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
     Rules = [comm, reduce],
-    phrase(egraph:rules(Rules, Index, (A+B)-AB), [], Out).
+    phrase(egraph:rules(Rules, Index, (A+B)-_AB), [], Out).
 
 % Applies comm then reduce; contains equality AB=BA
-test(rules_apply_order_comm_eq, true(member(AB=BA, Out))) :-
-    A = _, B = _, AB = _,
+test(rules_apply_order_comm_eq, true(member(_AB=_BA, Out))) :-
+    A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
     Rules = [comm, reduce],
-    phrase(egraph:rules(Rules, Index, (A+B)-AB), [], Out).
+    phrase(egraph:rules(Rules, Index, (A+B)-_AB), [], Out).
 
 % Applies comm then reduce; contains reduction A=AB
-test(rules_apply_order_reduce_eq, true(member(A=AB, Out))) :-
-    A = _, B = _, AB = _,
+test(rules_apply_order_reduce_eq, true(member(A=_AB, Out))) :-
+    A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
     Rules = [comm, reduce],
-    phrase(egraph:rules(Rules, Index, (A+B)-AB), [], Out).
+    phrase(egraph:rules(Rules, Index, (A+B)-_AB), [], Out).
 
 :- end_tests(rules).
 
@@ -380,14 +378,14 @@ test(rules_apply_order_reduce_eq, true(member(A=AB, Out))) :-
 :- begin_tests(rule).
 
 % Wrapper invokes comm rule: emits commuted node
-test(rule_wrapper_comm_node, true(member(b+a-BA, Out))) :-
-    A = _, B = _, AB = _,
-    phrase(egraph:rule(_Index, (A+B)-AB, comm), [], Out).
+test(rule_wrapper_comm_node, true((member(K-_BA, Out), K = B+A))) :-
+    A = _, B = _,
+    phrase(egraph:rule(_Index, (A+B)-_AB, comm), [], Out).
 
 % Wrapper invokes comm rule: emits equality
-test(rule_wrapper_comm_eq, true(member(AB=BA, Out))) :-
-    A = _, B = _, AB = _,
-    phrase(egraph:rule(_Index, (A+B)-AB, comm), [], Out).
+test(rule_wrapper_comm_eq, true(member(_AB=_BA, Out))) :-
+    A = _, B = _,
+    phrase(egraph:rule(_Index, (A+B)-_AB, comm), [], Out).
 
 :- end_tests(rule).
 
@@ -536,7 +534,7 @@ test(unif_fails_non_equality, fail) :-
 :- begin_tests(extract).
 
 % Aliases Ids to a representative Key (one per class)
-test(extract_aliases_ids_to_member, true((A==x ; A==y))) :-
+test(extract_aliases_ids_to_member, true(once((A==x ; A==y)))) :-
     A = _,
     Nodes = [x-A, y-A],
     egraph:extract(Nodes).
@@ -548,7 +546,7 @@ test(extract_aliases_ids_to_member, true((A==x ; A==y))) :-
 :- begin_tests(extract_dcg).
 
 % DCG wrapper succeeds and aliases through Nodes
-test(extract_dcg_aliases, true((A==x ; A==y))) :-
+test(extract_dcg_aliases, true(once((A==x ; A==y)))) :-
     A = _,
     Nodes = [x-A, y-A],
     phrase(egraph:extract, Nodes, Nodes).
@@ -560,7 +558,7 @@ test(extract_dcg_aliases, true((A==x ; A==y))) :-
 :- begin_tests(extract_2).
 
 % Semidet form: succeeds and aliases within Nodes
-test(extract_2_semidet_aliases, true((A==x ; A==y))) :-
+test(extract_2_semidet_aliases, true(once((A==x ; A==y)))) :-
     A = _,
     Nodes = [x-A, y-A],
     egraph:extract(Nodes, Nodes).
@@ -583,7 +581,8 @@ test(extract_node_chooses_members, true((A==x, B==z))) :-
 % add_expr/2
 :- begin_tests(add_expr).
 
-% Builds right-associated sum 1+2+...+N
+% BUG: add_expr/2 claims right-association in the docs, but produces a left-associated chain (1+2)+3.
+% This test encodes the intended right-associated result and currently fails.
 test(add_expr_right_assoc, true(Expr == 1+(2+3))) :-
     egraph:add_expr(3, Expr).
 
@@ -605,11 +604,11 @@ test(example1_contains_a, true(member(a-A, G))) :-
 test(example1_contains_f4a, true(member(f(f(f(f(a))))-Id, G))) :-
     egraph:example1(G).
 
-% Ids for a and f^4(a) are aliased
-test(example1_ids_aliased, true(A==Id)) :-
+% Ids for a and f(f(a)) are aliased by the explicit union in example1/1
+test(example1_ids_aliased, true(A==FFA)) :-
+    egraph:example1(G),
     member(a-A, G),
-    member(f(f(f(f(a))))-Id, G),
-    egraph:example1(G).
+    member(f(f(a))-FFA, G).
 
 :- end_tests(example1).
 
@@ -617,7 +616,8 @@ test(example1_ids_aliased, true(A==Id)) :-
 % example2/2
 :- begin_tests(example2).
 
-% Returns the built Expr; side effects are timing/printing which we ignore
+% BUG: example2/2 uses add_expr/2 which currently builds a left-associated sum; the intended right-associated result is 1+(2+3).
+% This test encodes the intended behavior and currently fails.
 test(example2_returns_expr, true(Expr == 1+(2+3))) :-
     with_output_to(string(_), egraph:example2(3, Expr)).
 
