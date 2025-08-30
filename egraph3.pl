@@ -233,36 +233,44 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 :- use_module(library(ordsets)).
 :- use_module(library(rbtrees)).
 
-%% Predicate reference (concise; implementation)
-%% Ids are logic variables acting as mutable unique identifiers; only (=)/2 aliases them. Keys preserve variable identity (use (==)).
-%% - lookup/2                 Find Id by Key in canonical ordset; prune by order, confirm with (==); semidet, O(N).
-%% - add//2, add/4            Ensure node for Term; for compounds build F(ChildIds); emit Key-Id only (no aliasing).
-%% - add_node/3,/4            Insert Node-Id if absent; reuse Id if present; Out remains canonical; no Id unification.
-%% - union//2, union/4        Alias two Ids via (=)/2, then merge_nodes/2 to re-canonicalize.
-%% - merge_nodes//0, /2       Dedupe to one Key-Id per Key; unify duplicate Ids; repeat until stable.
-%% - merge_group/4            Helper: unify all tail Ids with head; report if any merge occurred.
-%% - comm//2                  From (A+B)-AB emit B+A-BA and AB=BA.
-%% - assoc//2, assoc_//3      From (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_; restricted by class(BC) from Index.
-%%                            NOTE: if BC absent, a cut currently makes the rule fail instead of emitting nothing.
-%% - reduce//2                If class(B) contains integer 0, emit A=AB.
-%% - constant_folding//2      For numeric VA in class(A), VB in class(B): emit
-%%                            VC-C and C=AB where VC is VA+VB.
-%%   constant_folding_a//4,
-%%   constant_folding_b//4    Staged numeric search used by constant_folding//2.
-%% - rules//3, rule//3        Apply rules to a node in given order; pure producers.
-%% - make_index/2             Build rbtree Id -> [Keys]; rebuild after any Id aliasing.
-%% - match/4                  Run rules over a worklist; outputs ordered by worklist then per-rule.
-%% - push_back//1             Append list to DCG output (scheduling helper).
-%% - rebuild//1               Consume (=)/2 (alias Ids), enqueue Key-Id, then merge_nodes//0.
-%% - saturate//1,//2,/4       Iterate make_index -> match -> rebuild -> merge to a
-%%                            length fixpoint; alias-only steps don't count as
-%%                            progress.
-%% - unif/1                   Perform A=B aliasing; only Id variables should appear.
-%% - extract/1,//0,/2         Alias each class Id with a representative Key to obtain concrete Prolog terms.
-%%   extract_node/1           Choose a representative per class; backtracks; fails on empty groups.
-%% Notes:
-%% - The goal of extract is to obtain a concrete Prolog term per class.
-%%   It is the last standard step and you should not rewrite after extraction.
+%% Implementation reference (concise; one sentence per line).
+%% Ids are logic variables used as mutable class identifiers and only (=)/2 may alias them.
+%% Keys preserve variable identity and must be compared with (==).
+%% lookup/2 finds the Id for a Key in a canonical ordset in O(N) time.
+%% add//2 and add/4 insert a term as nodes and emit Key-Id without aliasing.
+%% add_node/3 and add_node/4 insert or reuse a Node-Id and keep the set canonical.
+%% union//2 and union/4 alias two Ids and then re-canonicalize with merge_nodes/2.
+%% merge_nodes//0 and merge_nodes/2 deduplicate by Key and unify duplicate Ids.
+%% merge_group/4 unifies the tail Ids with the head and reports if changes occurred.
+%% comm//2 emits the commuted +(B,A) and AB=BA for +(A,B).
+%% assoc//2 emits AB, AB+C, and ABC=ABC_ for A+(B+C) filtered by class(BC).
+%% NOTE: assoc//2 currently fails when BC is absent due to a cut and should emit no output.
+%% assoc_//3 iterates class(BC) members and emits at most one triple per +(B,C).
+%% reduce//2 emits A=AB when class(B) contains the integer 0 and otherwise emits nothing.
+%% constant_folding//2 emits VC-C and C=AB for numeric VA in class(A) and VB in class(B).
+%% constant_folding_a//4 picks numeric VA from class(A) and delegates to constant_folding_b//4.
+%% constant_folding_b//4 pairs numeric VB in class(B) with VA and emits folds.
+%% rules//3 applies a list of rules to a node in order using an index.
+%% rule//3 invokes one rule for a node and index and forwards its output unchanged.
+%% make_index/2 builds an rbtree mapping Id to the Keys in its class.
+%% match/4 runs rules over a worklist and produces scheduled matches.
+%% push_back//1 appends a list to DCG output as a scheduling helper.
+%% rebuild//1 consumes equalities by aliasing Ids, enqueues pairs, and merges.
+%% saturate//1 runs the driver to a length fixpoint and ignores alias-only steps.
+%% saturate//2 runs the driver with a step bound and stops early on a fixpoint.
+%% saturate/4 is the pure driver used by the DCG forms.
+%% unif/1 recognizes A=B and performs Id aliasing and is used only by rebuild//1.
+%% extract/1 aliases each class Id to a representative Key to produce concrete terms.
+%% extract//0 is the DCG wrapper around extract/1 and is the last standard step to run.
+%% extract/2 aliases and returns the node list unchanged in a semidet in-place form.
+%% extract_node/1 chooses a representative Key per class and backtracks over choices.
+%% add_expr/2 builds the left-associated addition chain 1+2+...+N for N>=1.
+%% example1/1 builds a small graph, performs a union, and returns the nodes.
+%% example2/2 builds and saturates an addition chain and prints size sanity checks.
+%% example3/3 enumerates extracted results after saturation and removes duplicates.
+%% Notes.
+%% The goal of extract is to extract a concrete prolog term per class and it is the last standard step.
+%% Only rebuild//1 and merge_nodes/2 may unify Ids and rules must not inspect or bind them.
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
 %  Find Id for Key in a canonical ordset of Key-Id pairs.
