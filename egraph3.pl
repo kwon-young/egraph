@@ -63,6 +63,7 @@ Notes
 %  - Non-canonical input may fail spuriously.
 %  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by name.
 %  - Keys preserve variable identity (no alpha/variant normalization).
+%  - Variant-equal keys with different variables are distinct and will not match; this is by design.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -188,9 +189,9 @@ comm((A+B)-AB, _Nodes) -->
 comm(_, _) --> [].
 %! assoc(+Node, +Index)// is nondet.
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
-%  - Restrict to members of class(BC) via Index; emit at most one triple per match.
+%  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - If BC is absent, intended behavior is no output. BUG: the cut causes failure instead of emitting [].
+%  - If BC is absent in Index, intended behavior is "no output" (DCG succeeds with []). BUG: the cut causes failure instead.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -387,7 +388,7 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract one concrete Prolog term per class by unifying each class Id with a chosen Key. This is the last standard step when using an e-graph.
+%  Extract one concrete Prolog term per class (materialize) by unifying each class Id with a representative Key. This is the last standard step of using an e-graph; do not run rewriting after this.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, read Nodes directly.
 %  Semidet: fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
