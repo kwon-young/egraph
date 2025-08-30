@@ -22,18 +22,19 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 Implementation predicates (internal)
-- lookup/2: O(N) read-only search in an ordset of Key-Id; preserves variable identity via (==); binds only the value.
-- add/4: worker behind add//2; builds Keys as F(ChildIds) (congruence) and appends nodes; no unification.
-- add_node/4, add_node/3: ensure a Key has a class Id; reuse existing; no unification.
-- merge_nodes//0, merge_nodes/2: canonicalize to one Key-Id per Key and iterate to a fixpoint after aliasing.
-- merge_group/4: unify all Ids in a Key-group into the first; reports whether any merge happened.
-- make_index/2: build rbtree Id -> [Keys] from a canonicalized ordset.
-- rules//3, rule//3: run DCG rules over a node with Index; rules only emit items and A=B.
-- match/4: collect rule outputs over the current worklist given an Index; pure (no mutation).
-- push_back//1: append a list to the DCG output (difference-list scheduler).
-- rebuild//1: apply (=)/2 equalities (alias Ids), enqueue new nodes, then canonicalize; the only place where unification of Ids happens.
-- unif/1: recognize and execute (=)/2 on class Ids (used only via exclude/3).
-- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4: internal example rules/helpers; pure producers.
+- lookup/2: O(N) read-only lookup in a canonical ordset of Key-Id; first prunes by standard order, then confirms with (==) to preserve variable identity. Pure; binds only the value.
+- add/4: worker behind add//2; builds Keys as F(ChildIds) (congruence) left-to-right and appends Node-Id pairs. Pure producer; no unification; may introduce duplicates.
+- add_node/4, add_node/3: ensure a Key has a class Id; reuse existing Id or insert Node-Id with a fresh Id. Pure except for allocating a fresh logic var.
+- merge_nodes//0, merge_nodes/2: canonicalize to one Key-Id per Key by sorting, grouping equal Keys, and unifying all Ids in each group into the first; iterate to a fixpoint after aliasing. Only unifies Id variables; backtrackable.
+- merge_group/4: unify all Ids in a Key-group into the first (representative); report whether any merge occurred. Deterministic.
+- make_index/2: build rbtree Id -> [Keys] from a canonicalized ordset. Assumes prior merge_nodes/2; Index must be rebuilt after any aliasing.
+- rules//3, rule//3: run DCG rules over a node with Index; rules must only emit Key-Id items and A=B equalities. No unification here.
+- match/4: collect rule outputs over the current worklist given Index. Pure; no mutation.
+- push_back//1: append a list to the DCG output (difference-list scheduler) in O(1). Scheduling only; no deduplication.
+- rebuild//1: apply (=)/2 equalities (alias Ids), enqueue new items, then canonicalize; the only place where unification of Ids happens. Effects are logical/backtrackable.
+- unif/1: recognize and execute (=)/2 on class Ids (used only via exclude/3 in rebuild//1). Impure by design; never call from user rules.
+- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4: internal example rules/helpers; pure producers that never unify Ids directly.
+- extract/2, extract_node/1: validation helpers used by extract//0; may alias Ids via member/2, so use only for validation and discard any bindings.
 
 Equality and identity
 - Key equality is determined after standard ordering and confirmed with (==), preserving variable identity.
