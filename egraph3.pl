@@ -56,11 +56,11 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Read-only Id lookup for Key in a canonical ordset of Key-Id pairs.
-%  - Complexity: worst-case O(N). Prunes by standard order; confirms Key with (==) to preserve variable identity.
-%  - Effects: pure and steadfast. Binds Id only; never inspects/unifies Ids; fails if Key is absent.
-%  - Precondition: Pairs is a strictly ordered ordset (from merge_nodes/2 or sort/2).
-%  Note: Ids are logic variables acting as class identifiers; alias only via unification and never compare by print-name.
+%  Read-only lookup of Id for Key in a canonical ordset of Key-Id.
+%  - Prunes by standard order, then confirms Key with (==) to preserve variable identity.
+%  - Binds Id only; never touches Ids; fails if Key absent. Pure and steadfast.
+%  - Pairs must be a strictly ordered ordset (from merge_nodes/2 or sort/2).
+%  Note: Ids are logic variables used as mutable class identifiers; they alias only via unification. Never compare them by name.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -90,12 +90,12 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id; reuse the Id if Key already exists.
-%  - Compound: Key = F(ChildIds) built left-to-right (congruence; stable arg order).
-%  - Atom/var: Key = Term; preserves variable identity (no alpha/variant normalization).
-%  - Pure producer: only emits Key-Id items; no unification/canonicalization; duplicates merged later.
-%  - DCG variant threads a difference list; add/4 is the worker (foldl/4 builds ChildIds).
-%  Effect: fresh Id allocated only when Key is new. Aliasing elsewhere may instantiate variables inside Keys; run merge_nodes/2 afterwards.
+%  Insert Term, returning its class Id; reuse Id if Key already exists.
+%  - Compound: builds Key=F(ChildIds) left-to-right (congruence; stable arg order).
+%  - Atom/var: Key=Term; preserves variable identity (no variant normalization).
+%  - Pure producer: emits only Key-Id items; no unification; duplicates removed by merge_nodes/2.
+%  - DCG threads a difference list; add/4 is the worker (foldl/4 builds ChildIds).
+%  Effect: allocates a fresh Id only when Key is new. Aliasing may instantiate vars inside Keys; call merge_nodes/2 afterwards.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -108,8 +108,8 @@ add(Term, Id, In, Out) :-
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
 %  Ensure Node has a class Id; reuse if present, else insert Node-Id with a fresh Id.
-%  - In/Out are canonical ordsets of Key-Id; prune by standard order, then confirm identity with (==).
-%  - No unification/canonicalization here; call merge_nodes/2 after any Id aliasing elsewhere.
+%  - In/Out are canonical ordsets of Key-Id; prune by order, then confirm identity with (==).
+%  - No unification/canonicalization here; run merge_nodes/2 after any Id aliasing elsewhere.
 %  Effect: fresh Id only when Node is new; Out=In if Node existed. Pure w.r.t. Keys.
 %  Note: In must be an ordset (ord_add_element/3 maintains order). Class Ids are logic variables; never compare by name.
 add_node(Node-Id, In, Out) :-
@@ -122,10 +122,10 @@ add_node(Node, Id, In, Out) :-
 
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
-%  Alias classes by unifying IdA and IdB, then canonicalize via merge_nodes/2.
+%  Alias classes by unifying IdA and IdB, then canonicalize with merge_nodes/2.
 %  - IdA/IdB must be class Ids produced by this e-graph.
 %  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
-%  Effect: only Id aliasing (logical/backtrackable). Keys are never unified.
+%  Effect: only Id aliasing (logical/backtrackable). Keys never unify.
 %  Note: merge_nodes/2 is required because aliasing can reveal duplicate Keys.
 union(A, B, In, Out) :-
    A = B,
@@ -134,12 +134,12 @@ union(A, B, In, Out) :-
 %! merge_nodes//0 is det.
 %  DCG wrapper for merge_nodes/2.
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize: keep one Key-Id per Key and return a sorted ordset.
-%  - Algorithm: sort/2 → group by Key → unify all Ids in each group with the first (representative).
-%  - Iterate until stable; unifying Ids can instantiate variables inside Keys and reveal new duplicates.
+%  Canonicalize to one Key-Id per Key and return a sorted ordset.
+%  - Algorithm: sort/2, group by Key, unify all Ids in a group with the first (representative).
+%  - Iterate until stable; unifying Ids may instantiate variables inside Keys and expose new duplicates.
 %  - Complexity: O(N log N) per pass.
-%  Effect: only Id variables unify; Keys never do. Key equality is tested after ordering and confirmed by (==).
-%  Note: Uses foldl/5 to thread a Changed flag; recursion continues only if any group had >1 Id. Ids are logic variables; never compare by print-name.
+%  Effect: only Id variables unify; Keys never do. Key equality is decided after ordering and confirmed with (==).
+%  Note: foldl/5 threads a Changed flag; recur only if any group had >1 Id. Ids are logic variables; never compare by name.
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -148,11 +148,11 @@ merge_nodes(In, Out) :-
    ;  Sort = Out
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
-%  Unify all Ids in a group into the first; Changed=true iff the group had >1 Id.
+%  Unify all Ids in a group with the first (Rep); Changed=true iff the group has >1 Id.
 %  - Rep is the first Id; unify each tail Id with Rep.
-%  - Changed feeds merge_nodes/2's outer fixpoint.
+%  - Changed drives merge_nodes/2’s outer fixpoint.
 %  - Determinism: det.
-%  Note: Unifying Ids may instantiate variables inside Keys; a later pass can reveal duplicates.
+%  Note: Unifying Ids can instantiate variables inside Keys; later passes may reveal duplicates.
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
    (  T == []
@@ -164,7 +164,7 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
 %  Commutativity for +(A,B): from (A+B)-AB emit B+A-BA and AB=BA.
 %  - Models equality without in-place rewrites; both orders share the class.
 %  - Matches only +(A,B); emits exactly one result per match (avoids blow‑up).
-%  Note: BA is fresh; AB=BA is consumed by rebuild//1 (the only place that unifies Ids).
+%  Note: BA is fresh; AB=BA is consumed by rebuild//1 (the only place Ids unify).
 comm((A+B)-AB, _Nodes) -->
    !,
    [B+A-BA, AB=BA].
@@ -183,7 +183,7 @@ assoc(_, _) --> [].
 %  - Members is the list of Keys in class(BC) (from Index).
 %  - Confines rewrites to the current class; emits nodes/equalities only.
 %  Determinism: nondet over Members; at most one triple per qualifying member.
-%  Note: Fresh Ids for AB/ABC_; equalities are deferred to rebuild//1.
+%  Note: AB/ABC_ are fresh; equalities are deferred to rebuild//1.
 assoc_([Node | Nodes], A, ABC) -->
    (  { Node = (B+C) }
    -> [A+B-AB, AB+C-ABC_, ABC=ABC_]
@@ -205,7 +205,7 @@ reduce(_, _) --> [].
 %! constant_folding(+Node, +Index)// is nondet.
 %  Fold ground numeric sums (integers/floats) into a single constant.
 %  - Shrinks the search space by canonicalizing ground arithmetic; introduces C and preserves AB via C=AB.
-%  Note: Uses is/2 for evaluation; preserves the numeric type it produces. Emits nodes/equalities only; unification is deferred to rebuild//1.
+%  Note: Uses is/2 for evaluation; preserves the numeric type produced. Emits nodes/equalities only; unification is deferred to rebuild//1.
 constant_folding((A+B)-AB, Index) -->
    !,
    { rb_lookup(A, ANodes, Index) },
@@ -216,7 +216,7 @@ constant_folding(_, _) --> [].
 %  - Staged search avoids building pairs eagerly.
 %  - Emits nodes/equalities only; unification is deferred to rebuild//1.
 %  Determinism: nondet over numeric members of class(A) and class(B); one pair per numeric combination.
-%  Note: Uses number/1 to guard both sides; VB is handled in constant_folding_b//4.
+%  Note: Guards with number/1 on both sides; VB is handled in constant_folding_b//4.
 constant_folding_a([VA | ANodes], B, AB, Index) -->
    (  {number(VA)}
    -> {rb_lookup(B, BNodes, Index)},
@@ -228,7 +228,7 @@ constant_folding_a([], _, _, _) --> [].
 %! constant_folding_b(+ClassB, +VA, -AB, +Index)// is nondet.
 %  Helper: for each numeric VB in class(B), compute VC is VA+VB; emit VC-C and C=AB.
 %  - Introduces fresh C for VC while preserving AB as the class Id for the sum via C=AB.
-%  Note: Arithmetic uses is/2; guards in constant_folding_a//4 ensure both VA and VB are numbers. Emits nodes/equalities only; unification is deferred to rebuild//1.
+%  Note: Arithmetic uses is/2; guards in constant_folding_a//4 ensure both sides are numbers. Emits nodes/equalities only; unification is deferred to rebuild//1.
 %  Determinism: nondet over numeric members of class(B); one emission per numeric VB.
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
    (  {number(VB)}
@@ -246,7 +246,7 @@ constant_folding_b([], _, _, _) --> [].
 %  - Rules may only emit Key-Id items and (=)/2 equalities; no unification.
 %  - Appends outputs to the DCG stream; rebuild//1 later consumes them.
 %  - Uses sequence/2 (library(dcg/high_order)) to iterate rules in order.
-%  Determinism: nondet over Rules; each Rule is called exactly once per Node (node order, then rule order).
+%  Determinism: nondet over Rules; each Rule is called once per Node (node order, then rule order).
 %  Note: Keep Rules pure; unification must go through rebuild//1 via (=)/2 items.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
@@ -275,7 +275,7 @@ make_index(In, Index) :-
 %  Run Rules over Worklist to produce Matches (Key-Id items and (=)/2 equalities).
 %  - Worklist is the current node set (ordset of Key-Id pairs).
 %  - Rules must not perform unification; only emit nodes and equalities.
-%  - Matches are consumed by rebuild//1 (the only place Id variables are unified).
+%  - Matches are consumed by rebuild//1 (the only place Id variables unify).
 %  - Output order: Worklist order, then per-node rule order.
 %  Determinism: det; produces a concrete list; no mutation or Id unification here.
 match(Rules, Worklist, Index, Matches) :-
@@ -298,7 +298,7 @@ rebuild(Matches) -->
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Apply Rules until a fixpoint (no new Key-Id items/equalities). See caveat on alias-only steps.
+%  Apply Rules to a fixpoint (no new Key-Id items/equalities). See caveat on alias-only steps.
 %  Note: Fixpoint is length-based; alias-only steps are invisible unless later rule outputs change size.
 saturate(Rules) -->
    saturate(Rules, inf).
