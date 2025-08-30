@@ -57,6 +57,7 @@ Notes
 %  - Effects: binds only Val; never touches Keys or Pairs.
 %  Notes:
 %    - Ids are opaque logic variables used as mutable class identifiers; do not unify or inspect them here.
+%    - Determinism: semidet; succeeds at most once.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -336,7 +337,7 @@ saturate(Rules) -->
 %  Determinism: det driver; nondet arises only from Rules.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker. Threads the e-graph explicitly.
-%  - MaxSteps: non-negative integer (use DCG wrapper for inf).
+%  - MaxSteps: non-negative integer or inf.
 %  - Each iteration rebuilds the Id->Keys index because Id variables may alias.
 %  - Fixpoint is length-based; alias-only progress is invisible.
 %  Determinism: det driver; nondet comes only from Rules.
