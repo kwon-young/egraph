@@ -392,24 +392,24 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Final step: for each class, alias its Id with one of its Keys (a representative) to materialize a concrete Prolog term per class.
+%  Final extraction step: for each class, alias its Id with one of its Keys (a representative) to materialize one concrete Prolog term per class.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, examine Nodes directly.
 %  Det: semidet; fails only if some class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
-%  - This is the last standard step of using an e-graph; stop rewriting/saturating after extraction.
+%  - This is the last standard step when using an e-graph; do not continue rewriting/saturation after extraction.
 %  - Only Id variables unify; Keys never unify with each other.
 %  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extraction; aliases Ids to materialize concrete Prolog terms.
-%  This is the last standard step of using an e-graph.
-%  Succeeds iff every class has at least one Key; otherwise fails.
+%  DCG wrapper for extraction; aliases Ids to materialize one concrete Prolog term per class.
+%  Last standard step when using an e-graph; do not continue rewriting after this.
+%  Nondet over representative choices; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  Alias each class Id with one of its Keys (choose representatives) and return Nodes unchanged.
-%  Final step: extract concrete Prolog terms; stop rewriting/saturation.
-%  Det: semidet (fails only if some class has no Keys).
+%  Alias each class Id with one of its Keys (representative) and return Nodes unchanged.
+%  Final step: extract concrete Prolog terms; stop rewriting/saturation after this.
+%  Det: semidet (fails only if some class has no Keys); nondet over representative choice.
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
 %  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
@@ -420,7 +420,7 @@ extract(Nodes, Nodes) :-
 %! extract_node(+Groups) is semidet.
 %  For each Id->[Keys], unify Id with one member; backtracks over choices; fails on empty groups.
 %  Core of extraction; aliases Ids. Use only as the last step.
-%  Det: semidet.
+%  Det: semidet; nondet over representative choice.
 %  Notes:
 %  - Picks a representative via member/2; Keys do not unify with each other.
 %  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
