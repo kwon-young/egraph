@@ -58,15 +58,15 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Return Id for Key from a canonical ordset of Key-Id pairs (read-only).
-%  - Requires canonical input (see merge_nodes/2).
-%  - Prunes by standard order; confirms exact Key identity with (==).
-%  - Binds Id only; fails if absent; steadfast; no allocation on success.
+%  Read-only query: return Id for Key from a canonical ordset of Key-Id pairs.
+%  - Input must be canonical (see merge_nodes/2).
+%  - Prunes by standard order; confirms Key identity with (==).
+%  - Binds Id only; steadfast; fails if absent; no allocation on success.
 %  Cost: O(N) worst case. Pure w.r.t. Keys/Ids; no backtracking on success.
 %  Notes:
 %  - Undefined on non-canonical input; canonicalize first.
-%  - Ids are logic variables (class ids); compare by identity, never by print-name.
-%  - Build Keys from compound terms with add/4 before inserting/searching.
+%  - Ids are logic variables (class ids); compare by identity only (never by print-name).
+%  - Build Keys via add/4 before inserting/searching.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -96,16 +96,16 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id (reusing Id if an identical Key exists).
-%  - compound: Key = F(ChildIds) built left-to-right (stable order ⇒ congruence)
-%  - atom/var: Key = Term; variable identity is part of the Key (no variant renaming)
-%  - Emits Key-Id only; never unifies Ids here. Duplicates removed by merge_nodes/2.
+%  Insert Term and return its class Id (reuse if an identical Key already exists).
+%  - compound: Key = F(ChildIds) built left-to-right (stable arg order ⇒ congruence).
+%  - atom/var: Key = Term; variable identity is part of the Key (no variant renaming).
+%  - Emits Key-Id only; never unifies Ids here. Duplicates are removed by merge_nodes/2.
 %  Pre: In is an ordset (canonical preferred).
 %  Cost: build O(|Term|), insert O(N). Det; steadfast; pure on Keys.
 %  Notes:
-%  - Ids are logic vars (mutable class identifiers); the caller supplies the fresh Id.
+%  - Id is a logic var (class id). In DCG form it is produced; in add/4 the output var becomes the new Id if inserted.
 %  - DCG form is a pure producer (no side effects).
-%  - Keys are immutable data; only Id variables unify elsewhere.
+%  - Keys are immutable data; only Id variables may unify elsewhere.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -118,15 +118,15 @@ add(Term, Id, In, Out) :-
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
 %  Ensure Node has a class Id in the ordset.
-%  - If present: reuse Id and Out=In; otherwise insert Node-Id using the fresh Id variable provided by the caller.
+%  - If present: reuse Id and Out=In; otherwise insert Node-Id with a fresh Id variable (the output var).
 %  - Uses standard order and (==) to respect variable identity; no canonicalization here.
 %  - No Id unification; ord_add_element/3 preserves set semantics.
 %  Pre: In is canonical (from merge_nodes/2). Ids are logic vars (class ids).
-%  Cost: O(N). Det; quasi-pure (introduces at most one fresh Id variable; no Id unification).
+%  Cost: O(N). Det; quasi-pure (may introduce one fresh Id variable; no Id unification).
 %  Notes:
 %  - Canonicalize via merge_nodes/2 before calling.
 %  - add_node/3 (Node-Id, In, Out) is a thin wrapper over add_node/4.
-%  - Compare Ids by identity (the variable), not by print-name.
+%  - Compare Ids by identity (the variable), never by print-name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
