@@ -42,6 +42,7 @@ Equality and identity
 
 Notes
 - Logic variables as class Ids are intentional: unification is the only mutating operation and is backtrackable. This can instantiate variables embedded in Keys; always follow Id aliasing with merge_nodes/2.
+- Terminology: Ids are logic variables (not predicate symbols); they alias classes only via unification and should never be compared by name.
 - Internal predicates are pure w.r.t. Keys; only Id variables may be unified, and only in rebuild//1 and merge_nodes/2.
 */
 
@@ -53,7 +54,7 @@ Notes
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  O(N) read-only lookup in a canonical ordset of Key-Id pairs.
 %  - Key must be nonvar. First prune by standard order; confirm equality with (==) to preserve variable identity.
-%  - Binds Val only; Keys/Pairs are untouched. Fails if Key is absent.
+%  - Binds Val only; Keys and Pairs are not modified. Fails if Key is absent.
 %  Notes:
 %    - Ids are opaque mutable class identifiers (logic variables). Do not unify or inspect them here.
 %    - Pairs must be a strictly ordered ordset.
@@ -250,7 +251,7 @@ constant_folding_b([], _, _, _) --> [].
 %  Apply each DCG Rule(Node,Index)// to Node, given Index; nondet over Rules.
 %  - Purity: rules may only emit Key-Id items and (=)/2 equalities; no unification.
 %  - Scheduling: append outputs to the DCG stream; rebuild//1 later consumes them.
-%  - Uses library(dcg/high_order): sequence/2 to iterate rules.
+%  - Uses sequence/2 from library(dcg/high_order) to iterate rules.
 %  - Ids are mutable logic variables; rules must not unify them directly.
 %  Determinism: nondet over Rules; each Rule is called exactly once per Node.
 rules(Rules, Index, Node) -->
@@ -269,7 +270,7 @@ rule(Index, Node, Rule) -->
 %  - Ids are logic variables and may alias; always rebuild after aliasing.
 %  - Assumes Nodes were canonicalized by merge_nodes/2.
 %  - Index is read-only/ephemeral; rebuild/discard after each aliasing step.
-%  Notes: Uses library(pairs) (autoloaded): transpose_pairs/2, group_pairs_by_key/2.
+%  Notes: Uses transpose_pairs/2 and group_pairs_by_key/2 (autoloaded from library(pairs)).
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
