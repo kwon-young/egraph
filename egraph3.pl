@@ -62,8 +62,8 @@ Notes
 %  - Input must be canonical (from merge_nodes/2).
 %  - Prunes by standard order, then confirms exact Key identity with (==) (preserves variable identity).
 %  - Binds Id only; fails if absent; no allocation on success.
-%  Complexity: O(N). Semidet; steadfast; pure w.r.t. Keys/Ids.
-%  Note: Undefined on non-canonical input; canonicalize first (or use add_node/3).
+%  Complexity: O(N) worst case. Semidet; steadfast; pure w.r.t. Keys/Ids; no backtracking on success.
+%  Note: Undefined on non-canonical input; canonicalize first via merge_nodes/2 (or use add_node/3).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -96,10 +96,10 @@ lookup(Item-V, [X1-V1]) :-
 %  Add Term and return its class Id; reuse Id if Key already exists.
 %  - Compound: build Key = F(ChildIds) left-to-right (stable arg order ⇒ congruence).
 %  - Atom/var: Key = Term; preserves variable identity (no alpha/variant renaming).
-%  - Produces only Key-Id pairs; never unifies Ids. Duplicates are removed later by merge_nodes/2.
+%  - Produces only Key-Id pairs; never unifies Ids. Duplicates are removed by merge_nodes/2.
 %  Pre: In is an ordset.
 %  Cost: build O(|Term|), insert O(N). Det; steadfast; pure w.r.t. Keys.
-%  Note: Ids are fresh logic vars (mutable class ids). DCG form is a pure producer.
+%  Note: Ids are fresh logic vars (mutable class ids). DCG form is a pure producer (no side effects).
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -131,7 +131,7 @@ add_node(Node, Id, In, Out) :-
 %  Alias classes by unifying IdA with IdB, then canonicalize via merge_nodes/2.
 %  - Effects: only Id variables unify; Keys never do. May instantiate vars inside Keys; merge collapses collisions.
 %  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id vars. Backtrackable.
-%  Determinism: det.
+%  Determinism: det; logical effects (Id aliasing only).
 %  Note: Only pass class Id variables here; never unify Keys directly.
 union(A, B, In, Out) :-
    A = B,
