@@ -52,11 +52,11 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
-%  O(N) read-only lookup in a canonical ordset of Key-Id pairs.
-%  - Key must be nonvar. First prune by standard order; confirm equality with (==) to preserve variable identity.
-%  - Binds Val only; Keys and Pairs are not modified. Fails if Key is absent.
+%  Read-only O(N) lookup in a canonical ordset of Key-Id pairs.
+%  - Key must be nonvar. Prune via standard order, then confirm with (==) to preserve variable identity.
+%  - Binds Val only; Pairs is not modified. Fails if Key is absent.
 %  Notes:
-%    - Ids are opaque mutable class identifiers (logic variables). Do not unify or inspect them here.
+%    - Ids are opaque class identifiers (fresh logic variables). Do not unify or inspect them here.
 %    - Pairs must be a strictly ordered ordset.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -87,14 +87,14 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id. Reuse existing Id if Key already exists.
+%  Insert Term and return its class Id; reuse an existing Id if the Key already exists.
 %  - Compound: Key = F(ChildIds) built left-to-right (congruence).
-%  - Atomic/var: Key = Term (variable identity preserved; no variant/alpha).
-%  - No canonicalization/unification; duplicates may appear. Canonicalize with merge_nodes/2 after any aliasing.
+%  - Atomic/var: Key = Term (variable identity preserved; no alpha/variant normalization).
+%  - Pure producer: no canonicalization/unification; duplicates may appear. Run merge_nodes/2 after any aliasing.
 %  - DCG form threads nodes via difference lists; add/4 is the worker.
-%  Effects: allocate fresh Ids only; Keys never unify here.
+%  Effects: allocate fresh Ids only; Keys are never unified here.
 %  Notes:
-%    - Id is a fresh logic variable (mutable class Id). Aliasing Ids may instantiate variables embedded in Keys; effects are logical/backtrackable.
+%    - Id is a fresh logic variable (mutable class Id). Aliasing Ids may instantiate variables embedded in Keys; effects are logical and backtrackable.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -107,9 +107,9 @@ add(Term, Id, In, Out) :-
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
 %  Ensure Key Node has a class Id; reuse if present, else insert Node-Id with a fresh Id.
-%  - In/Out are ordsets of Key-Id; equality uses ordering then (==) to preserve variable identity.
+%  - In/Out are ordsets of Key-Id; equality prunes by order then confirms with (==) to preserve variable identity.
 %  - No unification/canonicalization; run merge_nodes/2 after any Id aliasing.
-%  Effects: none, except allocating a fresh Id when Node is new.
+%  Effects: only allocates a fresh Id when Node is new.
 %  Notes: ord_add_element/3 assumes In is an ordset; callers must preserve this invariant.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -122,8 +122,8 @@ add_node(Node, Id, In, Out) :-
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
 %  Alias classes by unifying IdA with IdB, then canonicalize via merge_nodes/2.
-%  - IdA/IdB must be class Ids from this graph.
-%  - Unifying Ids can instantiate variables inside Keys; rules may rely on this.
+%  - IdA/IdB must be class Ids produced by this e-graph.
+%  - Unifying Ids may instantiate variables inside Keys; rules can rely on this.
 %  - Uses (=)/2 intentionally (no occurs-check); safe because Ids are fresh, acyclic logic variables.
 %  Effects: Id aliasing only (backtrackable).
 %  Determinism: det.
@@ -135,12 +135,12 @@ union(A, B, In, Out) :-
 %! merge_nodes//0 is det.
 %  DCG alias that threads the state through merge_nodes/2.
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize to one Key-Id per Key by sorting, grouping equal Keys, and unifying all Ids in each group into the first; iterate to a fixpoint.
+%  Canonicalize to one Key-Id per Key: sort, group equal Keys, unify all Ids in each group into the first; iterate to a fixpoint.
 %  - Complexity: O(N log N) per pass; extra passes if Id unification instantiates vars inside Keys.
-%  - Effects: only unifies Ids; Keys are never unified.
+%  - Effects: only Id unification; Keys are never unified.
 %  Notes:
 %    - Key equality preserves variable identity via (==) after ordering.
-%    - Repeat while any group has >1 Id or resorting after aliasing reveals new duplicates.
+%    - Repeat while any group has >1 Id or resorting after aliasing exposes new duplicates.
 %    - Terminates: each pass either aliases ≥1 pair of Ids or leaves the set unchanged.
 merge_nodes(In, Out) :-
    sort(In, Sort),
@@ -153,7 +153,7 @@ merge_nodes(In, Out) :-
 %  Unify all Ids in a Key-group into the first; set Changed=true iff the group has >1 Id.
 %  - Rep is the first Id; unify each tail Id with Rep.
 %  - Changed threads into the outer fixpoint in merge_nodes/2.
-%  Notes: Unifying Ids may instantiate variables inside Keys; resorting may expose new duplicates.
+%  Notes: Id unification may instantiate variables inside Keys; resorting may expose new duplicates.
 %  Determinism: det.
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
@@ -266,11 +266,11 @@ rule(Index, Node, Rule) -->
 
 %! make_index(+Nodes, -Index) is det.
 %  Build an rbtree Index mapping Id -> [Keys] from a canonicalized ordset of Key-Id pairs.
-%  - Complexity: O(N log N) (group + tree build).
+%  - Complexity: O(N log N) (grouping + tree build).
 %  - Ids are logic variables and may alias; always rebuild after aliasing.
 %  - Assumes Nodes were canonicalized by merge_nodes/2.
-%  - Index is read-only/ephemeral; rebuild/discard after each aliasing step.
-%  Notes: Uses transpose_pairs/2 and group_pairs_by_key/2 (autoloaded from library(pairs)).
+%  - Index is ephemeral/read-only; rebuild or discard after each aliasing step.
+%  Notes: uses transpose_pairs/2 and group_pairs_by_key/2 (autoload from library(pairs)).
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -281,7 +281,7 @@ make_index(In, Index) :-
 %  Central collection step before rebuild. Worklist is the current node set (ordset of Key-Id pairs).
 %  - Rules must not perform unification; only emit nodes and equalities.
 %  - Matches are consumed by rebuild//1 (the only place where Id variables are unified).
-%  - Ids are opaque logic variables; mutate them only via (=)/2 in rebuild//1.
+%  - Ids are opaque logic variables; update them only via (=)/2 in rebuild//1.
 %  Determinism: det given Rules/Worklist/Index; produces a (possibly empty) list; no mutation.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
@@ -289,7 +289,7 @@ match(Rules, Worklist, Index, Matches) :-
 %  Append List to the end of the DCG output in O(1) via difference lists.
 %  Schedules newly discovered items after the current worklist.
 %  - Purely structural; no deduplication and no unification side effects.
-%  - Defined as `push_back(L), L --> []` to exploit difference lists (zero-copy).
+%  - Defined as `push_back(L), L --> []` (difference-list DCG; zero-copy).
 %  - Use with ordset-like streams; canonicalization happens in merge_nodes/2.
 %  Determinism: det.
 push_back(L), L --> [].
