@@ -568,9 +568,9 @@ test(match_comm_eq, true(member(AB=_BA, Matches))) :-
     egraph:match([comm], Work, Index, Matches).
 
 % Ensures match preserves rule output order for a single work item
-test(match_comm_order_prefix, true((Matches = [K1, Eq1 | _], K1 = B+A-_, Eq1 = (AB=BA)))) :-
-    A = _, B = _, AB = _,
-    Work = [(A+B)-AB],
+test(match_comm_order_prefix, true((Matches = [K1, Eq1 | _], K1 = B+A-_, Eq1 = (_AB=BA)))) :-
+    A = _, B = _, _AB = _,
+    Work = [(A+B)-_AB],
     ord_list_to_rbtree([], Index),
     egraph:match([comm], Work, Index, Matches).
 
