@@ -35,7 +35,7 @@ Implementation predicates (internal)
 - unif/1 (semidet, impure by design): True for Eq=(A=B); performs A=B (no occurs-check). Intended only for rebuild//1 via exclude/3. Safe because Ids are fresh, acyclic logic variables.
 - comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): Example rewrite rules/helpers. Emit nodes/equalities only; avoid in-place rewrites; use Index to restrict search when possible. Must not inspect or bind Ids.
 - extract/2, extract_node/1 (semidet, aliases Ids): Validation helpers used by extract//0. Intentionally alias Ids via member/2; validation only; discard any bindings afterwards.
-- saturate/3 (det, driver): Worker that saturates with a step bound; rebuild index each iteration; only Ids may unify (in rebuild/merge). Fixpoint is length-based; alias-only steps do not count as progress.
+- saturate/4 (det, driver): Worker that saturates with a step bound; rebuild index each iteration; only Ids may unify (in rebuild/merge). Fixpoint is length-based; alias-only steps do not count as progress.
 - DCG bridging: Each DCG nonterminal compiles to extra-args; DCG forms remain pure producers. merge_nodes//0 is a DCG shim over merge_nodes/2.
 
 Notes on mutable class Ids
@@ -316,14 +316,14 @@ rebuild(Matches) -->
 %! saturate(+Rules)// is det.
 %  Run Rules to a length-based fixpoint: repeat until rebuild/merge does not change list length.
 %  Determinism: det; Rules must be pure producers (emit only nodes/equalities). Alias-only steps do not count as progress.
-%  Note (SWI): 'inf' is not numeric; this wrapper calls saturate//2 with inf and will error on SWI. Use saturate(Rules, LargeInteger) instead.
+%  SWI note: 'inf' is an atom; this wrapper calls saturate//2 with inf and will raise a type_error in N>0. Use saturate(Rules, MaxSteps) with a large integer.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run up to MaxSteps iterations (integer >= 0, or 'inf' where supported).
 %  Fixpoint: stop when length is unchanged after rebuild/merge. Alias-only steps don't change length.
 %  Determinism: det.
-%  Note (SWI): MaxSteps must be an integer; 'inf' triggers a type_error in the N>0 guard.
+%  SWI note: MaxSteps must be an integer; passing 'inf' raises type_error in N>0. Use a large integer value.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker: rebuild Id->Keys index each iteration; stop on stable length or when MaxSteps runs out.
 %  Rules must be pure producers; unification happens only in rebuild//1 and merge_nodes/2.
