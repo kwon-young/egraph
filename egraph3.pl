@@ -51,12 +51,12 @@ Notes
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  Read-only lookup in an ordset of Key-Id pairs (standard order).
-%  - Requires: Pairs is a strictly ordered ordset; Key is nonvar.
-%  - Equality: prunes by standard order, then confirms with (==) to preserve variable identity in Keys.
+%  - Pairs is a strictly ordered ordset; Key is nonvar.
+%  - Equality: first prunes by standard order, then confirms with (==) to preserve variable identity in Keys.
 %  - Complexity: O(N) linear scan (4-way unrolled).
-%  - Effects: none; binds only Val; never touches Keys/Pairs.
+%  - Effects: binds only Val; never touches Keys or Pairs.
 %  Notes:
-%    - Ids are opaque logic variables (mutable class Ids). Do not unify or inspect them here.
+%    - Ids are opaque logic variables (class identifiers). Do not unify or inspect them here.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -87,13 +87,13 @@ lookup(Item-V, [X1-V1]) :-
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
 %  Insert Term and return its class Id; reuse the existing Id if the Key already exists.
-%  - Compound: adds subterms left-to-right; Key = F(ChildIds) (congruence).
+%  - Compound: add subterms left-to-right; Key = F(ChildIds) (congruence).
 %  - Atomic/var: Key = Term. Variable identity is part of the Key (no alpha/variant normalization).
-%  - No canonicalization here; duplicates may be introduced. Call merge_nodes/2 to collapse.
+%  - No canonicalization; duplicates may be introduced. Call merge_nodes/2 after aliasing to collapse.
 %  Notes:
-%    - Id is a fresh logic variable (mutable class Id). Unifying Ids may instantiate variables inside Keys; effects are logical and backtrackable.
+%    - Id is a fresh logic variable (class Id). Unifying Ids may instantiate variables inside Keys; effects are logical and backtrackable.
 %    - DCG state is an ordset of Key-Id pairs (standard order). Rules must not unify; equalities are consumed only in rebuild//1.
-%    - Pure w.r.t. Keys: allocates fresh Id variables; no other bindings or side effects.
+%    - Pure w.r.t. Keys: allocates fresh Ids; no other bindings or side effects.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -219,10 +219,10 @@ reduce(A+B-AB, Index) -->
    [A=AB].
 reduce(_, _) --> [].
 %! constant_folding(+Node, +Index)// is nondet.
-%  Fold ground numeric additions (integers/floats) into a single constant.
+%  Fold ground numeric sums (integers/floats) into a single constant.
 %  Shrinks the search space by canonicalizing ground arithmetic; introduces fresh C and preserves AB as the class Id via C=AB.
 %  Notes:
-%    - Uses is/2 for evaluation.
+%    - Evaluation uses is/2.
 %    - Emits nodes/equalities only; no unification here (rebuild//1 consumes (=)/2).
 constant_folding((A+B)-AB, Index) -->
    !,
@@ -280,8 +280,8 @@ rule(Index, Node, Rule) -->
 
 %! make_index(+Nodes, -Index) is det.
 %  Build an rbtree Index mapping Id -> [Keys] from a canonicalized ordset of Key-Id pairs.
-%  - Complexity: O(N log N) (group + tree build).
-%  - Ids are logic variables and may alias; always rebuild after aliasing.
+%  - Complexity: O(N log N) (grouping + tree build).
+%  - Ids are logic variables and may alias; always rebuild the index after aliasing.
 %  - Assumes Nodes are canonicalized by merge_nodes/2. Determinism: det.
 %  Notes:
 %    - Index is read-only and ephemeral; discard it after each rebuild/aliasing step.
@@ -293,7 +293,7 @@ make_index(In, Index) :-
 
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
 %  Run Rules over Worklist to produce Matches (Key-Id items and (=)/2 equalities).
-%  Central collection phase before rebuilding the graph. Worklist is the current node set (ordset of Key-Id pairs).
+%  Central collection phase before rebuild. Worklist is the current node set (ordset of Key-Id pairs).
 %  Determinism: det given Rules/Worklist/Index; produces a (possibly empty) list; no mutation.
 %  Notes:
 %    - Rules must not perform unification; only emit nodes and equalities.
@@ -302,7 +302,7 @@ make_index(In, Index) :-
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
 %! push_back(+List)// is det.
-%  Append List to the end of the DCG output (O(1) via difference lists).
+%  Append List to the end of the DCG output in O(1) via difference lists.
 %  Schedules newly discovered items after the current worklist.
 %  Determinism: det.
 %  Notes:
@@ -319,7 +319,7 @@ push_back(L), L --> [].
 %  Determinism: det.
 %  Notes:
 %    - unif/1 intentionally performs side-effect unification of Id variables; use only via exclude/3 here. This is the only place where (=)/2 is executed.
-%    - Relies on SWI‑Prolog's autoload of library(apply):exclude/3.
+%    - Relies on autoload of library(apply): exclude/3.
 %    - Unification may instantiate variables inside Keys; merge_nodes/2 collapses any duplicates created by that.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
