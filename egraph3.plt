@@ -358,8 +358,8 @@ test(const_fold_b_filters_pair, true(member(5-_C, Out))) :-
     phrase(egraph:constant_folding_b([3, foo], 2, _AB, _Index), Out).
 
 % Emits equality C=AB for numeric VB
-test(const_fold_b_filters_eq, true(member(_C=_AB, Out))) :-
-    phrase(egraph:constant_folding_b([3, foo], 2, _AB, _Index), Out).
+test(const_fold_b_filters_eq, true(member(_C=AB, Out))) :-
+    phrase(egraph:constant_folding_b([3, foo], 2, AB, _Index), Out).
 
 % No output when class(B) has no numeric members
 test(const_fold_b_non_numeric_only, true(Out == [])) :-
@@ -379,18 +379,18 @@ test(rules_apply_order_commuted_node, true((member(K-_BA, Out), K = B+A))) :-
     phrase(egraph:rules(Rules, Index, (A+B)-_AB), Out).
 
 % Applies comm then reduce; contains equality AB=BA
-test(rules_apply_order_comm_eq, true(member(_AB=_BA, Out))) :-
+test(rules_apply_order_comm_eq, true(member(AB=BA, Out))) :-
     A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
     Rules = [comm, reduce],
-    phrase(egraph:rules(Rules, Index, (A+B)-_AB), Out).
+    phrase(egraph:rules(Rules, Index, (A+B)-AB), Out).
 
 % Applies comm then reduce; contains reduction A=AB
-test(rules_apply_order_reduce_eq, true(member(A=_AB, Out))) :-
+test(rules_apply_order_reduce_eq, true(member(A=AB, Out))) :-
     A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
     Rules = [comm, reduce],
-    phrase(egraph:rules(Rules, Index, (A+B)-_AB), Out).
+    phrase(egraph:rules(Rules, Index, (A+B)-AB), Out).
 
 :- end_tests(rules).
 
@@ -404,16 +404,16 @@ test(rule_wrapper_comm_node, true((member(K-_BA, Out), K = B+A))) :-
     phrase(egraph:rule(_Index, (A+B)-_AB, comm), Out).
 
 % Wrapper invokes comm rule: emits equality
-test(rule_wrapper_comm_eq, true(member(_AB=_BA, Out))) :-
+test(rule_wrapper_comm_eq, true(member(AB=BA, Out))) :-
     A = _, B = _,
-    phrase(egraph:rule(_Index, (A+B)-_AB, comm), Out).
+    phrase(egraph:rule(_Index, (A+B)-AB, comm), Out).
 
 % Wrapper invokes reduce rule: emits A=AB when class(B) contains 0
 % Confirms that rule//3 passes Index correctly to the reduce rule.
-test(rule_wrapper_reduce_eq, true(member(A=_AB, Out))) :-
+test(rule_wrapper_reduce_eq, true(member(A=AB, Out))) :-
     A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
-    phrase(egraph:rule(Index, (A+B)-_AB, reduce), Out).
+    phrase(egraph:rule(Index, (A+B)-AB, reduce), Out).
 
 :- end_tests(rule).
 
@@ -642,12 +642,11 @@ test(example1_contains_a, true(member(a-_A, G))) :-
 test(example1_contains_f4a, true(member(f(f(f(f(a))))-_Id, G))) :-
     egraph:example1(G).
 
-% BUG: example1/1 should alias Ids for a and f(f(a)) via the explicit union, but currently A does not equal FFA (observed A unifies with f(a)).
-test(example1_ids_aliased, [fail]) :-
+% The example unions a and f(f(a)), so their Ids must be aliased (A==FFA).
+test(example1_ids_aliased, true(A==FFA)) :-
     egraph:example1(G),
     member(a-A, G),
-    member(f(f(a))-FFA, G),
-    A == FFA.
+    member(f(f(a))-FFA, G).
 
 :- end_tests(example1).
 
