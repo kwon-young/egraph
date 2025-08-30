@@ -223,7 +223,7 @@ assoc_([], _, _) --> [].
 %  Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
 %  - Unification happens in rebuild//1 (Ids only); rules must not inspect or bind Ids.
-%  - Check numeric 0 with (==) to avoid arithmetic coercions.
+%  - Use strict term equality (==) to match numeric 0; avoids arithmetic coercion.
 %  Det: semidet; pure producer.
 reduce(A+B-AB, Index) -->
    {  rb_lookup(B, Nodes, Index),
@@ -389,7 +389,7 @@ saturate(Rules, N, In, Out) :-
 
 %! unif(+Eq) is semidet.
 %  True for Eq=(A=B); performs that unification as a side-effect.
-%  Only for rebuild//1 (via exclude/3); do not call from rules or user code.
+%  Only called from rebuild//1 via exclude/3; do not call from rules or user code.
 %  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
 %  - Only Id variables should appear here; Keys must not be unified.
 %  Det: semidet; intentionally impure (Id unification). Do not call from rewrite rules.
@@ -400,7 +400,7 @@ unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
 %  Extract concrete representatives by binding each class Id to one of its Keys (via member/2).
-%  - Purpose: final step of using an e-graph to obtain concrete Prolog terms.
+%  - Purpose: last standard step of using an e-graph; obtain concrete Prolog terms.
 %  - Side effect: aliases Ids; discard these bindings if you continue rewriting.
 %  - To inspect without aliasing, use the Nodes list directly.
 %  Ids: logic variables; bindings are intentional in this step.
@@ -408,12 +408,12 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper to extract representatives (aliases Ids) as the final step.
+%  DCG wrapper to extract representatives (aliases Ids) as the last standard step.
 %  - Succeeds iff every class has at least one Key; otherwise fails.
 %  - Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  DCG implementation of extract//0: for each Id->[Keys] group, unify Id with a chosen Key.
-%  - Purpose: extract concrete terms; use as the final step after saturation/merges.
+%  - Purpose: extract concrete terms; use as the last standard step after saturation/merges.
 %  - Side effect: aliases Ids; do not continue rewriting with these bindings.
 %  Det: semidet.
 %  Notes:
