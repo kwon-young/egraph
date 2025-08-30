@@ -278,7 +278,7 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 %  - Method: prune by standard order; confirm Key identity with (==); only binds Id.
 %  - Det/Big-O: semidet, steadfast; O(N); no choicepoints on success.
 %  Notes:
-%  - Non-canonical input may fail.
+%  - Non-canonical input may fail by design (precondition is canonical).
 %  - Ids are logic variables; compare with (==) only.
 %  - Keys keep variable identity; do not alpha-normalize or use =@=/2.
 %  - Variant-equal but non-identical keys do not match (intended; see egraph3.plt).
@@ -439,7 +439,7 @@ assoc_([], _, _) --> [].
 %  Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
 %  - Unification happens in rebuild//1 (Ids only); rules must not inspect or bind Ids.
-%  - Use strict term equality (==) to match numeric 0; avoids arithmetic coercion.
+%  - Use strict term equality (==) to match integer 0 and not 0.0.
 %  Determinism: semidet; pure producer.
 reduce(A+B-AB, Index) -->
    {  rb_lookup(B, Nodes, Index),
@@ -453,7 +453,8 @@ reduce(_, _) --> [].
 %  - Introduce C where VC is VA+VB; emit VC-C and C=AB.
 %  Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
-%  - Uses is/2; respects Prolog numeric semantics; pure producer.
+%  - Uses is/2; respects Prolog numeric semantics and mixed numeric types; pure
+%    producer.
 %  - Unification deferred to rebuild//1 (Ids only). Non-numeric members are skipped.
 %  Determinism: nondet; no side effects; must not inspect or bind Ids.
 constant_folding((A+B)-AB, Index) -->
@@ -480,9 +481,12 @@ constant_folding_a([], _, _, _) --> [].
 %  For each numeric VB in class(B), compute VC is VA+VB and emit VC-C, C=AB.
 %  Notes:
 %  - number/1 guards ensured by constant_folding_a//4.
-%  - Pure producer; unification deferred to rebuild//1 (Ids only); must not inspect or bind Ids.
+%  - Supports mixed numeric types; result type follows is/2 semantics.
+%  - Pure producer; unification deferred to rebuild//1 (Ids only); must not
+%    inspect or bind Ids.
 %  Determinism: nondet over numeric members of class(B); no side effects.
-%  The emitted VC-C is a new Key-Id pair; equality C=AB is consumed by rebuild//1.
+%  The emitted VC-C is a new Key-Id pair; equality C=AB is consumed by
+%  rebuild//1.
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
    (  {number(VB)}
    -> {VC is VA + VB},
