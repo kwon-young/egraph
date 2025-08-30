@@ -704,3 +704,153 @@ example3(N, Expr, R) :-
       saturate([comm, assoc, reduce, constant_folding], N),
       extract
    ), [], _)).
+
+/* ----------------------------------------------------------------------
+   Predicate reference (concise; one sentence per line; <= 80 columns).
+---------------------------------------------------------------------- */
+
+%% lookup/2
+% Find Id for Key in a canonical ordset using (==) on Keys and bind only Id.
+
+%% add//2
+% Insert Term as nodes via DCG and yield its class Id without aliasing Ids.
+
+%% add/4
+% Insert Term into a canonical set, building compound children left-to-right,
+% and return updated set with at most one fresh Id allocated.
+
+%% add_node/3
+% Insert Node-Id into a canonical set or reuse the existing Id when present.
+
+%% add_node/4
+% Insert the provided Node-Id pair or reuse the provided Id when the Key is
+% already present.
+
+%% union//2
+% Alias two class Ids via DCG and then re-canonicalize the set.
+
+%% union/4
+% Unify IdA with IdB and merge duplicate Keys deterministically.
+
+%% merge_nodes//0
+% DCG wrapper around merge_nodes/2 that emits nothing and performs no aliasing.
+
+%% merge_nodes/2
+% Deduplicate by Key, unify duplicate Ids with the head, and repeat until the
+% result is stable and canonical.
+
+%% merge_group/4
+% Unify all Ids in a duplicate group with the head and flag whether any change
+% occurred in this pass.
+
+%% comm//2
+% For +(A,B)-AB emit B+A-BA and AB=BA using a fresh BA and without inspecting
+% or binding Ids.
+
+%% assoc//2
+% For (A+(B+C))-ABC use class(BC) from Index to emit (A+B)-AB, (AB+C)-ABC_,
+% and ABC=ABC_ with no Id inspection or binding.
+
+%% assoc_//3
+% Iterate members of class(BC) and emit at most one triple per +(B,C) member.
+
+%% reduce//2
+% If class(B) contains the integer 0 emit A=AB, else emit nothing.
+
+%% constant_folding//2
+% For +(A,B)-AB fold numeric members VA in class(A) and VB in class(B) to VC
+% and emit VC-C and C=AB.
+
+%% constant_folding_a//4
+% Select numeric VA from class(A) and delegate to constant_folding_b//4.
+
+%% constant_folding_b//4
+% For each numeric VB compute VC is VA+VB and emit VC-C and C=AB.
+
+%% rules//3
+% Apply a list of rules to one node using Index and concatenate outputs in rule
+% order.
+
+%% rule//3
+% Invoke one Rule(Node,Index)//2 and forward its outputs unchanged.
+
+%% make_index/2
+% Build an rbtree Id->[Keys] from canonical Nodes and rebuild it after any Id
+% aliasing.
+
+%% match/4
+% Run Rules over a worklist using Index and produce scheduled Key-Id items and
+% equalities in stable order.
+
+%% push_back//1
+% Append a list to DCG output in O(1) using difference lists for scheduling.
+
+%% rebuild//1
+% Consume equalities by aliasing Ids, enqueue Key-Id items, and merge to
+% restore canonical order.
+
+%% saturate//1
+% Iterate make_index, match, rebuild, and merge to a length fixpoint while
+% ignoring alias-only steps.
+
+%% saturate//2
+% Run the driver with a step bound and stop early at a length fixpoint.
+
+%% saturate/4
+% Pure driver for saturation that measures progress by the merged list length
+% and ignores alias-only steps.
+
+%% unif/1
+% Recognize A=B and perform backtrackable Id aliasing as used by rebuild//1.
+
+%% extract/1
+% Alias each class Id to a representative Key and produce concrete terms as
+% the last standard step.
+
+%% extract//0
+% DCG wrapper for extract/1 that aliases Ids to representatives and succeeds
+% iff every class has a Key.
+
+%% extract/2
+% Semidet in-place extraction that aliases Ids and returns the node list
+% unchanged.
+
+%% extract_node/1
+% Choose one representative Key per Id from grouped keys and backtrack over
+% choices while failing on empty groups.
+
+%% add_expr/2
+% Build the left-associated chain 1+2+...+N for N>=1 without rewriting Keys.
+
+%% example1/1
+% Build a small graph, union a with f(f(a)), add f^4(a), and return nodes.
+
+%% example2/2
+% Build and saturate an addition chain with comm and assoc and print size
+% sanity checks.
+
+%% example3/3
+% Enumerate extracted results after saturation with all rules and remove
+% duplicates using distinct/1.
+
+/* ----------------------------------------------------------------------
+   Notes (short; one sentence per line; wrap at 80 columns).
+---------------------------------------------------------------------- */
+
+% Ids are logic variables used as mutable unique identifiers and must be
+% compared by identity with (==) and never by name or print-name.
+
+% Rules must not inspect or bind Id variables and may only emit Key-Id pairs
+% and equalities between Ids.
+
+% Only rebuild//1 and merge_nodes/2 perform Id aliasing, and any variable
+% instantiation inside Keys is collapsed by the next merge.
+
+% lookup/2 expects canonical ordsets and may fail on non-canonical inputs by
+% design.
+
+% assoc//2 contains a cut that commits before rb_lookup/3, so when BC is
+% absent in Index the rule fails instead of emitting nothing.
+
+% The goal of extract is to extract a concrete Prolog term per class and it is
+% the last standard step of using an egraph.
