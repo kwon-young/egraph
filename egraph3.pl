@@ -57,12 +57,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Read-only Id lookup for Key in a canonical ordset Pairs (from merge_nodes/2).
-%  - Pairs: strictly ordered, one pair per Key.
-%  - Prune by standard order; confirm with (==) to preserve variable identity.
-%  - Binds only Id; never touches stored Keys/Ids; fails if Key is absent.
+%  Read-only lookup of the class Id for Key in a canonical ordset Pairs (as produced by merge_nodes/2).
+%  - Pairs: strictly ordered, exactly one pair per Key (canonical).
+%  - Search prunes by standard order; identity is confirmed with (==) to preserve variable identity.
+%  - Only binds the output Id; never touches stored Keys/Ids; fails if Key is absent.
+%  - Precondition: Pairs is canonical; otherwise behavior is undefined.
 %  Notes:
-%  - Ids are fresh logic variables acting as class identifiers; never compare by print-name.
+%  - Ids are fresh logic variables used as mutable class identifiers; never compare by print-name.
 %  Determinism: semidet, steadfast, pure.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -93,12 +94,13 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id. Reuse existing Id if Key already present.
-%  - Compound: Key = F(ChildIds) built left-to-right (stable arg order ensures congruence).
-%  - Atom/var: Key = Term (variable identity preserved; no variant/alpha renaming).
-%  - Emits only Key-Id items; no unification. Duplicates are collapsed by merge_nodes/2.
+%  Insert Term and return its class Id; reuse the existing Id if the Key is already present.
+%  - Compound: Key = F(ChildIds) built left-to-right (stable arg order → congruence).
+%  - Atom/var: Key = Term; variable identity is preserved (no variant/alpha renaming).
+%  - Pure producer: emits only Key-Id items; no Id unification. Duplicates are removed by merge_nodes/2.
 %  - add//2 is the DCG wrapper; add/4 is the worker; foldl/4 builds ChildIds.
-%  Effect: fresh Id only for new Keys; call merge_nodes/2 after any Id aliasing elsewhere.
+%  - Precondition (add/4): In is an ordset.
+%  Effect: allocates a fresh Id only for new Keys; after any Id aliasing elsewhere, call merge_nodes/2.
 %  Determinism: det; pure w.r.t. Keys.
 add(Term, Id, In, Out) :-
    (  compound(Term)
@@ -114,9 +116,9 @@ add(Term, Id, In, Out) :-
 %  Ensure Node has a class Id; reuse if present, else insert Node-Id with a fresh Id.
 %  - In/Out are ordsets; prune by standard order; confirm with (==) to preserve variable identity.
 %  - No unification or canonicalization here; call merge_nodes/2 after any Id aliasing elsewhere.
+%  - Precondition: In is an ordset; ord_add_element/3 preserves order and set semantics.
 %  Effect: fresh Id only when Node is new; Out=In if Node already exists. Pure w.r.t. Keys.
 %  Notes:
-%  - In must be an ordset; ord_add_element/3 preserves order and set semantics.
 %  - Ids are logic vars used as mutable class IDs; never compare by print-name.
 %  Determinism: det; quasi-pure (no Id unification).
 add_node(Node-Id, In, Out) :-
@@ -130,9 +132,9 @@ add_node(Node, Id, In, Out) :-
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
 %  Alias two classes by unifying IdA with IdB, then canonicalize with merge_nodes/2.
-%  - IdA/IdB must be class Ids from this e-graph.
+%  - IdA/IdB must be class Ids from this e-graph; mixing foreign vars breaks invariants.
 %  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
-%  Effect: Id aliasing only (logical/backtrackable). Keys never unify here.
+%  Effect: Id aliasing only (logical/backtrackable). Keys never unify here; effects revert on backtracking.
 %  Notes:
 %  - Only Id variables unify; Keys are never unified.
 %  Determinism: det.
@@ -144,10 +146,10 @@ union(A, B, In, Out) :-
 %  DCG wrapper for merge_nodes/2 (DCG expansion calls merge_nodes(S0,S)).
 %  Determinism: det.
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize to one Key-Id per Key; return a sorted ordset.
+%  Canonicalize to one Key-Id per Key; return a sorted, canonical ordset.
 %  - Algorithm: sort/2 → group_pairs_by_key/2 → unify each group’s Ids with the first (representative).
-%  - Iterate until no new duplicates appear (Id unification may instantiate variables inside Keys).
-%  - Complexity: O(N log N) per pass.
+%  - Iterate until no new duplicates appear (Id unification can instantiate variables inside Keys and expose new duplicates).
+%  - Complexity: O(N log N) per pass. Terminates when a fixed point is reached.
 %  Effect: only Id variables unify; Keys never unify. Key equality: standard order + (==) to preserve variable identity.
 %  Determinism: det; logical effects (Id unification only).
 merge_nodes(In, Out) :-
@@ -159,7 +161,8 @@ merge_nodes(In, Out) :-
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
 %  Map a group to Key-Rep and indicate whether any unification occurred.
-%  - Rep = first Id; unify each tail Id with Rep; Changed=true iff group has >1 Id.
+%  - Rep = first Id; unify each tail Id with Rep; Changed=true iff group has >1 Id; otherwise pass through Changed0.
+%  Effect: Keys never unify; only Id variables may unify.
 %  Determinism: det; logical effects (Id unification only).
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
@@ -180,7 +183,8 @@ comm((A+B)-AB, _Nodes) -->
 comm(_, _) --> [].
 %! assoc(+Node, +Index)// is nondet.
 %  Associativity for +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
-%  - Restrict candidates to members of class(BC) via Index (avoid quadratic search).
+%  - Restrict candidates to members of class(BC) via Index (avoids quadratic search).
+%  - If class(BC) is absent from Index, emit nothing.
 %  Notes:
 %  - AB and ABC_ are fresh.
 %  - ABC=ABC_ is consumed by rebuild//1 (the only place Ids unify).
