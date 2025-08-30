@@ -1526,3 +1526,34 @@ test(pair_compound_key_inner_var_aliased_removed, true(R == [])) :-
     ord_subtract([f(g(X))-I], [f(g(Y))-I], R).
 
 :- end_tests(ordsets_ord_subtract_even_more).
+
+% make_index/2 (additional)
+:- begin_tests(make_index_more3).
+
+% Index size equals the number of distinct class Ids (two classes -> size 2)
+test(rb_size_two_classes, true(Size == 2)) :-
+    A = _, B = _,
+    Nodes = [x-A, y-A, z-B],
+    egraph:make_index(Nodes, Index),
+    rb_size(Index, Size).
+
+:- end_tests(make_index_more3).
+
+
+% ordsets: ord_subtract/3 (edge cases)
+:- begin_tests(ordsets_ord_subtract_edge).
+
+% Removing one of two identical-key pairs removes only the identical pair, leaving the other
+test(pair_remove_one_of_same_key_two_ids, true(R == [a-Y])) :-
+    X = _, Y = _, X \== Y,
+    ord_add_element([], a-X, S1),
+    ord_add_element(S1, a-Y, S),
+    ord_subtract(S, [a-X], R).
+
+% Subtracting a variable from a set containing a compound with that variable does not remove the compound
+% Terms differ: X \== f(X), so f(X) remains
+test(var_vs_compound_not_removed, true(R == [f(X)])) :-
+    X = _,
+    ord_subtract([f(X)], [X], R).
+
+:- end_tests(ordsets_ord_subtract_edge).
