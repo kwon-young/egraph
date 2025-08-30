@@ -1,54 +1,55 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms with logic variables as mutable unique identifiers.
-Each class is keyed by an Id variable that may only be aliased via (=)/2.
+E-graphs for Prolog terms where class identifiers are logic variables.
+Each class Id is a logic variable that may only be aliased using (=)/2.
 Compare Id variables by identity with (==) and never by name or print-name.
 
-Nodes are an ordset of Key-Id pairs where Key is an atom, a var, or F(ChildIds).
+Nodes are an ordset of Key-Id pairs where Key is an atom, a variable, or F(Ids).
 Keys preserve variable identity and are never alpha-renamed or normalized.
 Ids are opaque logic variables and must not be inspected or compared by name.
-Canonicalization keeps at most one Key-Id per Key and is performed by
-merge_nodes/2 after any aliasing.
 
-Rules are pure producers that emit Key-Id pairs and equalities A=B only.
+Canonicalization keeps at most one Key-Id per Key and is done by merge_nodes/2.
+Unifying Ids may instantiate variables inside Keys and the next merge collapses
+any collisions.
+
+Rules are pure producers that emit only Key-Id pairs and equalities A=B.
 Rules must not inspect or bind Id variables and must not unify Keys.
-Only rebuild//1 and merge_nodes/2 perform Id aliasing and must run after rules
-to propagate effects and to re-canonicalize.
+Only rebuild//1 and merge_nodes/2 may alias Ids and must run after rules to
+propagate effects and to re-canonicalize.
 
-add//2 inserts a term as nodes and returns its class Id via DCG.
-union//2 aliases two class Ids via DCG and re-canonicalizes.
+add//2 inserts a term as nodes and yields its class Id via DCG.
+union//2 aliases two class Ids via DCG and then re-canonicalizes.
 saturate//1 runs the fixed-point driver with an unbounded step budget.
-saturate//2 runs the driver with a bounded step budget.
+saturate//2 runs the driver with an explicit bounded step budget.
 extract//0 aliases each class Id to a representative Key via DCG.
 extract/1 aliases each class Id to a representative Key in place.
 
 saturate iterates make_index, match, rebuild, and merge until the node count
-stabilizes, and alias-only steps do not count as progress.
+stabilizes and alias-only steps do not count as progress.
 
-Ids are compared by identity with (==) and never by name or print-name.
-Unifying Ids may instantiate variables inside Keys, and the next merge
-collapses any resulting collisions.
-lookup/2 expects canonicalized input and non-canonical sets may fail
-spuriously.
-
+lookup/2 expects canonicalized input and non-canonical sets may fail spuriously.
 Keys are variable-identity sensitive and variant-equal Keys with distinct
-variables are different by design.
-BUG: assoc//2 has a cut that commits before rb_lookup/3 and fails when BC is
-absent from the Index.
-The intended behavior is to emit no output when BC is absent.
+variables are intentionally treated as different Keys.
+
+BUG: assoc//2 commits before rb_lookup/3 and fails when BC is absent in Index.
+Intended behavior is to emit no output when BC is absent.
 
 The goal of extract is to extract a concrete prolog term per class by
-unifying each class Id with a representative Key.
-Extract is the last standard step of using an egraph and must not be followed
-by rewriting or saturation.
+unifying each class Id with one representative Key.
+Extraction is the last standard step of using an egraph and must not be
+followed by rewriting or saturation.
 
 Notes.
-Use Id variables as mutable unique identifiers but keep unification restricted
-to rebuild//1 and merge_nodes/2.
+Use Id variables as mutable unique identifiers and restrict unification to
+rebuild//1 and merge_nodes/2.
 Do not inspect, print, or compare Id variables by name in user code or rules.
-Portability note: using the atom inf as an unbounded step in saturate//2 may
-be non-portable across Prolog systems.
+Portability note: the atom inf as an unbounded step in saturate//2 may be
+non-portable across Prolog systems.
+
+Unknowns.
+DCG wrappers for //2 nonterminals rely on SWI-Prolog expansion that maps them
+to their +(2) counterparts and other systems may require explicit wrappers.
 */
 
 /* ----------------------------------------------------------------------
