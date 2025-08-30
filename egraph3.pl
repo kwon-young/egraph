@@ -64,7 +64,7 @@ Notes
 %  - Algo: prune by standard order, then confirm with (==). Binds Id only; never builds or unifies Keys.
 %  - Det/Cost: semidet, O(N); steadfast; no choicepoints on success.
 %  Notes:
-%  - Undefined on non-canonical input.
+%  - Non-canonical input is a precondition violation and may yield spurious failure.
 %  - Ids are fresh logic vars (mutable class ids); compare by identity (==), never by name.
 %  - Keys are those produced by add/4.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
@@ -122,6 +122,7 @@ add(Term, Id, In, Out) :-
 %  Pre: In is canonical.
 %  Det/Cost: O(N). det; quasi‑pure (may introduce one fresh Id; no Id unification).
 %  Notes:
+%  - Out is canonical.
 %  - Compare Ids by identity (==); never by name/print-name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -136,7 +137,7 @@ add_node(Node, Id, In, Out) :-
 %  Alias classes by unifying IdA with IdB, then canonicalize.
 %  - Only Id vars unify; Keys never do. This may instantiate vars inside Keys; merge_nodes/2 collapses collisions.
 %  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Ids. Backtrackable.
-%  Det: det. Effect is Id aliasing only.
+%  Det: det. Side effect: Id aliasing only (backtrackable).
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -150,6 +151,7 @@ union(A, B, In, Out) :-
 %  - Only Id vars unify; Keys never do. Id unification may instantiate vars inside Keys; the next pass collapses collisions.
 %  Cost: O(N log N) per pass; repeats while merges occur.
 %  Notes:
+%  - Out is canonical (sorted; one Key-Id per Key).
 %  - Terminates: the number of distinct Id vars strictly decreases on any merge.
 %  - Representative Id is the first after sorting; do not rely on it across backtracking.
 %  - Rebuild any Id→[Keys] index after this (Ids may have aliased).
@@ -166,6 +168,7 @@ merge_nodes(In, Out) :-
 %  Cost: O(|T|). det.
 %  Notes:
 %  - Id unification may instantiate variables embedded in Keys (collapsed in next pass).
+%  - Keys never unify; only Ids may alias.
 %  - Changed is the progress flag for merge_nodes/2.
 %  - Uses (=)/2 via maplist(=(H), T); no occurs-check; safe for fresh Ids.
 merge_group(Node-[H | T], Node-H, In, Out) :-
@@ -275,7 +278,7 @@ constant_folding_b([], _, _, _) --> [].
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply each Rule(Node,Index)// in Rules (list of DCG nonterminals) to Node using Index; append outputs in rule order.
 %  - Node is Key-Id; rules may emit only Key-Id items and (=)/2 between Ids.
-%  Impl: library(dcg/high_order):sequence//2. Index: rbtree Id -> [Keys]; read-only.
+%  Uses library(dcg/high_order):sequence//2. Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
 %  - Pure producer; steadfast; Ids are opaque mutable identifiers (do not inspect/bind).
 %  - Output order: per-node, then per-rule. Do not rely on representative Ids.
@@ -299,7 +302,8 @@ rule(Index, Node, Rule) -->
 %  Cost: O(N log N). det; pure; steadfast.
 %  Impl: transpose_pairs/2 flips Key-Id to Id-Key; Keys are stored as-is (no unification).
 %  Notes:
-%  - Intended for the current iteration only; rebuild after union/rebuild.
+%  - Result is an rbtree(Id->[Keys]) with nonempty value lists; rebuild after any Id aliasing.
+%  - Intended for the current iteration only.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -328,7 +332,7 @@ match(Rules, Worklist, Index, Matches) :-
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
 %  Apply Matches (nodes and (=)/2), then canonicalize:
-%    - exclude(unif, Matches, NewNodes): perform A=B; drop equalities.
+%    - exclude(unif, Matches, NewNodes): perform A=B, discard (=)/2 items; keep only Key-Id items.
 %    - push_back(NewNodes): enqueue Key-Id items.
 %    - merge_nodes: dedupe and propagate Id aliasing.
 %  Effects: Id aliasing via (=)/2; backtrackable. May instantiate variables inside Keys.
