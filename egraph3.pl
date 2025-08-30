@@ -274,7 +274,7 @@ Do not inspect, compare by name, or print Id variables in user code or rules.
 %% or bind them.
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Find Id for Key in a canonical ordset of Key-Id pairs.
+%  Find Id for Key in a canonical ordset of Key-Id pairs using (==) on Keys.
 %  - Pre: Pairs canonical (run merge_nodes/2 after aliasing).
 %  - Method: prune by standard order; confirm Key identity with (==); only binds Id.
 %  - Det/Big-O: semidet, steadfast; O(N); no choicepoints on success.
@@ -365,7 +365,7 @@ union(A, B, In, Out) :-
 %  DCG wrapper for merge_nodes/2; emits nothing. Pure producer.
 %  Note: On SWI-Prolog, DCG expansion calls merge_nodes/2 directly.
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize Nodes to at most one Key-Id per Key; repeat while any group merges.
+%  Canonicalize to at most one pair per Key by unifying duplicate Ids and repeat until stable.
 %  - Steps: sort -> group -> unify all Ids in each group with the first (representative).
 %  - Only Id variables unify; Keys never do. Aliasing may instantiate variables inside Keys; the next pass collapses collisions.
 %  Complexity: O(N log N) per pass; repeats while merges occur.
@@ -507,7 +507,8 @@ constant_folding_b([], _, _, _) --> [].
 %  Apply Rules to Node using Index; append outputs in rule order.
 %  Each Rule is a DCG nonterminal Rule(Node,Index)//2.
 %  - Node is Key-Id; rules may emit only Key-Id items and (=)/2 between Ids.
-%  - Uses sequence//2 from library(dcg/high_order). Index: rbtree Id -> [Keys]; read-only.
+%  - Uses sequence//2 from library(dcg/high_order).
+%  Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
 %  - Pure producer; steadfast; Ids are opaque mutable identifiers (do not inspect/bind).
 %  - Output order: per-node, then per-rule. Do not rely on representative Ids.
@@ -555,7 +556,7 @@ match(Rules, Worklist, Index, Matches) :-
 %  - Scheduling helper only; merge_nodes/2 handles canonicalization.
 %  Notes:
 %  - Implemented with the DCG idiom: push_back(L), L --> [].
-%  - Pure w.r.t. Keys/Ids; no aliasing or inspection of Ids.
+%  - Pure with respect to Keys and Ids; no aliasing or Id inspection.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
 %  Apply Matches (Key-Id items and (=)/2 between Ids), then canonicalize:
@@ -617,7 +618,8 @@ saturate(Rules, N, In, Out) :-
 %  Recognize Eq=(A=B) and perform A=B (Id aliasing). Only called by rebuild//1; never call from rules or user code.
 %  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id variables; effect is backtrackable.
 %  - Only class Id variables may appear on either side; Keys must not.
-%  Det: semidet; intentionally impure. Note: this is the only explicit Id unification outside merge_nodes/2.
+%  Det: semidet; intentionally impure.
+%  Note: this is intentionally the only explicit Id unification outside merge_nodes/2.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
@@ -631,7 +633,9 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extract/1. Final step: alias Ids to materialize one concrete Prolog term per class.
+%  DCG wrapper for extract/1.
+%  Final step: alias Ids to materialize one concrete Prolog term per class.
+%  It is the last standard step of using an egraph.
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
