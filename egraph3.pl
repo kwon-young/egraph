@@ -57,13 +57,14 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Read-only lookup of Id for Key in a canonical ordset (one Key-Id per Key).
-%  Pre: Pairs are canonical (output of merge_nodes/2).
-%  Prunes by standard order; confirms identity with (==) to preserve variable identity.
+%  Read-only lookup of Id for Key in a canonical ordset (exactly one Key-Id per Key).
+%  Pre: Pairs must be canonical (sorted, de-duplicated) as produced by merge_nodes/2.
+%  Strategy: prune by standard order then confirm term identity with (==) to preserve variable identity.
 %  Effects: binds only Id; fails if Key is absent; no allocation; never unifies Keys or Ids.
-%  Ids: fresh logic variables acting as mutable class identifiers; never compare by name.
+%  Ids: fresh logic variables that serve as mutable, backtrackable class identifiers; never compare by name.
 %  Complexity: O(N) worst case with pruning via compare/3.
 %  Determinism: semidet; steadfast; pure.
+%  Note: If Pairs is not canonical, this may miss matches or pick the wrong Id; always call merge_nodes/2 first.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -310,23 +311,23 @@ rebuild(Matches) -->
    merge_nodes.
 %! saturate(+Rules)// is det.
 %  Run Rules to a length-based fixpoint (no new Key-Id pairs or equalities).
-%  SWI-Prolog: saturate//2 uses MaxSteps=inf; on SWI, 'inf' is not numeric and (N>0) raises type_error. Prefer saturate(Rules, LargeInteger) or adjust the guard.
+%  Portability (SWI): This uses MaxSteps=inf as a sentinel; on SWI, 'inf' is not numeric and the guard (N > 0) raises type_error. Prefer saturate(Rules, LargeInteger) on SWI or change the guard to allow 'inf'.
 %  Determinism: det; Rules must be pure producers (emit only nodes/equalities).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run at most MaxSteps iterations (integer >= 0).
-%  Fixpoint: compare lengths before/after rebuild (after merge_nodes/2).
-%  Alias-only steps do not change length; progress requires adding/removing pairs.
-%  SWI-Prolog: MaxSteps must be an integer; 'inf' makes (N > 0) raise type_error.
+%  Fixpoint test: compare lengths before/after rebuild (after merge_nodes/2).
+%  Alias-only steps (only A=B equalities) do not change length; progress requires adding/removing pairs.
+%  Portability (SWI): MaxSteps must be an integer; passing 'inf' makes (N > 0) raise type_error.
 %  Determinism: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker that threads the e-graph explicitly.
 %  Rebuild Id->Keys index each iteration (Ids may alias).
 %  Stop when length is stable or MaxSteps is exhausted.
-%  Rules must be pure producers (emit nodes/equalities only). Unification happens only via rebuild//1.
+%  Rules must be pure producers (emit nodes/equalities only). Unification happens only in rebuild//1 and merge_nodes/2.
 %  Ids: logic variables as mutable class ids; never compare by name. Always rebuild the index after aliasing.
-%  SWI-Prolog: MaxSteps must be an integer; 'inf' with (N > 0) raises type_error.
+%  Portability (SWI): MaxSteps must be an integer; using 'inf' triggers a type_error at (N > 0). Use a large integer on SWI or adjust the guard to handle the sentinel.
 %  Determinism: det driver; nondet only from Rules.
 saturate(Rules, N, In, Out) :-
    (  N > 0
