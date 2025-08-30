@@ -128,11 +128,11 @@ add_node(Node, Id, In, Out) :-
 
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
-%  Alias two classes by unifying IdA with IdB, then canonicalize with merge_nodes/2.
-%  - IdA/IdB must be class Ids from this e-graph; mixing foreign vars breaks invariants.
-%  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
-%  Effect: Id aliasing only (logical/backtrackable). Keys never unify here; effects revert on backtracking.
-%  Notes: Unifying Ids can instantiate variables inside Keys; merge_nodes/2 will expose and collapse any new duplicates. Only Id variables unify; Keys never do.
+%  Alias classes by unifying IdA with IdB, then canonicalize.
+%  - IdA/IdB must be class Ids from this e-graph.
+%  - Uses (=)/2 (no occurs‑check); safe (Ids are fresh, acyclic vars).
+%  Effect: Id aliasing only; Keys never unify; effects backtrackable.
+%  Notes: Id aliasing may instantiate variables inside Keys; merge_nodes/2 collapses any new duplicates.
 %  Determinism: det.
 union(A, B, In, Out) :-
    A = B,
