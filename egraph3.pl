@@ -392,7 +392,7 @@ unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
 %  Extract one concrete Prolog term per class by unifying each class Id with one of its Keys (a representative).
-%  Goal: materialize concrete terms; this is the last standard step of using an e-graph.
+%  Goal: extract a concrete Prolog term per class; this is the last standard step of using an e‑graph.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, inspect Nodes directly.
 %  Det: semidet; fails only if some class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
@@ -402,7 +402,7 @@ extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
 %  DCG wrapper for extract/1; aliases Ids to materialize exactly one concrete term per class.
-%  Last standard step of using an e-graph; stop rewriting/saturation after this.
+%  Last standard step of using an e‑graph; stop rewriting/saturation after this.
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
