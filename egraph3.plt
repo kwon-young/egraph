@@ -436,7 +436,7 @@ test(match_comm_eq, true(member(AB=BA, Matches))) :-
 
 % Appends its list to DCG output
 test(push_back_appends, true(Out == [a,b])) :-
-    phrase(egraph:push_back([a,b]), Out).
+    phrase(egraph:push_back([a,b]), [], Out).
 
 :- end_tests(push_back).
 
@@ -604,7 +604,7 @@ test(example1_contains_a, true(member(a-_A, G))) :-
 test(example1_contains_f4a, true(member(f(f(f(f(a))))-_Id, G))) :-
     egraph:example1(G).
 
-% Ids for a and f(f(a)) are aliased by the explicit union in example1/1
+% BUG: example1/1 should alias Ids for a and f(f(a)) via the explicit union, but currently A does not equal FFA (observed A unifies with f(a)).
 test(example1_ids_aliased, true(A==FFA)) :-
     egraph:example1(G),
     member(a-A, G),
