@@ -16,7 +16,7 @@ Execution
 Caveats
 - The fixpoint in saturate//2 is length-based; alias-only steps (A=B with no new pairs) do not change the length and are invisible to the stop test.
 - Never serialize or compare Ids by print-name; treat them as opaque logic variables.
-- extract//0 and extract/1 use member/2 and may alias Ids; both are for validation only. To inspect the graph without aliasing Ids, use the Nodes list directly.
+- extract//0 and extract/1 alias Ids via member/2 to choose a concrete representative term per class; use them as the final step of an e-graph pipeline. To inspect without aliasing, examine the Nodes list directly.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
@@ -34,7 +34,7 @@ Implementation predicates (internal)
 - rebuild//1 (det, Id effects only): Apply (=)/2 equalities (alias Ids), enqueue new nodes, then canonicalize (merge_nodes/2).
 - unif/1 (semidet, intentionally impure): True for Eq=(A=B); performs A=B (no occurs-check). Only for rebuild//1 via exclude/3. Safe for fresh, acyclic Ids. Never call from rules.
 - comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): Example rewrite rules/helpers. Pure producers; consult Index only; never inspect/bind Ids; no in-place rewrites.
-- extract/2, extract_node/1 (semidet, aliases Ids): Validation helpers for extract//0. Intentionally alias Ids via member/2; discard bindings afterwards.
+- extract/2, extract_node/1 (semidet, aliases Ids): Extraction helpers for extract//0. They unify each class Id with a concrete Key via member/2; use as the final step and discard bindings if you must continue analysis.
 - saturate/4 (det, driver): Iterate with a step bound. Rebuild Id->[Keys] each iteration; only Ids may unify (during rebuild/merge). Stop when length is unchanged; alias-only steps are not progress.
 - DCG bridging: DCG calls to merge_nodes//0 expand to merge_nodes/2; no extra wrapper required on SWI-Prolog. Nonterminals must remain pure producers.
 - Id discipline: Ids are fresh logic variables acting as mutable class identifiers. Alias via unification only; compare by identity (==), never by name/print-name.
@@ -399,37 +399,36 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Validate and return Nodes (intentionally aliases Ids).
-%  - Aliases class Id variables via member/2; for validation only.
+%  Extract concrete representatives by binding each class Id to one of its Keys (via member/2).
+%  - Purpose: final step of using an e-graph to obtain concrete Prolog terms.
+%  - Side effect: aliases Ids; discard these bindings if you continue rewriting.
 %  - To inspect without aliasing, use the Nodes list directly.
-%  Ids: logic variables; discard any bindings produced here.
+%  Ids: logic variables; bindings are intentional in this step.
 %  Det: semidet.
-%  Notes:
-%  - Intentionally aliases Ids; do not use in normal rewriting or production code.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  Validate: every Id-class has at least one Key witness.
-%  Warning: intentionally aliases Ids via member/2; prefer extract/1 in user code.
+%  DCG wrapper to extract representatives (aliases Ids) as the final step.
+%  - Succeeds iff every class has at least one Key; otherwise fails.
+%  - Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  Helper for extract//0; succeeds iff each Id-group is nonempty.
-%  - Aliases Ids; discard any bindings afterwards. Pure w.r.t. Keys.
+%  DCG implementation of extract//0: for each Id->[Keys] group, unify Id with a chosen Key.
+%  - Purpose: extract concrete terms; use as the final step after saturation/merges.
+%  - Side effect: aliases Ids; do not continue rewriting with these bindings.
 %  Det: semidet.
 %  Notes:
-%  - Fails only if the index is corrupted (should not happen with merge_nodes/2).
-%  - Side-effect is intentional (Id aliasing); do not keep bindings.
-%  - For tests/validation only; do not rely on the bindings it creates.
+%  - Fails only if a class has no Keys (should not happen after merge_nodes/2).
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
    extract_node(Groups).
 %! extract_node(+Groups) is semidet.
-%  True iff every Id-group has at least one Key; fails otherwise.
-%  - Unifies each Id with one of its Keys via member/2 (validation only).
+%  For each Id->[Keys] group, unify Id with one of its Keys; fails if a group is empty.
+%  - This chooses concrete representatives (aliases Ids) and is the core of extraction.
 %  - With Groups built from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
-%  Det: semidet; aliases Ids; discard bindings after use.
+%  Det: semidet; aliases Ids.
 %  Notes:
-%  - Intentionally aliases Ids; use only in tests/validation.
+%  - Perform extraction only as the final step; do not continue rewriting with these bindings.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
