@@ -27,8 +27,8 @@ test(lookup_fail_absent, fail) :-
 :- end_tests(lookup).
 
 
-% add//2 and add/4
-:- begin_tests(add).
+% add/4
+:- begin_tests(add_4).
 
 % Add atom: second add reuses the same Id
 test(add_atom_reuse_id, true(Id2==Id)) :-
@@ -52,6 +52,11 @@ test(add_compound_child_right, true(member(b-_B, Out))) :-
 test(add_compound_parent_uses_child_ids, true((member(a-A, Out), member(b-B, Out), member(f(A,B)-Id, Out)))) :-
     egraph:add(f(a,b), Id, [], Out).
 
+:- end_tests(add_4).
+
+% add//2
+:- begin_tests(add_dcg_2).
+
 % DCG form: add//2 builds nodes via phrase/3
 % Verifies that adding an atom via DCG yields a singleton list with that node.
 test(add_dcg_atom, true(Out == [a-Id])) :-
@@ -62,11 +67,11 @@ test(add_dcg_atom, true(Out == [a-Id])) :-
 test(add_dcg_compound_builds_all_nodes, true((member(a-A, Out), member(b-B, Out), member(f(A,B)-Id, Out)))) :-
     phrase(egraph:add(f(a,b), Id), [], Out).
 
-:- end_tests(add).
+:- end_tests(add_dcg_2).
 
 
-% add_node/3 and add_node/4
-:- begin_tests(add_node).
+% add_node/3
+:- begin_tests(add_node_3).
 
 % Inserting a new node produces it with a fresh Id
 test(add_node_insert_member, true(member(x-Id, Out))) :-
@@ -88,24 +93,29 @@ test(add_node_reuse_noop, true(Out==In)) :-
     In = [x-X],
     egraph:add_node(x, _Id, In, Out).
 
+:- end_tests(add_node_3).
+
+% add_node/4
+:- begin_tests(add_node_4).
+
 % Pair form delegates and uses provided Id
 test(add_node_pair_form_member, true(member(y-Y, Out))) :-
     X = _,
     egraph:add_node(y-Y, [x-X], Out).
 
-:- end_tests(add_node).
+:- end_tests(add_node_4).
 
 
-% union//2 and union/4
-:- begin_tests(union).
+% union//2
+:- begin_tests(union_dcg_2).
 
 % Unifies the two Ids (aliases classes)
-test(union_alias_ids, true(A==B)) :-
+test(union_alias_ids_dcg, true(A==B)) :-
     A = _, B = _,
     phrase(egraph:union(A, B), [x-A, y-B], _Out).
 
 % Preserves both distinct keys after alias
-test(union_keeps_both_keys, true((member(x-A, Out), member(y-A, Out)))) :-
+test(union_keeps_both_keys_dcg, true((member(x-A, Out), member(y-A, Out)))) :-
     A = _, B = _,
     phrase(egraph:union(A, B), [x-A, y-B], Out).
 
@@ -116,19 +126,35 @@ test(union_dcg_pipeline_alias, true(A==FFA)) :-
             egraph:union(A, FFA)), [], _Out).
 
 % Union on same Id is a no-op on the set
-test(union_same_id_noop, true(Out == [x-A])) :-
+test(union_same_id_noop_dcg, true(Out == [x-A])) :-
     A = _,
     phrase(egraph:union(A, A), [x-A], Out).
 
-:- end_tests(union).
+:- end_tests(union_dcg_2).
+
+% union/4
+:- begin_tests(union_4).
+
+% Unifies the two Ids (aliases classes)
+test(union_alias_ids_4, true(A==B)) :-
+    A = _, B = _,
+    egraph:union(A, B, [x-A, y-B], _Out).
+
+% Preserves both distinct keys after alias
+test(union_keeps_both_keys_4, true((member(x-A, Out), member(y-A, Out)))) :-
+    A = _, B = _,
+    egraph:union(A, B, [x-A, y-B], Out).
+
+% Union on same Id is a no-op on the set
+test(union_same_id_noop_4, true(Out == [x-A])) :-
+    A = _,
+    egraph:union(A, A, [x-A], Out).
+
+:- end_tests(union_4).
 
 
-% merge_nodes//0 and merge_nodes/2
-:- begin_tests(merge_nodes).
-
-% DCG form is a no-op on empty set
-test(merge_nodes_dcg_empty_noop, true(Out == [])) :-
-    phrase(egraph:merge_nodes, [], Out).
+% merge_nodes/2
+:- begin_tests(merge_nodes_2).
 
 % Duplicate keys are deduplicated to a single representative pair
 test(merge_nodes_dedup_output_single_key, true(Out == [x-A])) :-
@@ -161,13 +187,22 @@ test(merge_nodes_alias_instantiates_keys_ids_equal, true(FB==FA)) :-
     egraph:merge_nodes(In, Out),
     _ = Out.
 
+:- end_tests(merge_nodes_2).
+
+% merge_nodes//0
+:- begin_tests(merge_nodes_dcg_0).
+
+% DCG form is a no-op on empty set
+test(merge_nodes_dcg_empty_noop, true(Out == [])) :-
+    phrase(egraph:merge_nodes, [], Out).
+
 % DCG wrapper on non-canonical input: deduplicates and aliases Ids
 % Ensures phrase/3 with merge_nodes//0 canonicalizes [x-A,x-B] into [x-A] and unifies A,B.
 test(merge_nodes_dcg_dedup_and_alias, true((Out == [x-A], A==B))) :-
     A = _, B = _,
     phrase(egraph:merge_nodes, [x-A, x-B], Out).
 
-:- end_tests(merge_nodes).
+:- end_tests(merge_nodes_dcg_0).
 
 
 % merge_group/4
@@ -511,39 +546,49 @@ test(rebuild_drops_equalities, true(\+ member(_=_ , Out))) :-
 :- end_tests(rebuild).
 
 
-% saturate//1, saturate//2, saturate/4
-:- begin_tests(saturate).
+% saturate//1
+:- begin_tests(saturate_dcg_1).
 
-% saturate//1 adds exactly one new node for comm and reaches fixpoint
-test(saturate_fixpoint_adds_one, true(L2 is L1 + 1)) :-
+% Verifies saturate//1 adds exactly one new node for comm and reaches fixpoint
+test(saturate1_fixpoint_adds_one, true(L2 is L1 + 1)) :-
     phrase(egraph:add(1+2, _), [], G0),
     length(G0, L1),
     phrase(egraph:saturate([comm]), G0, G2),
     length(G2, L2).
 
-% saturate//1 result contains the commuted node
-test(saturate_fixpoint_contains_commuted, true(member(2+1-_, G2))) :-
+% Verifies saturate//1 result contains the commuted node
+test(saturate1_contains_commuted, true(member(2+1-_, G2))) :-
     phrase(egraph:add(1+2, _), [], G0),
     phrase(egraph:saturate([comm]), G0, G2).
 
-% saturate//1 result contains the original node
-test(saturate_fixpoint_contains_original, true(member(1+2-_, G2))) :-
+% Verifies saturate//1 result contains the original node
+test(saturate1_contains_original, true(member(1+2-_, G2))) :-
     phrase(egraph:add(1+2, _), [], G0),
     phrase(egraph:saturate([comm]), G0, G2).
 
-% saturate//2 with MaxSteps=0 leaves graph unchanged
-test(saturate_zero_steps_no_change, true(G == G0)) :-
+:- end_tests(saturate_dcg_1).
+
+% saturate//2
+:- begin_tests(saturate_dcg_2).
+
+% Verifies saturate//2 with MaxSteps=0 leaves graph unchanged
+test(saturate2_zero_steps_no_change, true(G == G0)) :-
     phrase(egraph:add(1+2, _), [], G0),
     phrase(egraph:saturate([comm], 0), G0, G).
 
-% saturate/4 one step grows by exactly one node for comm rule
-test(saturate_driver_one_step_grows_by_one, true(L0p1 is L0 + 1)) :-
+:- end_tests(saturate_dcg_2).
+
+% saturate/4
+:- begin_tests(saturate_4).
+
+% Verifies saturate/4 one step grows by exactly one node for comm rule
+test(saturate4_one_step_grows_by_one, true(L0p1 is L0 + 1)) :-
     phrase(egraph:add(1+2, _), [], G0),
     egraph:saturate([comm], 1, G0, G1),
     length(G0, L0),
     length(G1, L0p1).
 
-:- end_tests(saturate).
+:- end_tests(saturate_4).
 
 
 % unif/1
@@ -642,12 +687,11 @@ test(example1_contains_a, true(member(a-_A, G))) :-
 test(example1_contains_f4a, true(member(f(f(f(f(a))))-_Id, G))) :-
     egraph:example1(G).
 
-% BUG: Id for 'a' appears unified with the term f(a) in example1/1 result; Ids should be logic variables aliased by union/2, not unified with Keys. Demonstrate by expecting failure of identity A==FFA.
-test(example1_ids_aliased, [fail]) :-
+% Aliases the Id for 'a' with the Id for f(f(a)) via union/2
+test(example1_ids_aliased_by_union, true(A==FFA)) :-
     egraph:example1(G),
     member(a-A, G),
-    member(f(f(a))-FFA, G),
-    A == FFA.
+    member(f(f(a))-FFA, G).
 
 :- end_tests(example1).
 
