@@ -58,14 +58,14 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Lookup Id for Key in a canonical ordset of Key-Id.
-%  - Pre: Pairs canonical (run merge_nodes/2 first).
-%  - Algo: prune by standard order, confirm with (==); binds Id only.
-%  - Det/Cost: semidet, O(N) worst case; no choicepoints on success; steadfast.
+%  Find Id for Key in a canonical ordset of Key-Id pairs.
+%  - Pre: Pairs canonical (call merge_nodes/2 first).
+%  - Algo: prune via standard order, confirm with (==); binds Id only.
+%  - Det/Cost: semidet, O(N); steadfast; no choicepoints on success.
 %  Notes:
 %  - Undefined on non-canonical input.
-%  - Ids are fresh logic variables used as mutable class ids; compare by identity (==), never by name.
-%  - Keys should be produced via add/4.
+%  - Ids are fresh logic variables (mutable class ids); compare by identity (==), never by name.
+%  - Keys should be produced by add/4.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -95,14 +95,14 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Construct Key for Term and ensure presence; return its class Id.
-%  - compound Term: Key=F(ChildIds) (left-to-right ⇒ stable congruence).
-%  - atom/var Term: Key=Term (variable identity is part of Key).
-%  - Emits only Key-Id; never unifies Ids. merge_nodes/2 dedupes.
+%  Construct Key for Term and ensure its presence; return its class Id.
+%  - compound Term: Key = F(ChildIds) (left-to-right ⇒ stable congruence).
+%  - atom/var Term: Key = Term (variable identity is part of the Key).
+%  - Emits only Key-Id; never unifies Ids. merge_nodes/2 deduplicates.
 %  Pre: In is an ordset (prefer canonical).
-%  Det/Cost: build O(|Term|), insert O(N). det; steadfast; pure w.r.t. Keys.
+%  Det/Cost: build O(|Term|), insertion O(N) via ord_add_element/3. det; steadfast; pure w.r.t. Keys.
 %  Notes:
-%  - Id is fresh logic var when inserted; otherwise reused. DCG form is a pure producer.
+%  - Id is a fresh logic var when inserted; otherwise reused. DCG form is a pure producer.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -114,7 +114,7 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node appears with a class Id in the canonical ordset.
+%  Ensure Node has a class Id in the canonical ordset.
 %  - If present: reuse Id and Out=In; else insert Node-Id with a fresh Id var.
 %  - Respects standard order and (==) (variable identity); no canonicalization here.
 %  - Never unifies Ids; ord_add_element/3 preserves set semantics.
@@ -132,8 +132,8 @@ add_node(Node, Id, In, Out) :-
 
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
-%  Alias classes by unifying IdA and IdB, then canonicalize.
-%  - Only Id vars unify; Keys never do. This may instantiate vars inside Keys; merge_nodes/2 collapses any collisions.
+%  Alias classes by unifying IdA with IdB, then canonicalize.
+%  - Only Id vars unify; Keys never do. This may instantiate vars inside Keys; merge_nodes/2 collapses collisions.
 %  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Ids. Backtrackable.
 %  Det: det. Effect is Id aliasing only.
 union(A, B, In, Out) :-
@@ -341,15 +341,15 @@ rebuild(Matches) -->
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Run Rules until the number of Key-Id pairs is unchanged after rebuild/merge.
+%  Run Rules until the number of Key-Id pairs stops changing after rebuild/merge.
 %  Det: det. Rules must be pure producers (emit only Key-Id and (=)/2). Alias-only steps do not count as progress.
-%  Portability: delegates to saturate//2 with MaxSteps=inf. On SWI-Prolog, inf>0 raises type_error; use saturate//2 with a large integer instead.
+%  Portability: delegates to saturate//2 with MaxSteps=inf. On SWI-Prolog, inf>0 raises type_error; use saturate//2 with a large integer.
 %  Notes:
-%  - Fixpoint is length-based and ignores alias-only steps (no add/remove of pairs).
+%  - Fixpoint is length-based; alias-only steps are ignored (no add/remove of pairs).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
-%  Run up to MaxSteps iterations (length-based stopping).
+%  Run up to MaxSteps iterations (length-based stop).
 %  - MaxSteps: integer >= 0. The atom inf works only if the system defines inf > 0; otherwise pass a large integer.
 %  - Stop when the number of pairs is unchanged after rebuild/merge. Alias-only steps do not count as progress.
 %  Det: det.
@@ -395,9 +395,9 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Validate and return Nodes (aliases Ids intentionally).
+%  Validate and return Nodes (intentionally aliases Ids).
 %  - Aliases class Id variables via member/2; for validation only.
-%  - To inspect without aliasing, use the node list directly.
+%  - To inspect without aliasing, use the Nodes list directly.
 %  Ids: logic variables; discard any bindings produced here.
 %  Det: semidet.
 %  Notes:
@@ -414,7 +414,7 @@ extract(Nodes) :-
 %  Notes:
 %  - Fails only if the index is corrupted (should not happen with merge_nodes/2).
 %  - Side-effect is intentional (Id aliasing); do not keep bindings.
-%  - For tests/validation; do not rely on the bindings it creates.
+%  - For tests/validation only; do not rely on the bindings it creates.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
