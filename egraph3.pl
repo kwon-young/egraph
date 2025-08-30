@@ -52,11 +52,14 @@ Notes
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  Read-only search in an ordset of Key-Id pairs.
 %  - Pairs is a strictly ordered ordset; Key must be nonvar.
-%  - Equality check: prune by standard order, then confirm with (==) to preserve variable identity in Keys.
-%  - Complexity: O(N) (manual 4-way unroll).
+%  - Equality: prune by standard order, then confirm with (==) to preserve variable identity in Keys.
+%  - Complexity: O(N) (manual 4-way unroll for speed and locality).
 %  - Effects: binds Val only; Keys/Pairs remain untouched.
 %  - Fails if Key is not present.
-%  Note: Ids are opaque logic variables used as mutable class identifiers; never unify/inspect them here.
+%  Determinism: semidet.
+%  Notes:
+%    - Ids are opaque logic variables used as mutable, backtrackable class identifiers; never unify/inspect them here.
+%    - Pairs must be a canonical ordset; behavior is undefined if it is not strictly ordered.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -90,8 +93,11 @@ lookup(Item-V, [X1-V1]) :-
 %  - Compound: add subterms left-to-right; Key = F(ChildIds) (congruence).
 %  - Atomic/var: Key = Term (variable identity is part of the Key; no alpha/variant normalization).
 %  - No canonicalization/unification here; duplicates may appear. Call merge_nodes/2 after any aliasing.
+%  - DCG form threads the node set via difference lists; see add/4 for the worker.
 %  Effects: allocates fresh Ids only; Keys are never unified here.
-%  Note: Id is a fresh logic variable (mutable class Id). Unifying Ids later can instantiate variables inside Keys; all effects are logical/backtrackable.
+%  Determinism: det.
+%  Notes:
+%    - Id is a fresh logic variable (mutable class Id). Unifying Ids later can instantiate variables inside Keys; all effects are logical/backtrackable.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
