@@ -349,7 +349,7 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  Portability: calls saturate//2 with MaxSteps=inf. On SWI‑Prolog, do not use inf; call saturate//2 with a large integer bound instead.
+%  Portability: calls saturate//2 with MaxSteps=inf. On systems where N>0 over atoms errors (e.g., SWI‑Prolog), call saturate//2 with a large integer bound instead.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -392,18 +392,18 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Finalization step: for each class, unify its Id with one of its Keys (a representative), yielding a concrete Prolog term per class.
+%  Final step: for each class, alias its Id with one of its Keys (a representative) to materialize a concrete Prolog term per class.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, examine Nodes directly.
-%  Det: semidet; fails only if a class has no Keys (should not happen after merge_nodes/2).
+%  Det: semidet; fails only if some class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
-%  - This is the last standard step of using an e-graph; stop rewriting after extraction.
+%  - This is the last standard step of using an e-graph; stop rewriting/saturating after extraction.
 %  - Only Id variables unify; Keys never unify with each other.
 %  - Ids are logic variables (mutable class identifiers); compare by identity (==), never by print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for the final extraction; aliases Ids to materialize concrete Prolog terms.
-%  Goal: extract concrete Prolog terms; this is the last standard step of using an e-graph.
+%  DCG wrapper for extraction; aliases Ids to materialize concrete Prolog terms.
+%  This is the last standard step of using an e-graph.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
