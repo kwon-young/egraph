@@ -1,7 +1,7 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs with congruence closure for Prolog terms (variable-identity sensitive).
+E-graphs (congruence closure) for Prolog terms; Key equality is variable-identity sensitive.
 
 Core model
 - Nodes: ordset of Key-Id pairs (standard order). A Key is an atom/var or a term F(ChildIds). Variable identity is part of the Key (no alpha/variant normalization).
@@ -21,7 +21,7 @@ Caveats
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract//0, extract/1: last standard step; materializes concrete Prolog terms (one per class).
 
-Implementation predicates (concise reference)
+Implementation predicates (complete reference)
 - lookup/2 (semidet, pure, steadfast): canonical ordset lookup Key-Id; prunes by standard order, confirms with (==); binds Id only; O(N); no choicepoints on success.
 - add//2, add/4 (det, pure w.r.t. Keys): build Key=F(ChildIds) left-to-right (stable congruence); emit only Key-Id; no Id aliasing; In is an ordset (canonical preferred).
 - add_node/4, add_node/3 (det, quasi-pure): reuse Id if present, else insert Node-Id with a fresh Id var; Out canonical; never aliases Ids; In canonical.
@@ -194,7 +194,7 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; emit at most one triple per match.
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - If BC is absent from Index, the intended behavior is to emit nothing. Note: due to the cut in the first clause, the current implementation fails instead of succeeding with no emissions ([]).
+%  - If BC is absent, intended behavior is no output. BUG: the cut causes failure instead of emitting [].
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -348,7 +348,7 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  - Portability: N='inf' triggers arithmetic comparison in saturate/4; on systems where atoms cannot be compared arithmetically (e.g., SWI), prefer saturate//2 with a large finite MaxSteps.
+%  - Portability: saturate//1 uses MaxSteps=inf; on systems where N > 0 with atoms errors (e.g., SWI), prefer saturate//2 with a large integer MaxSteps.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
@@ -364,7 +364,7 @@ saturate(Rules) -->
 %  Det: det. Notes:
 %  - Progress is measured by list length after merge; alias-only steps are ignored.
 %  - Worklist is the current canonical Nodes.
-%  - N is compared arithmetically (N > 0); a non-numeric MaxSteps (e.g., 'inf') will error on systems that disallow arithmetic on atoms; use a large integer instead.
+%  - N is compared arithmetically (N > 0); using an atom like inf may error on some systems; use a large integer instead.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -391,21 +391,21 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Materialize one concrete Prolog term per class by unifying each class Id with a representative Key. This is the last standard step of using an e-graph.
-%  Effects: aliases Id variables (backtrackable). To inspect without aliasing, inspect Nodes directly.
-%  Det: semidet; fails only if some class has no Keys (should not happen after merge_nodes/2).
+%  Extract one concrete Prolog term per class by unifying each class Id with a chosen Key. This is the last standard step when using an e-graph.
+%  Effects: aliases Id variables (backtrackable). To inspect without aliasing, read Nodes directly.
+%  Semidet: fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
 %  - Ids are logic variables used as mutable class identifiers; compare by identity (==), never by name/print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extract/1. Aliases Ids to materialize one concrete term per class; this should be the last standard step (stop rewriting/saturation after this).
+%  DCG wrapper for extract/1. Aliases Ids to materialize one concrete term per class; this is the last standard step (stop rewriting/saturation after this).
 %  Nondet over representative choice; succeeds iff every class has at least one Key.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  Alias each class Id with one of its Keys (representative) and return Nodes unchanged.
-%  Goal: extract a concrete Prolog term per class; last standard step of using an e‑graph; stop rewriting/saturation afterward.
+%  Alias each class Id with one of its Keys (a representative) and return Nodes unchanged.
+%  Goal: extract concrete Prolog terms (one per class); this is the last standard step of using an e-graph; stop rewriting/saturation afterward.
 %  Det: semidet; fails only if some class has no Keys; nondet over representative choice.
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
