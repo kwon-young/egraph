@@ -1,52 +1,52 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms. Keys preserve variable identity; class Ids are fresh logic variables used as mutable, backtrackable, unique identifiers (opaque Ids).
+E-graphs for Prolog terms using logic variables as class identifiers.
 
-Core model
-- Nodes: ordset of Key-Id. Key is atom/var or F(ChildIds). Variable identity in Keys is significant (no alpha/variant normalization).
-- Class Ids: fresh logic variables; the only mutation is aliasing Ids via (=)/2.
-- Canonicalization: merge_nodes/2 deduplicates to one Key-Id per Key; rebuild any Id→Keys index after aliasing.
+Essentials
+- Nodes: canonical ordset of Key-Id, where Key is an atom/var or F(ChildIds).
+- Keys preserve variable identity (no alpha/variant normalization). Use (==) to confirm a hit after ordering-based pruning.
+- Class Ids: fresh logic variables acting as opaque, backtrackable, unique identifiers. The only mutation is aliasing Ids via (=)/2.
+- Canonicalization: merge_nodes/2 keeps at most one Key-Id per Key and must be (re)run after any Id aliasing.
 
-Execution (DCG pipeline)
-- Predicates are pure producers; only rebuild//1 and merge_nodes/2 unify Ids.
-- Rules emit only Key-Id items and equalities A=B; they never inspect or bind Ids.
-- rebuild//1 consumes equalities (Id aliasing), enqueues new items, then calls merge_nodes/2.
+Execution model (DCG pipeline)
+- Rules are pure producers: they may emit only Key-Id items and equalities A=B; they never inspect or bind Ids.
+- Only rebuild//1 and merge_nodes/2 unify Ids. rebuild//1 consumes A=B equalities (aliasing), enqueues items, then canonicalizes.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract//0, extract/1.
 
-Implementation predicates (brief reference)
-- lookup/2: canonical ordset lookup Key-Id; prune by standard order, confirm with (==); binds Id only; O(N); steadfast; no choicepoints on success.
-- add/4, add//2: build nodes; compound terms become F(ChildIds) left-to-right (stable congruence). Emit only Key-Id; no Id aliasing.
-- add_node/3, add_node/4: reuse Id if present; else insert with a fresh Id var. In/Out canonical. Never unify Ids.
-- merge_nodes/2, merge_nodes//0: sort → group → unify all Ids per Key with the first; repeat until no change. Keys never unify.
-- merge_group/4: helper for merge_nodes/2; unify tail Ids with head; Changed=true iff group had >1 Id.
-- make_index/2: build rbtree Id->[Keys] from canonical Nodes; keyed by Id identity (==); rebuild after any Id aliasing.
-- rules//3, rule//3: apply Rule(Node,Index)//2 in order; pure producers; output is per-node then per-rule.
-- match/4: run rules over a worklist to collect scheduled matches (Key-Id and (=)/2); no unification here.
-- push_back//1: O(1) append to DCG output; scheduling only.
+Implementation overview
+- lookup/2: O(N) lookup in canonical ordset; prunes by standard order then confirms with (==). Binds Id only; steadfast; no choicepoints on success.
+- add/4, add//2: build nodes. Compounds become F(ChildIds) left-to-right (stable congruence). Emit Key-Id only (no aliasing).
+- add_node/3, add_node/4: reuse Id if present; otherwise insert with a fresh Id. In/Out stay canonical. Never unify Ids.
+- merge_nodes/2, merge_nodes//0: sort → group → alias all Ids per Key to the first; repeat while any merge happened. Keys never unify.
+- merge_group/4: helper for merge_nodes/2; unifies tail Ids with head; signals whether any merge occurred.
+- make_index/2: rbtree Id->[Keys], keyed by Id identity (==). Always rebuild after aliasing.
+- rules//3, rule//3: apply Rule(Node,Index)//2 in the given order. Output order is per-node then per-rule.
+- match/4: apply rules over a worklist to produce scheduled matches (Key-Id and A=B); no unification here.
+- push_back//1: O(1) append to DCG output (scheduling only).
 - rebuild//1: perform (=)/2 on Ids, drop equalities, append Key-Id items, then merge_nodes/2.
-- unif/1: recognize Eq=(A=B) and perform A=B (Ids only). Used only by rebuild//1.
-- comm//2: commute +(A,B) to B+A and emit AB=BA.
-- assoc//2, assoc_//3: associativity for +/2 restricted by Index to members of class(BC). Note: current cut causes failure when BC is absent; intended behavior is no output.
+- unif/1: recognize and execute A=B (Ids only); used solely by rebuild//1.
+- comm//2: for (A+B)-AB, emit B+A-BA and AB=BA.
+- assoc//2, assoc_//3: associativity for +/2 constrained by class(BC) from Index. Known issue: a cut causes failure if BC is absent; intended behavior is “no output”.
 - reduce//2: neutral element 0 for +/2; if class(B) contains 0, emit A=AB.
-- constant_folding//2, constant_folding_a//4, constant_folding_b//4: fold numeric sums; emit VC-C and C=AB.
+- constant_folding//2 and helpers: fold numeric sums; emit VC-C and C=AB.
 
-Extraction
-- extract//0, extract/1, extract/2, extract_node/1: last standard step; alias each class Id with a chosen Key to materialize one concrete Prolog term per class. Use only after rewriting/saturation.
+Extraction (last standard step)
+- extract//0, extract/1, extract/2, extract_node/1: alias each class Id with a chosen representative Key to materialize one concrete Prolog term per class. Do not run rewriting after extraction.
 
 Driver
-- saturate//1, saturate//2, saturate/4: iterate make_index → match → rebuild → merge until length stabilizes. Alias-only steps (only A=B) are not progress.
-  Note: on SWI‑Prolog, saturate//1 uses MaxSteps=inf and will error; use saturate//2 with a large integer bound.
+- saturate//1, saturate//2, saturate/4: iterate make_index → match → rebuild → merge until the size stabilizes. Alias-only steps (only A=B) are not counted as progress.
+  Note (SWI-Prolog): saturate//1 uses MaxSteps=inf and N>0 with N=inf throws error. Prefer saturate//2 with a large integer bound.
 
-Id discipline
-- Ids are fresh logic variables (opaque mutable identifiers); alias via (=)/2 only; compare by identity (==), never by name/print-name.
-- Unifying Ids may instantiate variables inside Keys; run merge_nodes/2 afterward (rebuild//1 already does).
+Id discipline and gotchas
+- Compare Ids by identity (==), never by name/print-name. Do not serialize Ids.
+- Unifying Ids can instantiate variables inside Keys; always merge afterward (rebuild//1 already does).
+- lookup/2 expects canonical input; non-canonical lists may fail spuriously.
 
 Notes
-- Non-canonical input to lookup/2 may fail spuriously.
-- Do not serialize or compare Ids by print-name; keep Ids opaque.
+- Keys are intentionally variable-identity sensitive; variant-equal keys with different variables are distinct.
 */
 
 
