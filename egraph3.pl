@@ -240,6 +240,7 @@ constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply each DCG Rule(Node,Index)// to Node using Index; nondet over Rules.
+%  - Node is a Key-Id pair Key-Id; Id is an opaque class identifier (logic variable).
 %  - Rules is a list of DCG nonterminals Rule//2.
 %  - Rules may only emit Key-Id items and (=)/2 equalities; no unification.
 %  - Appends outputs to the DCG stream; rebuild//1 later consumes them.
