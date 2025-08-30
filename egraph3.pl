@@ -19,7 +19,7 @@ Caveats
 - extract//0 and extract/1 alias Ids via member/2 to choose a concrete representative term per class; use them as the final step of an e-graph pipeline. To inspect without aliasing, examine the Nodes list directly.
 
 Public API
-- add//2, union//2, saturate//1, saturate//2, extract/1, extract//0 (final extraction step; produces concrete Prolog terms).
+- add//2, union//2, saturate//1, saturate//2, extract//0, extract/1: last standard step; materializes concrete Prolog terms (one per class).
 
 Implementation predicates (quick reference)
 - lookup/2 (semidet, pure, steadfast): On canonical Pairs, find Id for Key by standard-order pruning then (==) confirmation. Binds Id only; never constructs/unifies Keys or allocates Ids. Pre: canonical (merge_nodes/2). Cost: O(N).
@@ -349,14 +349,14 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  Portability: delegates to saturate//2 with MaxSteps=inf. On systems where N>0 over atoms errors (e.g., SWI-Prolog), prefer saturate//2 with a large integer.
+%  Portability: delegates to saturate//2 with MaxSteps=inf. On systems where N>0 over atoms errors (e.g., SWI‑Prolog), call saturate//2 with a large integer bound instead.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run up to MaxSteps iterations; stop early when length stabilizes (after rebuild/merge).
 %  - MaxSteps: integer >= 0 (or inf if supported).
 %  - Alias-only steps are ignored.
-%  Det: det. On systems where N>0 over atoms errors, pass a large integer instead of inf.
+%  Det: det. On systems where N>0 over atoms errors (e.g., SWI‑Prolog), pass a large integer instead of inf.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Driver. Each iteration: make_index/2, match/4, rebuild//1 (aliases Ids), merge_nodes/2.
 %  - Only rebuild//1 and merge_nodes/2 unify Ids.
@@ -392,21 +392,22 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Final step: choose a concrete representative Key for each class by unifying each class Id with one of its Keys.
+%  Goal: extract a concrete Prolog term per equivalence class by unifying each class Id with one of its Keys (representative).
 %  Effects: aliases Id variables (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
-%  Det: semidet (fails only if a class has no Keys; should not happen after merge_nodes/2).
+%  Det: semidet; fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
+%  - Last standard step when using an e-graph; do not continue rewriting after extraction.
 %  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are logic variables; compare by identity (==), never by name.
+%  - Ids are logic variables; compare by identity (==), never by name/print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for the final extraction (aliases Ids). Use only as the last step.
+%  DCG wrapper for the final extraction (aliases Ids). Last standard step: materializes concrete Prolog terms.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Alias each class Id with one of its Keys (choose representatives); returns the same list.
-%  Final standard step: do not continue rewriting/saturation after this.
+%  Last standard step: extract concrete Prolog terms and stop rewriting/saturation.
 %  Det: semidet (fails only if some class has no Keys).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
