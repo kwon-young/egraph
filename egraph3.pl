@@ -53,10 +53,10 @@ Notes
 
 %! lookup(+Key-?Val, +Pairs) is semidet.
 %  Read-only O(N) lookup in a canonical ordset of Key-Id pairs.
-%  - Key must be nonvar; preserves variable identity by confirming with (==) after standard order pruning.
-%  - Binds Val only; Pairs is read-only. Fails if Key absent.
+%  - Key is nonvar; variable identity is preserved: after standard-order pruning, equality is confirmed with (==).
+%  - Binds Val only; Pairs is read-only. Fails if Key is absent.
 %  - Pairs must be a strictly ordered ordset (from merge_nodes/2 or sort/2).
-%  Note: Ids are fresh logic variables (class Ids); do not unify/inspect them here.
+%  Note: Ids are fresh logic variables (class Ids); never unify/inspect them here.
 %  Determinism: semidet (0 or 1 solution).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -92,6 +92,7 @@ lookup(Item-V, [X1-V1]) :-
 %  - Atom/var: Key = Term (preserves variable identity; no alpha/variant normalization).
 %  - Pure producer: no unification or canonicalization; duplicates OK (merge later).
 %  - DCG variant threads a difference list; add/4 does the work.
+%  - Internals: uses foldl/5 with two accumulators to collect ChildIds (first acc) while threading the node set (second acc).
 %  Effects: allocates a fresh Id only when Key is new.
 %  Note: Ids are fresh logic variables (class Ids). Unifying Ids later may instantiate variables embedded in Keys; always follow aliasing with merge_nodes/2.
 add(Term, Id, In, Out) :-
@@ -269,11 +270,11 @@ rule(Index, Node, Rule) -->
 
 %! make_index(+Nodes, -Index) is det.
 %  Build an rbtree Index mapping Id -> [Keys] from a canonicalized ordset of Key-Id pairs.
-%  - Complexity: O(N log N) (grouping + tree build).
-%  - Ids are logic variables and may alias; always rebuild after aliasing.
-%  - Assumes Nodes were canonicalized by merge_nodes/2.
-%  - Index is ephemeral/read-only; rebuild or discard after each aliasing step.
-%  Notes: uses transpose_pairs/2 and group_pairs_by_key/2 (autoload from library(pairs)).
+%  - Complexity: O(N log N) (group+tree build).
+%  - Ids may alias; rebuild after any aliasing (e.g., rebuild//1 or a merge_nodes/2 pass).
+%  - Requires Nodes already canonicalized by merge_nodes/2.
+%  - Index is ephemeral/read-only; discard/rebuild after each aliasing step.
+%  Notes: uses transpose_pairs/2 and group_pairs_by_key/2 (autoloaded from library(pairs)).
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
