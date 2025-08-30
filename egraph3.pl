@@ -63,8 +63,8 @@ Notes
 %  - Binds only Id; no mutation; fails if Key is absent.
 %  Precondition: Pairs is canonical.
 %  Notes: Ids are fresh logic vars used as class ids; never compare by name.
-%  Complexity: O(N) worst case; prunes via compare/3 and early exits.
-%  Determinism: semidet, steadfast, pure.
+%  Complexity: O(N) worst case with pruning via compare/3.
+%  Determinism: semidet; steadfast; pure.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -100,7 +100,7 @@ lookup(Item-V, [X1-V1]) :-
 %  - Pure producer: emits only Key-Id items; no Id unification; duplicates removed by merge_nodes/2.
 %  Precondition (add/4): In is an ordset.
 %  Notes: Ids are opaque logic variables (class ids). Canonicalize after any aliasing elsewhere.
-%  Complexity: O(|Term|) to visit/build, plus O(N) worst-case per insertion into the ordset; dedup happens later in merge_nodes/2.
+%  Complexity: O(|Term|) to build; ordset insertion O(N); dedup later via merge_nodes/2.
 %  Determinism: det; steadfast.
 add(Term, Id, In, Out) :-
    (  compound(Term)
@@ -150,7 +150,7 @@ union(A, B, In, Out) :-
 %  - Repeats because unifying Ids can instantiate variables inside Keys and expose duplicates.
 %  Complexity: O(N log N) per pass; may require multiple passes.
 %  Effect: only Id variables unify; Keys never do.
-%  Termination: finite; each successful pass can only decrease the number of distinct Id vars (or leave it unchanged), and there are finitely many.
+%  Termination: finite; each pass reduces (or preserves) the number of distinct Id vars; only finitely many exist.
 %  Determinism: det; logical effects (Id unification only).
 merge_nodes(In, Out) :-
    sort(In, Sort),
@@ -279,7 +279,7 @@ make_index(In, Index) :-
 %  Run Rules over Worklist using Index to produce Matches (nodes and (=)/2).
 %  - Output order: worklist order, then per-node rule order.
 %  Notes: Uses foldl/4 with rules//3; steadfast accumulator; does not inspect or bind Ids.
-%  Complexity: O(|Worklist|*|Rules| + |Matches|) plus whatever each Rule does over Index.
+%  Complexity: O(|Worklist|*|Rules| + |Matches|) plus per-Rule cost over Index.
 %  Determinism: det; produces a concrete list; no mutation or Id unification.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
@@ -302,17 +302,17 @@ rebuild(Matches) -->
    push_back(NewNodes),
    merge_nodes.
 %! saturate(+Rules)// is det.
-%  Apply Rules until a length-based fixpoint (no new pairs/equalities).
-%  Notes: This form currently throws on SWI-Prolog because it passes inf to saturate/4, whose guard uses (N > 0). Use saturate//2 with a non-negative integer for now, or patch the guard to handle inf. Fixpoint uses node-list length; alias-only steps are invisible unless later rule outputs change size. Rules must be pure producers; must not inspect/bind Ids.
-%  Determinism: det driver; rules must be pure producers.
+%  Apply Rules to a length-based fixpoint (no new Key-Id pairs/equalities).
+%  Note: On SWI, this form errors because it passes inf to saturate/4 whose guard uses (N > 0). Prefer saturate//2 with a non-negative integer or patch the guard. Alias-only steps are invisible unless later rule outputs change size.
+%  Determinism: det; Rules must be pure producers (emit only nodes/equalities).
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run at most MaxSteps iterations (non-negative integer; inf intended but see note).
 %  - Fixpoint: compare lengths before/after rebuild (post merge_nodes/2).
 %  - Alias-only steps do not change length; progress must add/remove pairs.
-%  Notes: Passing inf currently raises a type_error in the worker due to (N > 0). Use a non-negative integer until the guard handles inf. Rules must not unify; only emit nodes/equalities; must not inspect/bind Ids.
-%  Determinism: det driver; nondet arises only from Rules.
+%  Note: On SWI, passing inf raises a type_error due to (N > 0); use a non-negative integer unless the guard is patched. Rules must be pure producers (no unification).
+%  Determinism: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker that threads the e-graph explicitly.
 %  - Rebuild Id->Keys index each iteration (Ids may alias).
