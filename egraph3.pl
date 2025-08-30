@@ -58,13 +58,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Canonical ordset lookup: return Id for Key.
-%  Pre: Pairs is canonical (output of merge_nodes/2).
-%  Semantics: prune by standard order, confirm identity with (==) to preserve variable identity.
-%  Effects: binds Id only; does not unify Keys or Ids; fails if absent. No heap allocation on the success path.
-%  Ids: fresh logic variables (mutable, backtrackable class identifiers); never compare by print-name.
-%  Complexity: O(N) worst case. Steadfast; pure.
-%  Note: Non-canonical inputs are unsound; canonicalize first. For insertion use add_node/3.
+%  Return Id for Key from a canonical ordset Pairs.
+%  - Requires Pairs as output of merge_nodes/2 (canonical).
+%  - Prunes by standard order; confirms Key identity with (==) to preserve variable identity.
+%  - Binds Id only; no unification of Keys/Ids; fails if Key absent; no allocation on success path.
+%  - Ids are fresh logic vars (mutable class ids); never compare by print-name.
+%  Complexity: O(N). Steadfast; pure.
+%  Note: For non-canonical inputs results are undefined; canonicalize first. Use add_node/3 to insert.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -94,14 +94,13 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id; reuse the Id if Key already exists.
-%  Compound Term: build Key = F(ChildIds) left-to-right (stable arg order ⇒ congruence).
-%  Atom/var: Key = Term; preserves variable identity (no alpha/variant renaming).
-%  Emits only Key-Id pairs; never unifies Ids. Duplicates are collapsed later by merge_nodes/2.
+%  Insert Term and return its class Id; reuse Id if Key already exists.
+%  - Compound: Key = F(ChildIds) built left-to-right (stable arg order ⇒ congruence).
+%  - Atom/var: Key = Term; variable identity preserved (no alpha/variant renaming).
+%  - Emits only Key-Id pairs; never unifies Ids; duplicates are collapsed by merge_nodes/2.
 %  Pre: In is an ordset.
-%  Ids: fresh logic variables as mutable class ids; alias only via unification; never compare by print-name.
 %  Cost: build O(|Term|), insert O(N). Det; steadfast; pure w.r.t. Keys.
-%  Note: DCG form is a pure producer; no unification of Keys/Ids here.
+%  Notes: Ids are fresh logic vars (class ids). DCG form is a pure producer.
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -113,13 +112,12 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node has a class Id; reuse if present, otherwise insert Node-Id with a fresh unbound Id.
-%  In/Out are ordsets; prune by standard order; confirm with (==) to preserve variable identity.
-%  No unification/canonicalization here; ord_add_element/3 preserves set semantics.
-%  Pre: In is an ordset. Effect: creates a fresh Id only when Node is new; Out=In if already present.
-%  Ids: logic variables as mutable class ids; alias only via unification; never compare by print-name.
-%  Cost: O(N) in |In|. Det; quasi-pure (no Id unification).
-%  Note: Keys never unify here; only membership is checked.
+%  Ensure Node has a class Id in the ordset.
+%  - If present, reuse Id and Out=In; else insert Node-Id with a fresh unbound Id.
+%  - Prunes by standard order; confirms with (==) to preserve variable identity.
+%  - No unification/canonicalization; ord_add_element/3 preserves set semantics.
+%  Pre: In is an ordset. Ids are logic vars (class ids).
+%  Cost: O(N). Det; quasi-pure (no Id unification).
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -131,27 +129,21 @@ add_node(Node, Id, In, Out) :-
 %! union(+IdA, +IdB)// is det.
 %! union(+IdA, +IdB, +In, -Out) is det.
 %  Alias classes by unifying IdA with IdB, then canonicalize via merge_nodes/2.
-%  Pre: IdA and IdB are class Ids from this e-graph.
-%  Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
-%  Effects: may instantiate variables inside Keys; the next merge collapses collisions.
-%  Only Id variables unify; Keys never do. Backtrackable.
-%  Determinism: det; logical effect (Id aliasing).
-%  Note: union//2 always follows aliasing with merge_nodes/2.
+%  - Effects: only Id variables unify; Keys never do. May instantiate vars inside Keys; merge collapses collisions.
+%  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id vars. Backtrackable.
+%  Determinism: det.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
 
 %! merge_nodes//0 is det.
-%  DCG wrapper for merge_nodes/2. Emits nothing; only canonicalizes.
-%  Determinism: det; steadfast.
+%  DCG wrapper for merge_nodes/2; emits nothing; only canonicalizes.
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize Nodes to one Key-Id per Key; repeat until stable under Id aliasing.
-%  Out is canonical (sorted, exactly one entry per Key).
-%  Algorithm: sort/2 → group_pairs_by_key/2 → unify all Ids in each equal-Key group with the first; repeat if any group merged.
-%  Effects: only Id variables unify; Keys never do. Unification may instantiate variables inside Keys; the next pass collapses collisions.
-%  Cost: O(N log N) per pass; multiple passes possible. Det; logical effects (Id unification only).
-%  Termination: strictly decreases the number of distinct Id vars whenever a merge occurs.
-%  Note: The representative is the first Id in each group after sorting; this choice is backtrackable.
+%  Canonicalize to one Key-Id per Key; repeat until stable under Id aliasing.
+%  - Algorithm: sort/2 → group_pairs_by_key/2 → unify all Ids in each group with the first; repeat if any group merged.
+%  - Effects: only Id vars unify; Keys never do. Unification may instantiate variables inside Keys; next pass collapses collisions.
+%  - Cost: O(N log N) per pass; multiple passes possible. Det.
+%  Termination: the number of distinct Id vars strictly decreases on any merge. Representative is the first Id after sorting (backtrackable choice).
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
@@ -161,9 +153,8 @@ merge_nodes(In, Out) :-
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
 %  For Key-[H|T], unify each Id in T with H; Changed=true iff T is nonempty.
-%  Effects: only Id variables unify; Keys never do. Keys are unchanged; only the representative Id is propagated.
-%  Cost: O(|T|). Det; logical effects (Id unification).
-%  Note: Unification may instantiate variables inside Keys; the next merge pass collapses collisions.
+%  - Effects: only Id vars unify; Keys unchanged. Representative Id is H.
+%  Cost: O(|T|). Det.
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
    (  T == []
@@ -172,9 +163,9 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
    ).
 
 %! comm(+Node, +Index)// is nondet.
-%  Commutativity for +/2: from (A+B)-AB emit B+A-BA and AB=BA.
-%  Model equality without in-place rewrite; emit exactly one commuted variant per match.
-%  Notes: BA is fresh; equality is consumed by rebuild//1. Rules must not inspect or bind Ids; no side effects.
+%  Commutativity of +/2: from (A+B)-AB emit B+A-BA and AB=BA.
+%  - Models equality without in-place rewrite; emit at most one commuted variant per match.
+%  Notes: BA is fresh; equality is consumed by rebuild//1. Rules must not inspect or bind Ids.
 comm((A+B)-AB, _Nodes) -->
    !,
    [B+A-BA, AB=BA].
@@ -191,7 +182,7 @@ assoc((A+BC)-ABC, Index) -->
 assoc(_, _) --> [].
 %! assoc_(+Members, +A, -ABC)// is nondet.
 %  Helper for assoc//2: iterate members of class(BC) with A fixed.
-%  Emit at most one triple per qualifying member; confine rewrites to the class.
+%  - Emit at most one triple per qualifying member; confine rewrites to the class.
 %  Notes: Pure producer; must not inspect or bind Ids.
 %  Determinism: nondet over Members; tail-recursive; no side effects.
 assoc_([Node | Nodes], A, ABC) -->
@@ -203,11 +194,10 @@ assoc_([Node | Nodes], A, ABC) -->
 assoc_([], _, _) --> [].
 %! reduce(+Node, +Index)// is semidet.
 %  Neutral element of +/2: if class(B) contains integer 0, emit A=AB.
-%  Use once/1 to avoid duplicates; match 0 exactly with (==).
+%  - Use once/1 to avoid duplicates; match 0 exactly with (==).
 %  Index: rbtree Id -> [Keys]; read-only.
 %  Notes: Unification happens in rebuild//1; rules must not inspect or bind Ids.
 %  Determinism: semidet; pure producer.
-%  Note: Exact 0 (==), not arithmetic equivalence.
 reduce(A+B-AB, Index) -->
    {  rb_lookup(B, Nodes, Index),
       once((member(Node, Nodes), Node == 0))
@@ -216,10 +206,10 @@ reduce(A+B-AB, Index) -->
    [A=AB].
 reduce(_, _) --> [].
 %! constant_folding(+Node, +Index)// is nondet.
-%  Fold ground numeric sums into a constant.
-%  Introduce C for VC is VA+VB and emit VC-C, C=AB.
+%  Fold ground numeric sums for +/2 into a constant.
+%  - Introduce C where VC is VA+VB; emit VC-C and C=AB.
 %  Index: rbtree Id -> [Keys]; read-only.
-%  Notes: Uses is/2; preserves Prolog numeric type semantics; pure producer. Unification deferred to rebuild//1.
+%  Notes: Uses is/2; respects Prolog numeric semantics; pure producer. Unification deferred to rebuild//1.
 %  Determinism: nondet; no side effects; must not inspect or bind Ids.
 constant_folding((A+B)-AB, Index) -->
    !,
@@ -228,10 +218,9 @@ constant_folding((A+B)-AB, Index) -->
 constant_folding(_, _) --> [].
 %! constant_folding_a(+ClassA, +B, -AB, +Index)// is nondet.
 %  Pick numeric VA in class(A), then search class(B) for numeric VB.
-%  Staged search avoids building pairs eagerly; guarded with number/1.
+%  - Staged search avoids building pairs eagerly; guarded with number/1.
 %  Notes: Pure producer; unification deferred to rebuild//1.
 %  Determinism: nondet over numeric members of class(A) and class(B); no side effects.
-%  Note: VA/VB must be numbers; non-numeric members are skipped.
 constant_folding_a([VA | ANodes], B, AB, Index) -->
    (  {number(VA)}
    -> {rb_lookup(B, BNodes, Index)},
@@ -242,9 +231,8 @@ constant_folding_a([VA | ANodes], B, AB, Index) -->
 constant_folding_a([], _, _, _) --> [].
 %! constant_folding_b(+ClassB, +VA, -AB, +Index)// is nondet.
 %  For each numeric VB in class(B), compute VC is VA+VB and emit VC-C, C=AB.
-%  Notes: number/1 guards are ensured by constant_folding_a//4. Pure producer; unification deferred to rebuild//1; must not inspect or bind Ids.
+%  Notes: number/1 guards ensured by constant_folding_a//4. Pure producer; unification deferred to rebuild//1; must not inspect or bind Ids.
 %  Determinism: nondet over numeric members of class(B); no side effects.
-%  Note: Numeric evaluation follows Prolog's is/2 semantics and types.
 constant_folding_b([VB | BNodes], VA, AB, Index) -->
    (  {number(VB)}
    -> {VC is VA + VB},
@@ -256,28 +244,24 @@ constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply each Rule(Node,Index)// to Node using Index; append outputs in rule order.
-%  Rules is a list of callable DCG nonterminals of the form Rule(+Node,+Index)//.
-%  Node is Key-Id; Rules may only emit Key-Id and (=)/2 items.
-%  Implementation: uses library(dcg/high_order):sequence//2.
-%  Index: rbtree Id -> [Keys]; rebuilt after any Id aliasing; read-only within rules.
-%  Notes: Pure producer; steadfast; must not inspect or bind Ids (Ids are opaque).
-%  Determinism: nondet over Rules; each Rule runs once per Node (node order, then rule order). No side effects.
+%  - Rules is a list of callable DCG nonterminals Rule(+Node,+Index)//.
+%  - Node is Key-Id; rules may only emit Key-Id and (=)/2 items.
+%  Impl: library(dcg/high_order):sequence//2. Index: rbtree Id -> [Keys]; read-only.
+%  Notes: Pure producer; steadfast; must not inspect or bind Ids. Nondet over Rules.
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
 %  Call a single DCG rule Rule(Node,Index)// on Node.
-%  Notes: Pure producer; steadfast; must not inspect or bind Ids (Ids are opaque class variables).
-%  Determinism: as Rule//2; no side effects.
+%  Notes: Pure producer; steadfast; must not inspect or bind Ids. Determinism as Rule//2.
 rule(Index, Node, Rule) -->
    call(Rule, Node, Index).
 
 %! make_index(+Nodes, -Index) is det.
 %  Build rbtree Index mapping Id -> [Keys] from canonical Nodes.
-%  Pre: Nodes are canonical (use merge_nodes/2 first).
-%  Rebuild after any Id aliasing (Ids are the map keys).
+%  - Pre: Nodes are canonical (use merge_nodes/2 first).
+%  - Rebuild after any Id aliasing (Ids are the map keys).
 %  Ids: logic variables as mutable class ids; the variable itself is the key. Never compare by print-name.
 %  Cost: O(N log N). Det; pure; steadfast.
-%  Note: Never reuse across aliasing; rebuild immediately after any (=)/2 on Ids.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -285,16 +269,15 @@ make_index(In, Index) :-
 
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
 %  Run Rules over Worklist using Index; produce Matches (nodes and (=)/2).
-%  Output order: worklist order, then per-node rule order.
-%  Notes: Uses foldl/4 with rules//3; steadfast accumulator; rules must not inspect or bind Ids.
+%  - Output order: worklist order, then per-node rule order.
+%  Impl: foldl/4 with rules//3; steadfast accumulator.
 %  Cost: O(|Worklist|*|Rules| + |Matches|) plus per-Rule cost over Index.
 %  Determinism: det; produces a concrete list; no mutation or Id unification. Pure.
-%  Note: Matches is a flat list mixing Key-Id pairs and equalities A=B.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
 %! push_back(+List)// is det.
-%  Append List to the DCG output in O(1) via difference lists.
-%  Scheduling only; canonicalization is done by merge_nodes/2.
+%  Append List to DCG output in O(1) via difference lists.
+%  - Scheduling only; canonicalization is done by merge_nodes/2.
 %  Notes: Idiomatic DCG trick: push_back(L), L --> []. Steadfast; does not inspect or bind Ids.
 %  Determinism: det; pure producer; no side effects. Keys/Ids are not touched.
 push_back(L), L --> [].
@@ -303,10 +286,8 @@ push_back(L), L --> [].
 %    - exclude(unif, Matches, NewNodes): perform A=B; drop equalities.
 %    - push_back(NewNodes): enqueue Key-Id items.
 %    - merge_nodes: dedupe and unify Id classes.
-%  Effects: only Id aliasing via (=)/2; backtrackable.
-%  Ids: logic variables as mutable class ids; aliasing may instantiate vars inside Keys.
-%  Determinism: det; logical effects (Id unification only).
-%  Note: Equalities must be between class Ids; Keys remain immutable.
+%  Effects: only Id aliasing via (=)/2; backtrackable. May instantiate vars inside Keys.
+%  Determinism: det; logical effects (Id unification only). Equalities must be between class Ids.
 rebuild(Matches) -->
    { exclude(unif, Matches, NewNodes) },
    push_back(NewNodes),
@@ -314,20 +295,18 @@ rebuild(Matches) -->
 %! saturate(+Rules)// is det.
 %  Run Rules to a length-based fixpoint: repeat until rebuild/merge does not change list length.
 %  Determinism: det; Rules must be pure producers (emit only nodes/equalities). Alias-only steps do not count as progress.
-%  SWI note: 'inf' is an atom; this wrapper calls saturate//2 with inf and will raise type_error in N>0 on SWI. Use saturate(Rules, MaxSteps) with a large integer.
+%  SWI note: 'inf' is an atom; on SWI use saturate(Rules, MaxSteps) with a large integer.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
 %  Run up to MaxSteps iterations (integer >= 0, or 'inf' where supported).
-%  Fixpoint: stop when length is unchanged after rebuild/merge. Alias-only steps don't change length.
-%  Determinism: det.
-%  SWI note: MaxSteps must be an integer; passing 'inf' raises type_error in N>0. Use a large integer value.
+%  - Fixpoint: stop when length unchanged after rebuild/merge. Alias-only steps don't change length.
+%  Determinism: det. SWI: MaxSteps must be integer; prefer a large integer.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker: rebuild Id->Keys index each iteration; stop on stable length or when MaxSteps runs out.
-%  Rules must be pure producers; unification happens only in rebuild//1 and merge_nodes/2.
-%  Ids: logic variables as mutable class ids; never compare by print-name; always rebuild the index after aliasing.
+%  - Rules must be pure producers; unification happens only in rebuild//1 and merge_nodes/2.
+%  - Ids are logic vars; rebuild the index after aliasing; never compare by print-name.
 %  Determinism: det driver; nondet only from Rules.
-%  Note: Alias-only steps do not change length. On systems without numeric 'inf', pass a large integer.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -349,19 +328,17 @@ saturate(Rules, N, In, Out) :-
 %! unif(+Eq) is semidet.
 %  True for Eq = (A=B); performs that unification as a side-effect.
 %  Intended only for rebuild//1 via exclude/3.
-%  Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
-%  Ids: only Id variables should appear here; Keys must not be unified.
-%  Determinism: semidet; deliberately impure (Id unification).
-%  Note: Never call from rewrite rules; keep all unification centralized in rebuild//1.
+%  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
+%  - Only Id variables should appear here; Keys must not be unified.
+%  Determinism: semidet; deliberately impure (Id unification). Do not call from rewrite rules.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Validate and return Nodes (aliasing Ids).
-%  Warning: aliases class Id variables via member/2; use for validation only.
-%  To inspect without aliasing, use the node list directly.
-%  Ids: logic variables; discard any bindings made here; never compare Ids by print-name.
-%  Determinism: semidet; aliases Ids.
-%  Note: Intentionally aliases Ids to witnesses; do not rely on bindings after return.
+%  Validate and return Nodes (aliases Ids).
+%  - Aliases class Id variables via member/2; use for validation only.
+%  - To inspect without aliasing, use the node list directly.
+%  Ids: logic variables; discard any bindings produced here.
+%  Determinism: semidet.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
@@ -369,21 +346,17 @@ extract(Nodes) :-
 %  Warning: intentionally aliases Ids via member/2; prefer extract/1 in user code.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Helper for extract//0; succeeds iff each Id-group is nonempty.
-%  Warning: aliases Ids; discard any bindings afterwards.
-%  Notes: Pure w.r.t. Keys; impurity comes only from aliasing Ids during validation.
-%  Determinism: semidet; aliases Ids; pure w.r.t. Keys.
-%  Note: Relies on member/2 aliasing an Id with one of its Keys; do not depend on the specific witness chosen.
+%  - Aliases Ids; discard any bindings afterwards. Pure w.r.t. Keys.
+%  Determinism: semidet.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
    extract_node(Groups).
 %! extract_node(+Groups) is semidet.
 %  True iff every Id-group has at least one Key; fails otherwise.
-%  Warning: unifies each Id with one of its Keys via member/2 (validation only).
-%  Notes: Intentionally aliases Ids; do not rely on any bindings produced.
-%  Note: With Groups built from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
-%  Determinism: semidet; aliases Ids.
-%  Note: The aliasing is deliberate to validate non-emptiness of classes; discard bindings after use.
+%  - Unifies each Id with one of its Keys via member/2 (validation only).
+%  - With Groups built from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
+%  Determinism: semidet; aliases Ids; discard bindings after use.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
