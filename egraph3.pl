@@ -1,51 +1,36 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms. Class identifiers (Ids) are fresh logic variables used as mutable, backtrackable unique identifiers.
+E-graphs for Prolog terms. Classes are identified by fresh logic variables (Ids) that act as mutable, backtrackable unique identifiers.
 
-Core concepts
+Key ideas
 - Nodes: canonical ordset of Key-Id. Key is an atom/var or a compound F(ChildIds).
-- Keys preserve variable identity (no alpha/variant normalization). Use (==) after order pruning.
-- Ids: opaque logic variables; the only mutation is aliasing via (=)/2.
+- Keys preserve variable identity; do not alpha/variant-normalize. Use (==) after order pruning.
+- Ids are opaque logic variables; the only mutation is aliasing via (=)/2.
 - Canonicalization: merge_nodes/2 keeps at most one Key-Id per Key; rerun after any Id aliasing.
 
 Execution model (DCG pipeline)
-- Rules are pure producers: they only emit Key-Id items and equalities A=B; they never inspect or bind Ids.
-- Only rebuild//1 and merge_nodes/2 unify Ids. rebuild//1 consumes A=B, enqueues items, then canonicalizes.
+- Rules are pure producers: they emit only Key-Id items and equalities A=B; they must not inspect or bind Ids.
+- Only rebuild//1 and merge_nodes/2 perform Id aliasing. rebuild//1 consumes A=B, enqueues items, then canonicalizes.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract//0, extract/1.
 
-Implementation outline
-- lookup/2: O(N) scan over canonical ordset; prune by standard order, confirm Key with (==); binds Id only; no choicepoints on success.
-- add/4, add//2: build nodes. Compounds become F(ChildIds) left-to-right (stable congruence). Emit only Key-Id.
-- add_node/3,4: reuse Id if present; else insert with a fresh Id. Never unify Ids.
-- merge_nodes/2, //0: sort → group → alias all Ids per Key to the first; repeat while any merge happened. Keys never unify.
-- merge_group/4: unify tail Ids with head; signal whether any merge occurred.
-- make_index/2: rbtree Id->[Keys], keyed by Id identity (==). Rebuild after aliasing.
-- rules//3, rule//3: apply Rule(Node,Index)//2 in order; output order is per-node then per-rule.
-- match/4: apply rules over a worklist to produce scheduled matches (Key-Id and A=B); no unification here.
-- push_back//1: O(1) append to DCG output (scheduling only).
-- rebuild//1: perform (=)/2 on Ids, drop equalities, enqueue Key-Id items, then merge_nodes/2.
-- comm//2: for (A+B)-AB, emit B+A-BA and AB=BA.
-- assoc//2, assoc_//3: associativity for +/2 constrained by class(BC) from Index. Known issue: a cut causes failure if BC is absent; intended behavior is “no output”.
-- reduce//2: neutral element 0 for +/2; if class(B) contains 0, emit A=AB.
-- constant_folding//2 and helpers: fold numeric sums; emit VC-C and C=AB.
-
-Extraction (last standard step)
-- extract//0, extract/1, extract/2, extract_node/1: alias each class Id with a chosen representative Key to materialize one concrete Prolog term per class. Do not run rewriting after extraction.
-
 Driver
-- saturate//1, saturate//2, saturate/4: iterate make_index → match → rebuild → merge until size stabilizes. Alias-only steps (only A=B) do not count as progress.
-  Note (SWI-Prolog): saturate//1 with MaxSteps=inf and N>0 where N=inf throws; prefer saturate//2 with a large integer bound.
+- saturate//1, saturate//2, saturate/4 iterate: make_index → match → rebuild → merge until size stabilizes. Alias-only steps (only A=B) do not count as progress.
+- SWI-Prolog note: saturate//1 uses MaxSteps=inf; prefer saturate//2 with a large integer bound if arithmetic over 'inf' is unsupported.
 
 Id discipline
-- Compare Ids by identity (==), never by print-name; do not serialize Ids.
-- Unifying Ids can instantiate variables inside Keys; always re-merge (rebuild//1 does).
+- Compare Ids by identity (==); never by name/print-name; do not serialize them.
+- Unifying Ids may instantiate variables inside Keys; always re-merge (rebuild//1 does).
 - lookup/2 expects canonical input; non-canonical lists may fail spuriously.
 
-Note
+Known limitations
 - Keys are intentionally variable-identity sensitive; variant-equal keys with different variables are distinct.
+- assoc//2 currently uses a cut; when BC is absent from the Index the rule fails instead of emitting nothing. Tests document the intended behavior (“no output”).
+
+Notes
+- The goal of extract is to alias each class Id with a concrete representative Key to obtain a standard Prolog term per class. Extraction is the last standard step; do not run rewriting after it.
 */
 
 
@@ -191,7 +176,7 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - BUG: If BC is absent in Index the cut (!) prevents fallback; the rule fails instead of emitting no output ([]). Tests document the intended behavior.
+%  - Limitation: if BC is absent from Index, a cut (!) causes this rule to fail instead of emitting no output ([]). Intended behavior is “no output”.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
