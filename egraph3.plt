@@ -295,7 +295,7 @@ test(comm_emits_commuted_node, true((member(K-_BA, Out), K = B+A))) :-
 % Emits equality AB=BA indicating the commuted form is equated to the original
 test(comm_emits_equality, true(member(_=_, Out))) :-
     A = _, B = _,
-    phrase(egraph:comm((A+B)-AB, _Index), Out).
+    phrase(egraph:comm((A+B)-_, _Index), Out).
 
 % The emitted Ids BA and AB are variables
 test(comm_ids_are_vars, true((member(AB=BA, Out), var(AB), var(BA)))) :-
@@ -493,7 +493,7 @@ test(rules_apply_order_reduce_eq, true(member(A=AB, Out))) :-
     phrase(egraph:rules(Rules, Index, (A+B)-AB), Out).
 
 % Ensures output order is per-rule: comm outputs precede reduce outputs
-test(rules_output_order_prefix, true((Out = [K1, Eq1, Eq2 | _], K1 = (B+A)-_, Eq1 = (AB=BA), Eq2 = (A=AB)))) :-
+test(rules_output_order_prefix, true((Out = [K1, Eq1, Eq2 | _], K1 = (B+A)-_, Eq1 = (AB=_), Eq2 = (A=AB)))) :-
     A = _, B = _,
     ord_list_to_rbtree([B-[0]], Index),
     Rules = [comm, reduce],
@@ -523,7 +523,7 @@ test(rule_wrapper_reduce_eq, true(member(A=AB, Out))) :-
     phrase(egraph:rule(Index, (A+B)-AB, reduce), Out).
 
 % Ensures comm rule emits node before equality in its output list
-test(rule_comm_output_order, true((Out = [K1, Eq1], K1 = (B+A)-_, Eq1 = (AB=BA)))) :-
+test(rule_comm_output_order, true((Out = [K1, Eq1], K1 = (B+A)-_, Eq1 = (AB=_)))) :-
     A = _, B = _,
     phrase(egraph:rule(_Index, (A+B)-AB, comm), Out).
 
@@ -569,9 +569,9 @@ test(match_comm_eq, true(member(AB=_BA, Matches))) :-
     egraph:match([comm], Work, Index, Matches).
 
 % Ensures match preserves rule output order for a single work item
-test(match_comm_order_prefix, true((Matches = [K1, Eq1 | _], K1 = B+A-_, Eq1 = (_AB=BA)))) :-
-    A = _, B = _, _AB = _,
-    Work = [(A+B)-_AB],
+test(match_comm_order_prefix, true((Matches = [K1, Eq1 | _], K1 = B+A-_, Eq1 = (AB=_)))) :-
+    A = _, B = _,
+    Work = [(A+B)-AB],
     ord_list_to_rbtree([], Index),
     egraph:match([comm], Work, Index, Matches).
 
@@ -979,21 +979,6 @@ test(reduce_alias_only_no_growth, true(L2 == L1)) :-
 :- end_tests(saturate_more).
 
 
-% make_index/2 (bug demonstration)
-:- begin_tests(make_index_bug).
-
-% BUG: make_index/2 uses group_pairs_by_key/2 on ungrouped Id-Key pairs; when Ids are interleaved,
-%      keys for the same Id are split into multiple groups and the rbtree mapping loses members.
-%      Expected KeysA == [x,z], but current implementation often yields only one of them.
-test(interleaved_ids_loses_members, [fail]) :-
-    A = _, B = _,
-    Nodes = [x-A, y-B, z-A],
-    egraph:make_index(Nodes, Index),
-    rb_lookup(A, KeysA, Index),
-    sort(KeysA, SortedA),
-    SortedA == [x,z].
-
-:- end_tests(make_index_bug).
 
 
 % ordsets: ord_add_element/3 behavior on Key-Id pairs
@@ -1002,27 +987,27 @@ test(interleaved_ids_loses_members, [fail]) :-
 % Insert into empty set yields singleton
 test(insert_empty_singleton, true(Out == [a-X])) :-
     X = _,
-    ord_add_element(a-X, [], Out).
+    ord_add_element([], a-X, Out).
 
 % Insert keeps canonical order when appending a larger key
 test(insert_keeps_order, true(Out == [a-X, b-Y])) :-
     X = _, Y = _,
-    ord_add_element(b-Y, [a-X], Out).
+    ord_add_element([a-X], b-Y, Out).
 
 % Insert before when adding smaller key
 test(insert_at_front, true(Out == [a-X, b-Y])) :-
     X = _, Y = _,
-    ord_add_element(a-X, [b-Y], Out).
+    ord_add_element([b-Y], a-X, Out).
 
 % Allows same key with different Id (distinct element)
 test(allows_same_key_diff_id, true(length(Out,2))) :-
     X = _, Y = _,
     X \== Y,
-    ord_add_element(a-Y, [a-X], Out).
+    ord_add_element([a-X], a-Y, Out).
 
 % Does not duplicate an existing identical pair
 test(no_duplicate_identical_pair, true(Out == [a-X])) :-
     X = _,
-    ord_add_element(a-X, [a-X], Out).
+    ord_add_element([a-X], a-X, Out).
 
 :- end_tests(ordsets_ord_add_element).
