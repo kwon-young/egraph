@@ -1,6 +1,7 @@
 :- use_module(egraph3).
 :- use_module(library(plunit)).
 :- use_module(library(rbtrees)).
+:- use_module(library(ordsets)).
 
 % lookup/2
 :- begin_tests(lookup).
@@ -847,3 +848,181 @@ test(example3_n2_includes_3, true(member(3, Rs))) :-
     findall(R, egraph:example3(2, Expr, R), Rs).
 
 :- end_tests(example3).
+
+% lookup (more aspects)
+:- begin_tests(lookup_more).
+
+% Non-canonical list may spuriously fail even if key is present (precondition requires canonical ordset)
+test(noncano_list_fails, fail) :-
+    X = _, Y = _, Z = _,
+    egraph:lookup(b-_, [a-X, c-Z, b-Y]).
+
+:- end_tests(lookup_more).
+
+
+% add/4 (more)
+:- begin_tests(add_more).
+
+% Adds term with variable; variable identity preserved as part of Key
+test(var_key_identity_kept, true((member(f(V1)-_, Out), member(f(V2)-_, Out), V1\==V2))) :-
+    V1 = _, V2 = _, V1 \== V2,
+    egraph:add(f(V1), _Id1, [], T1),
+    egraph:add(f(V2), _Id2, T1, Out).
+
+:- end_tests(add_more).
+
+
+% add//2 (more)
+:- begin_tests(add_dcg_more).
+
+% Two adds of same atom are idempotent: second call reuses Id and does not add a new pair
+test(idempotent_same_atom, true(Out == [a-Id])) :-
+    phrase((egraph:add(a, Id), egraph:add(a, _)), [], Out).
+
+:- end_tests(add_dcg_more).
+
+
+% union//2 (more)
+:- begin_tests(union_dcg_more).
+
+% Aliasing two classes does not add or drop keys: count remains 2
+test(no_new_nodes_count, true(length(Out,2))) :-
+    A = _, B = _,
+    phrase(egraph:union(A, B), [x-A, y-B], Out).
+
+:- end_tests(union_dcg_more).
+
+
+% assoc//2 (more)
+:- begin_tests(assoc_more).
+
+% When class(BC) has two +(B,C) members, emit two triples (6 outputs)
+test(two_members_emit_two_triples, true(length(Out,6))) :-
+    A = _, B = _, C = _, BC = _, ABC = _,
+    ord_list_to_rbtree([BC-[B+C, B+C]], Index),
+    phrase(egraph:assoc((A+BC)-ABC, Index), Out).
+
+:- end_tests(assoc_more).
+
+
+% reduce//2 (more)
+:- begin_tests(reduce_more).
+
+% Does not reduce when class(B) contains 0.0 (strict term equality to integer 0 is required)
+test(zero_float_no_reduce, true(Out == [])) :-
+    A = _, B = _,
+    ord_list_to_rbtree([B-[0.0]], Index),
+    phrase(egraph:reduce((A+B)-_, Index), Out).
+
+:- end_tests(reduce_more).
+
+
+% constant_folding//2 (more)
+:- begin_tests(constant_folding_more).
+
+% Supports mixed numeric types: 2 + 2.5 -> 4.5
+test(mixed_numeric_adds_to_float, true(member(4.5-_C, Out))) :-
+    A = _, B = _,
+    ord_list_to_rbtree([A-[2], B-[2.5]], Index),
+    phrase(egraph:constant_folding((A+B)-_AB, Index), Out).
+
+% Two numeric members in class(B) produce two pairs and two equalities (4 outputs)
+test(two_vb_members_emit_four, true(length(Out,4))) :-
+    A = _, B = _,
+    ord_list_to_rbtree([A-[1], B-[2,3]], Index),
+    phrase(egraph:constant_folding((A+B)-_AB, Index), Out).
+
+:- end_tests(constant_folding_more).
+
+
+% rules//3 (more)
+:- begin_tests(rules_more).
+
+% Empty Rules list produces no output
+test(empty_rules_no_output, true(Out == [])) :-
+    phrase(egraph:rules([], _Index, (a+b)-_AB), Out).
+
+:- end_tests(rules_more).
+
+
+% match/4 (more)
+:- begin_tests(match_more).
+
+% No rules and empty worklist yield no matches
+test(empty_rules_and_worklist, true(Matches == [])) :-
+    ord_list_to_rbtree([], Index),
+    egraph:match([], [], Index, Matches).
+
+:- end_tests(match_more).
+
+
+% push_back//1 (more)
+:- begin_tests(push_back_more).
+
+% Pushing an empty list appends nothing
+test(push_empty_noop, true(Out == [])) :-
+    phrase(egraph:push_back([]), [], Out).
+
+:- end_tests(push_back_more).
+
+
+% saturate//2 (more)
+:- begin_tests(saturate_more).
+
+% Alias-only steps from reduce do not grow the graph
+test(reduce_alias_only_no_growth, true(L2 == L1)) :-
+    phrase(egraph:add(1+0, _), [], G0),
+    length(G0, L1),
+    phrase(egraph:saturate([reduce], 10), G0, G2),
+    length(G2, L2).
+
+:- end_tests(saturate_more).
+
+
+% make_index/2 (bug demonstration)
+:- begin_tests(make_index_bug).
+
+% BUG: make_index/2 uses group_pairs_by_key/2 on ungrouped Id-Key pairs; when Ids are interleaved,
+%      keys for the same Id are split into multiple groups and the rbtree mapping loses members.
+%      Expected KeysA == [x,z], but current implementation often yields only one of them.
+test(interleaved_ids_loses_members, [fail]) :-
+    A = _, B = _,
+    Nodes = [x-A, y-B, z-A],
+    egraph:make_index(Nodes, Index),
+    rb_lookup(A, KeysA, Index),
+    sort(KeysA, SortedA),
+    SortedA == [x,z].
+
+:- end_tests(make_index_bug).
+
+
+% ordsets: ord_add_element/3 behavior on Key-Id pairs
+:- begin_tests(ordsets_ord_add_element).
+
+% Insert into empty set yields singleton
+test(insert_empty_singleton, true(Out == [a-X])) :-
+    X = _,
+    ord_add_element(a-X, [], Out).
+
+% Insert keeps canonical order when appending a larger key
+test(insert_keeps_order, true(Out == [a-X, b-Y])) :-
+    X = _, Y = _,
+    ord_add_element(b-Y, [a-X], Out).
+
+% Insert before when adding smaller key
+test(insert_at_front, true(Out == [a-X, b-Y])) :-
+    X = _, Y = _,
+    ord_add_element(a-X, [b-Y], Out).
+
+% Allows same key with different Id (distinct element)
+test(allows_same_key_diff_id, true(length(Out,2))) :-
+    X = _, Y = _,
+    X \== Y,
+    ord_add_element(a-Y, [a-X], Out).
+
+% Does not duplicate an existing identical pair
+test(no_duplicate_identical_pair, true(Out == [a-X])) :-
+    X = _,
+    ord_add_element(a-X, [a-X], Out).
+
+:- end_tests(ordsets_ord_add_element).
