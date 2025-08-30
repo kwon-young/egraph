@@ -148,11 +148,11 @@ merge_nodes(In, Out) :-
    ;  Sort = Out
    ).
 %! merge_group(+Key-Ids, -Key-Rep, +Changed0, -Changed) is det.
-%  Unify all Ids in a group with the first (Rep); Changed=true iff the group has >1 Id.
+%  Unify every Id in a group with the first (Rep); Changed=true iff the group has >1 Id.
 %  - Rep is the first Id; unify each tail Id with Rep.
 %  - Changed drives merge_nodes/2’s outer fixpoint.
 %  - Determinism: det.
-%  Note: Unifying Ids can instantiate variables inside Keys; later passes may reveal duplicates.
+%  Note: Unifying Ids can instantiate variables inside Keys; later passes may expose duplicates.
 merge_group(Node-[H | T], Node-H, In, Out) :-
    maplist(=(H), T),
    (  T == []
