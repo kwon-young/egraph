@@ -256,6 +256,7 @@ constant_folding_b([], _, _, _) --> [].
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply each Rule(Node,Index)// to Node using Index; append outputs.
 %  - Node is Key-Id; Rules may only emit Key-Id and (=)/2 items.
+%  - Implementation: uses library(dcg/high_order):sequence//2.
 %  Index: rbtree Id -> [Keys]; rebuilt after any Id aliasing; read-only within rules.
 %  Notes: Pure producer; steadfast; must not inspect/bind Ids.
 %  Determinism: nondet over Rules; each Rule runs once per Node (node order, then rule order).
@@ -270,6 +271,7 @@ rule(Index, Node, Rule) -->
 
 %! make_index(+Nodes, -Index) is det.
 %  Build rbtree Index mapping Id -> [Keys] from canonical Nodes.
+%  - Pre: Nodes are canonical (use merge_nodes/2 first).
 %  - Must rebuild after any Id aliasing (Ids are the map keys).
 %  Ids: logic vars as class ids; the variable itself is the key. Never compare by name.
 %  Cost: O(N log N).
@@ -290,7 +292,7 @@ match(Rules, Worklist, Index, Matches) :-
 %! push_back(+List)// is det.
 %  Append List to the DCG output in O(1) via difference lists.
 %  - Scheduling only; canonicalization is done by merge_nodes/2.
-%  Notes: Idiomatic DCG trick (L, L --> []); steadfast; does not inspect or bind Ids.
+%  Notes: Idiomatic DCG trick: push_back(L), L --> []. Steadfast; does not inspect or bind Ids.
 %  Det: det; pure producer; no side effects.
 push_back(L), L --> [].
 %! rebuild(+Matches)// is det.
@@ -307,7 +309,7 @@ rebuild(Matches) -->
    merge_nodes.
 %! saturate(+Rules)// is det.
 %  Run Rules to a length-based fixpoint (no new Key-Id pairs or equalities).
-%  SWI note: This calls saturate//2 with 'inf', but saturate/4 checks (N > 0); in SWI this throws a type_error. Prefer saturate//2 with a large non-negative integer, or patch the guard.
+%  SWI note: Calls saturate//2 with MaxSteps=inf; on SWI, 'inf' is not numeric and the (N > 0) test in saturate/4 raises type_error. Use saturate(Rules, Max) with a large integer on SWI or adjust the guard.
 %  Det: det; Rules must be pure producers (emit only nodes/equalities).
 saturate(Rules) -->
    saturate(Rules, inf).
@@ -315,7 +317,7 @@ saturate(Rules) -->
 %  Run at most MaxSteps iterations (integer >= 0).
 %  - Fixpoint: compare lengths before/after rebuild (post merge_nodes/2).
 %  - Alias-only steps do not change length; progress must add/remove pairs.
-%  SWI note: MaxSteps must be a non-negative integer in SWI; 'inf' is not numeric and (N > 0) will raise a type_error.
+%  SWI note: MaxSteps must be an integer >= 0; 'inf' is not allowed and (N > 0) would raise type_error on SWI.
 %  Det: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker that threads the e-graph explicitly.
@@ -375,7 +377,8 @@ extract(Nodes, Nodes) :-
 %  True iff every Id-group has at least one Key; fails otherwise.
 %  Warning: unifies each Id with one of its Keys via member/2 (validation only).
 %  Notes: Intentionally aliases Ids; do not rely on any bindings produced.
-%  Det: semidet; fails if any class is empty; aliases Ids.
+%  Note: With Groups built from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
+%  Det: semidet; aliases Ids.
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
