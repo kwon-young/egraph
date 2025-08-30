@@ -59,14 +59,14 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Find Id for Key in a canonical ordset of Key-Id.
-%  - Pre: Pairs canonical (merge_nodes/2).
-%  - Method: prune by standard order, confirm with (==). Binds Id only; never allocates or unifies Keys.
-%  - Det/Complexity: semidet; steadfast; O(N). No choicepoints on success.
+%  Look up Id for Key in a canonical ordset of Key-Id pairs.
+%  - Pre: Pairs is canonical (call merge_nodes/2 first).
+%  - Method: prune by standard order; confirm with (==). Binds Id only; never constructs/unifies Keys.
+%  - Determinism/Complexity: semidet, steadfast, O(N); no choicepoints on success.
 %  Notes:
 %  - Non-canonical input may fail spuriously.
-%  - Ids are logic variables (mutable class ids); compare by identity (==), never by print‑name.
-%  - Keys preserve variable identity (built by add/4; no alpha‑renaming).
+%  - Ids are fresh logic variables (mutable class identifiers); compare by identity (==), never by print-name.
+%  - Keys retain variable identity (built by add/4; no alpha/variant normalization).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -99,11 +99,11 @@ lookup(Item-V, [X1-V1]) :-
 %  Ensure a node for Term exists; return its class Id.
 %  - Compound: Key = F(ChildIds) built left-to-right (stable congruence).
 %  - Atom/var:   Key = Term (variable identity remains part of Key).
-%  - Emits only Key-Id items; Ids are not unified here (dedup via merge_nodes/2).
+%  - Emits only Key-Id items; no Id unification here (dedup via merge_nodes/2).
 %  Pre: In is an ordset (preferably canonical).
-%  Det/Complexity: det; steadfast; pure wrt Keys. Build O(|Term|); insert O(N) via ord_add_element/3.
+%  Determinism/Complexity: det; steadfast; pure w.r.t. Keys. Build O(|Term|); insert O(N) via ord_add_element/3.
 %  Notes:
-%  - Reuse existing Id if present; otherwise allocate a fresh Id.
+%  - Reuse existing Id if present; otherwise allocate a fresh Id (logic variable).
 %  - DCG form is a pure producer (no Id aliasing).
 add(Term, Id, In, Out) :-
    (  compound(Term)
@@ -121,10 +121,10 @@ add(Term, Id, In, Out) :-
 %  - Uses standard order and (==) on Keys; no canonicalization here.
 %  - Never unifies Ids; ord_add_element/3 enforces set semantics.
 %  Pre: In is canonical.
-%  Det/Complexity: det; O(N). Quasi‑pure (may allocate one fresh Id).
+%  Determinism/Complexity: det; O(N). Quasi‑pure (may allocate one fresh Id).
 %  Notes:
 %  - Out remains canonical.
-%  - Ids are logic variables (mutable class ids); compare by identity (==) only; never by print‑name.
+%  - Ids are logic variables (mutable class identifiers); compare by identity (==) only; never by print-name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -138,7 +138,9 @@ add_node(Node, Id, In, Out) :-
 %  Alias classes by unifying IdA with IdB, then re-canonicalize.
 %  - Only Id vars unify; Keys never do. Key variables may instantiate; merge_nodes/2 collapses resulting collisions.
 %  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Ids. Backtrackable.
-%  Det: det. Side effect: Id aliasing only (backtrackable).
+%  Determinism/Effects: det; side effect is Id aliasing only (backtrackable).
+%  Notes:
+%  - Ids are logic variables used as mutable unique identifiers via unification; never compare by print-name.
 union(A, B, In, Out) :-
    A = B,
    merge_nodes(In, Out).
@@ -394,8 +396,8 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract one concrete Prolog term per class by unifying each class Id with one of its Keys.
-%  Purpose: final step of using an e-graph to obtain concrete Prolog terms.
+%  Extract exactly one concrete Prolog term per class by unifying each class Id with one of its Keys.
+%  Goal: extract is the last standard step of using an e-graph to obtain concrete Prolog terms.
 %  Effects: aliases Id variables via unification (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
 %  Determinism: semidet (fails only if some class has no Keys; should not happen after merge_nodes/2).
 %  Notes:
@@ -404,7 +406,7 @@ unif(A=B) :- A=B.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extraction (aliases Ids). Last standard step to obtain concrete terms.
+%  DCG wrapper for extraction (aliases Ids). This is the last standard step to obtain concrete terms from the e-graph.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
