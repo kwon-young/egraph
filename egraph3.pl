@@ -60,10 +60,10 @@ Notes
 %  Read-only lookup in a canonical ordset (exactly one Key-Id per Key).
 %  - Pairs must be canonical (output of merge_nodes/2).
 %  - Prunes by standard order; confirms with (==) to preserve variable identity.
-%  - Binds Id; fails if Key absent. No side effects.
+%  - Binds only Id; fails (no exception) if Key absent; no allocation; never unifies Keys or Ids.
 %  Ids: fresh logic variables (class ids via unification only); never compare by name.
-%  Complexity: O(N) worst-case; prunes via compare/3.
-%  Det: semidet; steadfast; pure.
+%  Complexity: O(N) worst-case; prunes with compare/3.
+%  Det: semidet; steadfast; pure; no exceptions.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -99,7 +99,7 @@ lookup(Item-V, [X1-V1]) :-
 %  - Emits only Key-Id pairs; never unifies Ids; duplicates removed by merge_nodes/2.
 %  Pre: In is an ordset.
 %  Ids: fresh logic vars (class ids); alias only via unification. Never compare by name.
-%  Cost: build O(|Term|); insert O(N).
+%  Complexity: build O(|Term|); insert O(N) into the ordset.
 %  Det: det; steadfast; pure w.r.t. Keys.
 add(Term, Id, In, Out) :-
    (  compound(Term)
@@ -118,7 +118,7 @@ add(Term, Id, In, Out) :-
 %  Pre: In is an ordset.
 %  Effect: fresh Id only when Node is new; Out=In if Node already exists.
 %  Ids: logic vars as class ids; alias only via unification; never compare by name.
-%  Cost: O(N) worst-case over |In|.
+%  Complexity: O(N) worst-case over |In|.
 %  Det: det; quasi-pure (no Id unification).
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -184,6 +184,7 @@ comm(_, _) --> [].
 %  Associativity for +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; emit at most one triple per match.
 %  - If class(BC) is absent, emit nothing.
+%  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only here.
 %  Notes: AB and ABC_ are fresh; unification deferred to rebuild//1. Rules must not inspect/bind Ids.
 assoc((A+BC)-ABC, Index) -->
    !,
@@ -205,6 +206,7 @@ assoc_([], _, _) --> [].
 %! reduce(+Node, +Index)// is semidet.
 %  Neutral element of +/2: if class(B) contains integer 0, emit A=AB.
 %  - Use once/1 to avoid duplicates; match 0 exactly with (==).
+%  Index: rbtree Id -> [Keys]; read-only.
 %  Notes: Unification happens in rebuild//1; rules must not inspect/bind Ids.
 %  Determinism: semidet.
 reduce(A+B-AB, Index) -->
@@ -217,6 +219,7 @@ reduce(_, _) --> [].
 %! constant_folding(+Node, +Index)// is nondet.
 %  Fold ground numeric sums into a single constant.
 %  - Introduce C for VC is VA+VB and emit VC-C, C=AB.
+%  Index: rbtree Id -> [Keys]; read-only.
 %  Notes: Uses is/2; preserves numeric type; pure producer. Unification deferred to rebuild//1.
 %  Determinism: nondet; must not inspect/bind Ids.
 constant_folding((A+B)-AB, Index) -->
@@ -253,6 +256,7 @@ constant_folding_b([], _, _, _) --> [].
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply each Rule(Node,Index)// to Node using Index; append outputs.
 %  - Node is Key-Id; Rules may only emit Key-Id and (=)/2 items.
+%  Index: rbtree Id -> [Keys]; rebuilt after any Id aliasing; read-only within rules.
 %  Notes: Pure producer; steadfast; must not inspect/bind Ids.
 %  Determinism: nondet over Rules; each Rule runs once per Node (node order, then rule order).
 rules(Rules, Index, Node) -->
@@ -303,7 +307,7 @@ rebuild(Matches) -->
    merge_nodes.
 %! saturate(+Rules)// is det.
 %  Run Rules to a length-based fixpoint (no new Key-Id pairs or equalities).
-%  SWI note: pass a non-negative integer to saturate//2; the atom 'inf' will fail under (N > 0).
+%  SWI note: This calls saturate//2 with 'inf', but saturate/4 checks (N > 0); in SWI this throws a type_error. Prefer saturate//2 with a large non-negative integer, or patch the guard.
 %  Det: det; Rules must be pure producers (emit only nodes/equalities).
 saturate(Rules) -->
    saturate(Rules, inf).
@@ -311,7 +315,7 @@ saturate(Rules) -->
 %  Run at most MaxSteps iterations (integer >= 0).
 %  - Fixpoint: compare lengths before/after rebuild (post merge_nodes/2).
 %  - Alias-only steps do not change length; progress must add/remove pairs.
-%  SWI note: 'inf' is not numeric in SWI; with (N > 0) it raises a type_error. Use a non-negative integer or patch the guard.
+%  SWI note: MaxSteps must be a non-negative integer in SWI; 'inf' is not numeric and (N > 0) will raise a type_error.
 %  Det: det.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
 %  Worker that threads the e-graph explicitly.
