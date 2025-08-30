@@ -99,7 +99,8 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 %% - assoc//2, assoc_//3      From (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_; restricted by class(BC) from Index.
 %%                            NOTE: if BC absent, a cut currently makes the rule fail instead of emitting nothing.
 %% - reduce//2                If class(B) contains integer 0, emit A=AB.
-%% - constant_folding//2      For numeric VA∈class(A), VB∈class(B): emit VC-C and C=AB where VC is VA+VB.
+%% - constant_folding//2      For numeric VA in class(A), VB in class(B): emit
+%%                            VC-C and C=AB where VC is VA+VB.
 %%   constant_folding_a//4,
 %%   constant_folding_b//4    Staged numeric search used by constant_folding//2.
 %% - rules//3, rule//3        Apply rules to a node in given order; pure producers.
@@ -107,12 +108,15 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 %% - match/4                  Run rules over a worklist; outputs ordered by worklist then per-rule.
 %% - push_back//1             Append list to DCG output (scheduling helper).
 %% - rebuild//1               Consume (=)/2 (alias Ids), enqueue Key-Id, then merge_nodes//0.
-%% - saturate//1,//2,/4       Iterate make_index → match → rebuild → merge to a length fixpoint; alias-only steps don’t count as progress.
+%% - saturate//1,//2,/4       Iterate make_index -> match -> rebuild -> merge to a
+%%                            length fixpoint; alias-only steps don't count as
+%%                            progress.
 %% - unif/1                   Perform A=B aliasing; only Id variables should appear.
 %% - extract/1,//0,/2         Alias each class Id with a representative Key to obtain concrete Prolog terms.
 %%   extract_node/1           Choose a representative per class; backtracks; fails on empty groups.
 %% Notes:
-%% - The goal of extract is to obtain a concrete Prolog term per class; it is the last standard step—do not rewrite after extraction.
+%% - The goal of extract is to obtain a concrete Prolog term per class.
+%%   It is the last standard step and you should not rewrite after extraction.
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
 %  Find Id for Key in a canonical ordset of Key-Id pairs.
@@ -514,7 +518,8 @@ example2(N, Expr) :-
    print_term(N1-Num, []), nl.
 
 %! example3(+N, +Expr, -R) is nondet.
-%  Enumerate possible results R after saturating with all rules, then validate via extract//0. Uses distinct/1 (SWI‑Prolog) to remove duplicates.
+%  Enumerate possible results R after saturating with all rules, then validate via extract//0.
+%  Uses distinct/1 (SWI-Prolog) to remove duplicates.
 %  Determinism: nondet over alternative extractions R.
 example3(N, Expr, R) :-
    distinct(R, phrase((
