@@ -394,22 +394,26 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract concrete Prolog terms by unifying each class Id with one of its Keys.
-%  Goal: extract a concrete Prolog term for each class; this is the last standard step of using an e‑graph.
-%  Side effects: aliases Ids via unification. Discard these bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
-%  Determinism: semidet.
-%  Note: Only Id variables unify; Keys never unify with each other.
+%  Extract one concrete Prolog term per class by unifying each class Id with one of its Keys.
+%  Purpose: final step of using an e-graph to obtain concrete Prolog terms.
+%  Effects: aliases Id variables via unification (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
+%  Determinism: semidet (fails only if some class has no Keys; should not happen after merge_nodes/2).
+%  Notes:
+%  - Only Id variables unify; Keys never unify with each other.
+%  - Ids are fresh logic variables; compare by identity (==), never by print-name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for extraction (aliases Ids). Extracts concrete Prolog terms; final standard step.
+%  DCG wrapper for extraction (aliases Ids). Last standard step to obtain concrete terms.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  For each Id->[Keys], unify the Id with one Key (choose a concrete representative).
 %  Final step: this aliases Ids; do not continue rewriting with these bindings.
-%  Determinism: semidet. Fails only if a class has no Keys (should not happen after merge_nodes/2).
-%  Note: Only Id variables unify; Keys never unify with each other.
+%  Determinism: semidet (fails only if a class has no Keys; should not happen after merge_nodes/2).
+%  Notes:
+%  - Only Id variables unify; Keys never unify with each other.
+%  - Ids are fresh logic variables; compare by identity (==), never by print-name.
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
@@ -417,9 +421,11 @@ extract(Nodes, Nodes) :-
 %! extract_node(+Groups) is semidet.
 %  For each Id->[Keys] group, unify the Id with one of its Keys; fails on empty groups.
 %  Chooses concrete representatives (aliases Ids); core of extraction.
-%  With Groups from Nodes, groups are nonempty by construction; failure indicates a corrupted index.
+%  With Groups from Nodes, groups are nonempty; failure indicates a corrupted index.
 %  Determinism: semidet; aliases Ids. Perform extraction only as the final step.
-%  Note: Uses member/2 to pick a Key; Keys never unify with each other.
+%  Notes:
+%  - Uses member/2 to pick a Key; Keys never unify with each other.
+%  - Ids are fresh logic variables; compare by identity (==).
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
