@@ -345,7 +345,7 @@ rebuild(Matches) -->
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
 %  - Alias-only steps (only A=B) do not count as progress.
-%  - Portability: uses MaxSteps=inf here; on systems that disallow atom/integer comparison in arithmetic (e.g., SWI), prefer saturate//2 with a large integer MaxSteps.
+%  - Portability: uses MaxSteps=inf here; on systems that disallow atom/integer comparison in arithmetic (e.g., SWI‑Prolog), prefer saturate//2 with a large integer bound.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
