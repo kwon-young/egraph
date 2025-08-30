@@ -63,6 +63,7 @@ Notes
 %  - Binds only Id; no mutation; fails if Key is absent.
 %  Precondition: Pairs is canonical.
 %  Notes: Ids are fresh logic vars used as class ids; never compare by name.
+%  Complexity: O(N) worst-case; scans with small-step pruning.
 %  Determinism: semidet, steadfast, pure.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -313,6 +314,7 @@ saturate(Rules) -->
 %  - Stop when length is stable or MaxSteps exhausted; MaxSteps=inf is unbounded.
 %  - Rules must be pure producers (emit nodes/equalities only). Unification happens only via rebuild//1.
 %  Notes: Ids are mutable logic variables used as class ids; never compare by name. Always rebuild the index after aliasing.
+%  Warning: As written, MaxSteps=inf will raise a type_error in the N > 0 guard; treat inf specially in the guard or pass a large integer.
 %  Determinism: det driver; nondet only from Rules.
 saturate(Rules, N, In, Out) :-
    (  N > 0
