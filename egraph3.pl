@@ -39,8 +39,8 @@ lookup/2 expects canonicalized input and non-canonical sets may fail spuriously.
 Known limitations.
 Keys are variable-identity sensitive and variant-equal keys with distinct
 variables are different by design.
-assoc//2 contains a cut and fails when BC is absent from the Index, but the
-intended behavior is to emit no output (an empty list).
+BUG: assoc//2 contains a cut that commits before rb_lookup/3 and fails when
+BC is absent from the Index; the intended behavior is to emit no output.
 
 Goal of extract.
 extract unifies each class Id with a representative Key to obtain one concrete
@@ -253,8 +253,8 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 %% comm//2 emits +(B,A)-BA and AB=BA for +(A,B)-AB without inspecting Ids.
 %% assoc//2 emits (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_ for (A+(B+C))-ABC using
 %% class(BC) from the index.
-%% NOTE: due to a cut, assoc//2 fails when BC is absent; the intended behavior
-%% is to emit no output.
+%% BUG: assoc//2 commits before rb_lookup/3 and fails when BC is absent; the
+%% intended behavior is to emit no output.
 %% assoc_//3 iterates class(BC) and emits at most one triple per +(B,C) member.
 %% reduce//2 emits A=AB when class(B) contains integer 0, and emits nothing
 %% otherwise (0.0 does not match).
@@ -444,8 +444,8 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - Limitation: a cut (!) makes the rule fail when BC is absent from Index.
-%  - Intended behavior is to emit no output (an empty list).
+%  - BUG: a cut commits before rb_lookup/3 and causes failure when BC is absent
+%    from Index; the intended behavior is to emit no output.
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -534,7 +534,8 @@ constant_folding_b([VB | BNodes], VA, AB, Index) -->
 constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
-%  Apply Rules to Node using Index; append outputs in rule order. Each Rule is a DCG nonterminal Rule(Node,Index)//2.
+%  Apply Rules to Node using Index; append outputs in rule order.
+%  Each Rule is a DCG nonterminal Rule(Node,Index)//2.
 %  - Node is Key-Id; rules may emit only Key-Id items and (=)/2 between Ids.
 %  - Uses sequence//2 from library(dcg/high_order). Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
