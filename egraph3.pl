@@ -53,232 +53,28 @@ Portability.
 DCG wrappers for //2 nonterminals rely on SWI-Prolog DCG expansion that maps
 them to predicates with two extra list arguments.
 Other systems may require explicit wrappers for these DCG rules.
-*/
-
-/* ----------------------------------------------------------------------
-   Predicate overview (one sentence per line; <= 80 columns).
----------------------------------------------------------------------- */
-
-%% lookup/2
-% lookup/2 finds the Id for Key in a canonical ordset of Key-Id pairs and
-% compares Keys by identity with (==).
-
-%% add//2
-% add//2 inserts a term as nodes via DCG and yields its class Id without
-% aliasing Ids.
-
-%% add/4
-% add/4 inserts a term into a node set and returns the updated set without
-% aliasing Ids.
-
-%% add_node/3
-% add_node/3 inserts Node-Id into a canonical set or reuses the existing Id in
-% place.
-
-%% add_node/4
-% add_node/4 inserts a provided Node-Id pair or reuses the provided Id when the
-% Key is present.
-
-%% union//2
-% union//2 aliases two class Ids via DCG and then re-canonicalizes the node
-% set.
-
-%% union/4
-% union/4 aliases two class Ids in place and then merges duplicate Keys
-% deterministically.
-
-%% merge_nodes//0
-% merge_nodes//0 wraps merge_nodes/2 in DCG and performs no aliasing itself.
-
-%% merge_nodes/2
-% merge_nodes/2 deduplicates by Key, unifies duplicate Ids, and repeats until
-% stable.
-
-%% merge_group/4
-% merge_group/4 unifies all Ids in a duplicate group with the head and flags
-% whether any change occurred.
-
-%% comm//2
-% comm//2 emits the commuted node B+A and the equality AB=BA for a +(A,B)
-% node.
-
-%% assoc//2
-% assoc//2 emits (A+B), (AB+C), and ABC=ABC_ for (A+(B+C)) using class(BC)
-% from Index.
-
-%% assoc_//3
-% assoc_//3 iterates class(BC) and emits at most one triple per +(B,C)
-% member.
-
-%% reduce//2
-% reduce//2 emits A=AB when class(B) contains the integer 0 and otherwise
-% emits nothing.
-
-%% constant_folding//2
-% constant_folding//2 folds numeric sums by emitting VC-C and C=AB when VA
-% and VB are numbers.
-
-%% constant_folding_a//4
-% constant_folding_a//4 selects numeric VA from class(A) and delegates to
-% constant_folding_b//4.
-
-%% constant_folding_b//4
-% constant_folding_b//4 pairs numeric VB with VA, computes VC is VA+VB, and
-% emits VC-C and C=AB.
-
-%% rules//3
-% rules//3 applies a list of rules to one node and concatenates their outputs
-% in order.
-
-%% rule//3
-% rule//3 invokes one rule for a node and index and forwards its output
-% unchanged.
-
-%% make_index/2
-% make_index/2 builds an rbtree Id->[Keys] from canonical nodes and must be
-% rebuilt after any aliasing.
-
-%% match/4
-% match/4 runs rules over a worklist and returns scheduled matches in a
-% stable order.
-
-%% push_back//1
-% push_back//1 appends a list to DCG output using difference lists in O(1)
-% time.
-
-%% rebuild//1
-% rebuild//1 consumes equalities by aliasing Ids, enqueues pairs, and then
-% re-canonicalizes.
-
-%% saturate//1
-% saturate//1 runs the driver to a length fixpoint and ignores alias-only
-% steps.
-
-%% saturate//2
-% saturate//2 runs the driver with a step bound and stops early on a
-% fixpoint.
-
-%% saturate/4
-% saturate/4 is the pure driver used by saturate//2 and saturate//1 and
-% measures progress by the merged list length.
-
-%% unif/1
-% unif/1 recognizes A=B and performs Id aliasing and is only called by
-% rebuild//1.
-
-%% extract/1
-% extract/1 aliases each class Id to a representative Key and produces
-% concrete terms as the final standard step.
-
-%% extract//0
-% extract//0 is the DCG wrapper around extract/1 and is the last standard
-% step to run.
-
-%% extract/2
-% extract/2 is the semidet in-place form that aliases and returns the node
-% list unchanged.
-
-%% extract_node/1
-% extract_node/1 chooses a representative Key per class and backtracks over
-% choices and fails on empty groups.
-
-%% add_expr/2
-% add_expr/2 builds the left-associated addition chain 1+2+...+N for N>=1.
-
-%% example1/1
-% example1/1 builds a small graph, performs a union, and returns the final
-% nodes.
-
-%% example2/2
-% example2/2 builds and saturates an addition chain and prints size sanity
-% checks.
-% Note: Saturation uses the non-DCG driver in this example.
-
-%% example3/3
-% example3/3 enumerates extracted results after saturation and removes
-% duplicates.
-
-/* Notes.
-   Ids are logic variables used as mutable unique identifiers and must be
-   compared with (==).
-   Keys preserve variable identity and are never alpha-renamed or normalized.
-   Only rebuild//1 and merge_nodes/2 unify Ids and rules must never inspect or
-   bind them.
-   The goal of extract is to obtain a concrete Prolog term per class and it
-   should be the last step. */
-
+**/
 
 :- use_module(library(dcg/high_order)).
 :- use_module(library(ordsets)).
 :- use_module(library(rbtrees)).
 
-%% Implementation reference (concise; one sentence per line).
-%% Ids are logic variables used as mutable unique class identifiers.
-%% Only (=)/2 may alias Ids and they must be compared by identity with (==),
-%% never by name or print-name.
-%% Keys preserve variable identity and are compared with (==), not with =@=/2
-%% or =/2.
-%% lookup/2 finds the Id for a Key in a canonical ordset in O(N) time using
-%% (==) on Keys.
-%% add//2 and add/4 insert a term as nodes without aliasing and build compound
-%% child Ids left-to-right.
-%% add_node/3 and add_node/4 insert or reuse a Node-Id in a canonical set and
-%% reuse the existing Id if present.
-%% union//2 and union/4 alias Ids with (=)/2 and re-canonicalize with
-%% merge_nodes/2.
-%% merge_nodes//0 and merge_nodes/2 deduplicate by Key, unify duplicate Ids
-%% with the head, and repeat until stable.
-%% merge_group/4 unifies tail Ids with the head and reports whether any change
-%% occurred.
-%% comm//2 emits +(B,A)-BA and AB=BA for +(A,B)-AB without inspecting Ids.
-%% assoc//2 emits (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_ for (A+(B+C))-ABC using
-%% class(BC) from the index.
-%% BUG: assoc//2 currently commits before rb_lookup/3 and fails when BC is
-%% absent from the index; the intended behavior is to emit no output.
-%% assoc_//3 iterates class(BC) and emits at most one triple per +(B,C) member.
-%% reduce//2 emits A=AB when class(B) contains integer 0 and emits nothing
-%% otherwise (0.0 does not match).
-%% constant_folding//2 emits VC-C and C=AB for numeric VA in class(A) and VB in
-%% class(B) with VC is VA+VB.
-%% constant_folding_a//4 selects numeric VA from class(A) and delegates to
-%% constant_folding_b//4.
-%% constant_folding_b//4 pairs numeric VB with VA, computes VC is VA+VB, and
-%% emits VC-C and C=AB.
-%% rules//3 applies a list of rules to a Node using Index and concatenates
-%% outputs in rule order.
-%% rule//3 invokes one rule for a Node and Index and forwards outputs unchanged.
-%% make_index/2 builds an rbtree Id->[Keys] from canonical Nodes and must be
-%% rebuilt after any aliasing.
-%% match/4 runs rules over a worklist and collects scheduled matches in a
-%% stable order.
-%% push_back//1 appends a list to DCG output in O(1) using difference lists.
-%% rebuild//1 applies (=)/2 equalities to alias Ids, enqueues Key-Id pairs, and
-%% merges to canonicalize.
-%% saturate//1 iterates until the node count reaches a fixpoint and ignores
-%% alias-only steps.
-%% saturate//2 runs with a step bound and stops early when a fixpoint is
-%% reached.
-%% saturate/4 is the pure driver used by the DCG forms and measures progress by
-%% list length after merge.
-%% unif/1 recognizes A=B and performs aliasing and is used only by rebuild//1.
-%% extract/1 aliases each class Id to a representative Key to materialize
-%% concrete terms and is the last standard step.
-%% extract//0 is the DCG wrapper around extract/1 and is intended as the final
-%% step.
-%% extract/2 is the semidet in-place form that aliases and returns the node
-%% list unchanged.
-%% extract_node/1 chooses a representative Key per class and backtracks over
-%% choices and fails on empty groups.
-%% add_expr/2 builds the left-associated addition chain 1+2+...+N for N>=1
-%% without rewriting Keys.
-%% example1/1 builds a small graph, unions a with f(f(a)), adds f^4(a), and
-%% returns the nodes.
-%% example2/2 builds and saturates an addition chain and prints size sanity
-%% checks.
-%% example3/3 enumerates extracted results after saturation and removes
-%% duplicates.
-%% Notes: Only rebuild//1 and merge_nodes/2 may unify Ids and rules must not
-%% inspect or bind them.
+attr_unify_hook(XSet, Y) :-
+   (  get_attr(Y, egraph, YSet)
+   -> append(XSet, YSet, Set),
+      put_attr(Y, egraph, Set)
+   ;  var(Y)
+   -> put_attr(Y, egraph, XSet)
+   ;  true
+   ).
+union(A, B, G1, G, In, Out) :-
+   get_attr(A, egraph, ASet),
+   get_attr(B, egraph, BSet),
+   ord_subtract(G1, ASet, G2),
+   ord_subtract(G2, BSet, G),
+   A = B,
+   get_attr(A, egraph, Set),
+   append(In, Set, Out).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
 %  Find Id for Key in a canonical ordset of Key-Id pairs using (==) on Keys.
@@ -415,10 +211,9 @@ merge_group(Node-[H | T], Node-H, In, Out) :-
 %  - BA is a fresh Id and AB is the original Id.
 %  - The equality is consumed by rebuild//1 and aliases only Id variables.
 %  - Rules must not inspect or bind Ids and may only emit nodes and A=B.
-comm((A+B)-AB, _Nodes) -->
-   !,
+comm((A+B)-AB, _Nodes) ==>
    [B+A-BA, AB=BA].
-comm(_, _) --> [].
+comm(_, _) ==> [].
 %! assoc(+Node, +Index)// is nondet.
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
@@ -430,11 +225,10 @@ comm(_, _) --> [].
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
 %  - Rules must not inspect or bind Ids; only emit nodes and (=)/2 between Ids.
-assoc((A+BC)-ABC, Index) -->
-   !,
+assoc((A+BC)-ABC, Index) ==>
    {rb_lookup(BC, Nodes, Index)},
    assoc_(Nodes, A, ABC).
-assoc(_, _) --> [].
+assoc(_, _) ==> [].
 %! assoc_(+Members, +A, -ABC)// is nondet.
 %  Helper for assoc//2: iterate members of class(BC) with A fixed.
 %  - Emit at most one triple per qualifying member; confine rewrites to the class.
@@ -457,13 +251,11 @@ assoc_([], _, _) --> [].
 %  - Unification happens in rebuild//1 (Ids only); rules must not inspect or bind Ids.
 %  - Use strict term equality (==) to match integer 0 and not 0.0.
 %  Determinism: semidet; pure producer.
-reduce(A+B-AB, Index) -->
-   {  rb_lookup(B, Nodes, Index),
-      once((member(Node, Nodes), Node == 0))
-   },
-   !,
+reduce(A+B-AB, Index),
+      rb_lookup(B, Nodes, Index),
+      once((member(Node, Nodes), Node == 0)) ==>
    [A=AB].
-reduce(_, _) --> [].
+reduce(_, _) ==> [].
 %! constant_folding(+Node, +Index)// is nondet.
 %  Fold ground numeric sums for +/2 into a constant.
 %  - Introduce C where VC is VA+VB; emit VC-C and C=AB.
@@ -473,11 +265,10 @@ reduce(_, _) --> [].
 %    producer.
 %  - Unification deferred to rebuild//1 (Ids only). Non-numeric members are skipped.
 %  Determinism: nondet; no side effects; must not inspect or bind Ids.
-constant_folding((A+B)-AB, Index) -->
-   !,
+constant_folding((A+B)-AB, Index) ==>
    { rb_lookup(A, ANodes, Index) },
    constant_folding_a(ANodes, B, AB, Index).
-constant_folding(_, _) --> [].
+constant_folding(_, _) ==> [].
 %! constant_folding_a(+ClassA, +B, -AB, +Index)// is nondet.
 %  Pick numeric VA in class(A), then search class(B) for numeric VB.
 %  - Staged search avoids building pairs eagerly; guarded with number/1.
@@ -563,13 +354,7 @@ make_index(In, Index) :-
 %  - Worklist is typically the current canonical Nodes.
 match(Rules, Worklist, Index, Matches) :-
    foldl(rules(Rules, Index), Worklist, Matches, []).
-%! push_back(+List)// is det.
-%  Append List to DCG output in O(1) via difference lists.
-%  - Scheduling helper only; merge_nodes/2 handles canonicalization.
-%  Notes:
-%  - Implemented with the DCG idiom: push_back(L), L --> [].
-%  - Pure with respect to Keys and Ids; no aliasing or Id inspection.
-push_back(L), L --> [].
+
 %! rebuild(+Matches)// is det.
 %  Apply Matches (Key-Id items and (=)/2 between Ids), then canonicalize:
 %    - exclude(unif, Matches, NewNodes): perform Id aliasing (A=B); drop equalities.
@@ -581,10 +366,13 @@ push_back(L), L --> [].
 %  - Rebuild any Id->[Keys] index after this (Ids are the map keys).
 %  - Keys must never appear on the left/right of (=)/2.
 %  - DCG call to merge_nodes//0 expands to merge_nodes/2.
-rebuild(Matches) -->
-   { exclude(unif, Matches, NewNodes) },
-   push_back(NewNodes),
-   merge_nodes.
+rebuild([A=B | T], In, Out) :-
+   A = B,
+   rebuild(T, In, Out).
+rebuild([N-Id | T], In, Out) :-
+   rebuild(T, [N-Id | In], Out).
+rebuild([], In, Out) :-
+   merge_nodes(In, Out).
 %! saturate(+Rules)// is det.
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
@@ -626,14 +414,6 @@ saturate(Rules, N, In, Out) :-
       )
    ;  Out = In
    ).
-
-%! unif(+Eq) is semidet.
-%  Recognize Eq=(A=B) and perform A=B (Id aliasing). Only called by rebuild//1; never call from rules or user code.
-%  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id variables; effect is backtrackable.
-%  - Only class Id variables may appear on either side; Keys must not.
-%  Det: semidet; intentionally impure.
-%  Note: this is intentionally the only explicit Id unification outside merge_nodes/2.
-unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
 %  The goal of extract is to unify each class Id with a representative Key
@@ -717,338 +497,3 @@ example3(N, Expr, R) :-
       saturate([comm, assoc, reduce, constant_folding], N),
       extract
    ), [], _)).
-
-/* ----------------------------------------------------------------------
-   Predicate reference (concise; one sentence per line; <= 80 columns).
----------------------------------------------------------------------- */
-
-%% lookup/2
-% Find Id for Key in a canonical ordset using (==) on Keys and bind only Id.
-
-%% add//2
-% Insert Term as nodes via DCG and yield its class Id without aliasing Ids.
-
-%% add/4
-% Insert Term into a canonical set, building compound children left-to-right,
-% and return updated set with at most one fresh Id allocated.
-
-%% add_node/3
-% Insert Node-Id into a canonical set or reuse the existing Id when present.
-
-%% add_node/4
-% Insert the provided Node-Id pair or reuse the provided Id when the Key is
-% already present.
-
-%% union//2
-% Alias two class Ids via DCG and then re-canonicalize the set.
-
-%% union/4
-% Unify IdA with IdB and merge duplicate Keys deterministically.
-
-%% merge_nodes//0
-% DCG wrapper around merge_nodes/2 that emits nothing and performs no aliasing.
-
-%% merge_nodes/2
-% Deduplicate by Key, unify duplicate Ids with the head, and repeat until the
-% result is stable and canonical.
-
-%% merge_group/4
-% Unify all Ids in a duplicate group with the head and flag whether any change
-% occurred in this pass.
-
-%% comm//2
-% For +(A,B)-AB emit B+A-BA and AB=BA using a fresh BA and without inspecting
-% or binding Ids.
-
-%% assoc//2
-% For (A+(B+C))-ABC use class(BC) from Index to emit (A+B)-AB, (AB+C)-ABC_,
-% and ABC=ABC_ with no Id inspection or binding.
-
-%% assoc_//3
-% Iterate members of class(BC) and emit at most one triple per +(B,C) member.
-
-%% reduce//2
-% If class(B) contains the integer 0 emit A=AB, else emit nothing.
-
-%% constant_folding//2
-% For +(A,B)-AB fold numeric members VA in class(A) and VB in class(B) to VC
-% and emit VC-C and C=AB.
-
-%% constant_folding_a//4
-% Select numeric VA from class(A) and delegate to constant_folding_b//4.
-
-%% constant_folding_b//4
-% For each numeric VB compute VC is VA+VB and emit VC-C and C=AB.
-
-%% rules//3
-% Apply a list of rules to one node using Index and concatenate outputs in rule
-% order.
-
-%% rule//3
-% Invoke one Rule(Node,Index)//2 and forward its outputs unchanged.
-
-%% make_index/2
-% Build an rbtree Id->[Keys] from canonical Nodes and rebuild it after any Id
-% aliasing.
-
-%% match/4
-% Run Rules over a worklist using Index and produce scheduled Key-Id items and
-% equalities in stable order.
-
-%% push_back//1
-% Append a list to DCG output in O(1) using difference lists for scheduling.
-
-%% rebuild//1
-% Consume equalities by aliasing Ids, enqueue Key-Id items, and merge to
-% restore canonical order.
-
-%% saturate//1
-% Iterate make_index, match, rebuild, and merge to a length fixpoint while
-% ignoring alias-only steps.
-
-%% saturate//2
-% Run the driver with a step bound and stop early at a length fixpoint.
-
-%% saturate/4
-% Pure driver for saturation that measures progress by the merged list length
-% and ignores alias-only steps.
-
-%% unif/1
-% Recognize A=B and perform backtrackable Id aliasing as used by rebuild//1.
-
-%% extract/1
-% Alias each class Id to a representative Key and produce concrete terms as
-% the last standard step.
-
-%% extract//0
-% DCG wrapper for extract/1 that aliases Ids to representatives and succeeds
-% iff every class has a Key.
-
-%% extract/2
-% Semidet in-place extraction that aliases Ids and returns the node list
-% unchanged.
-
-%% extract_node/1
-% Choose one representative Key per Id from grouped keys and backtrack over
-% choices while failing on empty groups.
-
-%% add_expr/2
-% Build the left-associated chain 1+2+...+N for N>=1 without rewriting Keys.
-
-%% example1/1
-% Build a small graph, union a with f(f(a)), add f^4(a), and return nodes.
-
-%% example2/2
-% Build and saturate an addition chain with comm and assoc and print size
-% sanity checks.
-
-%% example3/3
-% Enumerate extracted results after saturation with all rules and remove
-% duplicates using distinct/1.
-
-/* ----------------------------------------------------------------------
-   Notes (short; one sentence per line; wrap at 80 columns).
----------------------------------------------------------------------- */
-
-% Ids are logic variables used as mutable unique identifiers and must be
-% compared by identity with (==) and never by name or print-name.
-
-% Rules must not inspect or bind Id variables and may only emit Key-Id pairs
-% and equalities between Ids.
-
-% Only rebuild//1 and merge_nodes/2 perform Id aliasing, and any variable
-% instantiation inside Keys is collapsed by the next merge.
-
-% lookup/2 expects canonical ordsets and may fail on non-canonical inputs by
-% design.
-
-% assoc//2 contains a cut that commits before rb_lookup/3, so when BC is
-% absent in Index the rule fails instead of emitting nothing.
-
-% The goal of extract is to extract a concrete Prolog term per class and it is
-% the last standard step of using an egraph.
-
-/* ----------------------------------------------------------------------
-   Implementation documentation (concise; one sentence per line).
----------------------------------------------------------------------- */
-
-% lookup/2
-% Finds the Id for a Key in a canonical ordset using (==) on Keys.
-% Fails on non-canonical inputs by design.
-% Determinism: semidet.
-% Note: Keys preserve variable identity and variant-equal Keys do not match.
-
-% add//2
-% Inserts a term as nodes via DCG and yields its class Id without aliasing.
-% Builds child Ids left to right for compound terms.
-% Determinism: det.
-
-% add/4
-% Inserts a term into a node set and returns the updated set without aliasing.
-% Allocates at most one fresh Id and reuses an existing Id when present.
-% Determinism: det.
-
-% add_node/3
-% Inserts Node-Id into a canonical set or reuses the existing Id when present.
-% Keeps the set canonical and does not alias Ids.
-% Determinism: det.
-
-% add_node/4
-% Inserts the provided Node-Id pair or reuses the provided Id when the Key
-% is already present.
-% Determinism: det.
-
-% union//2
-% Aliases two class Ids via DCG and then re-canonicalizes the set.
-% Only Id variables unify and Keys never do.
-% Determinism: det.
-
-% union/4
-% Unifies two class Ids in place and merges duplicate Keys deterministically.
-% Only Id variables unify and Keys never do.
-% Determinism: det.
-
-% merge_nodes//0
-% DCG wrapper around merge_nodes/2 that emits nothing and performs no aliasing.
-% Determinism: det.
-
-% merge_nodes/2
-% Deduplicates by Key, unifies duplicate Ids with the head, and repeats until
-% stable.
-% Returns a canonical ordset sorted by standard order.
-% Determinism: det.
-
-% merge_group/4
-% Unifies all Ids in a duplicate group with the head and updates the change
-% flag.
-% Determinism: det.
-
-% comm//2
-% For +(A,B)-AB emits B+A-BA and AB=BA without inspecting or binding Ids.
-% Emits exactly two outputs per match.
-% Determinism: nondet over matches but one pair per input node.
-
-% assoc//2
-% For (A+(B+C))-ABC uses class(BC) from Index to emit (A+B)-AB, (AB+C)-ABC_,
-% and ABC=ABC_.
-% Determinism: nondet over class(BC) members.
-% Note: A cut causes failure when BC is absent and the intended behavior is
-% to emit nothing.
-
-% assoc_//3
-% Iterates members of class(BC) and emits at most one triple per +(B,C) member.
-% Determinism: nondet over members.
-
-% reduce//2
-% Emits A=AB when class(B) contains the integer 0 and otherwise emits nothing.
-% Uses strict term equality and does not match 0.0.
-% Determinism: semidet.
-
-% constant_folding//2
-% Folds numeric sums VA and VB to VC by emitting VC-C and C=AB.
-% Skips non-numeric members and supports mixed numeric types.
-% Determinism: nondet over numeric members.
-
-% constant_folding_a//4
-% Selects numeric VA from class(A) and delegates to constant_folding_b//4.
-% Determinism: nondet over numeric VA.
-
-% constant_folding_b//4
-% Pairs numeric VB with VA, computes VC is VA+VB, and emits VC-C and C=AB.
-% Determinism: nondet over numeric VB.
-
-% rules//3
-% Applies a list of rules to one node using Index and concatenates outputs
-% in rule order.
-% Determinism: follows the combined nondet of the rules.
-
-% rule//3
-% Invokes one Rule(Node,Index)//2 and forwards its outputs unchanged.
-% Determinism: follows the rule.
-
-% make_index/2
-% Builds an rbtree Id->[Keys] from canonical nodes.
-% Rebuild after any Id aliasing since Ids are the map keys.
-% Determinism: det.
-
-% match/4
-% Runs rules over a worklist using Index and produces scheduled matches in
-% stable order.
-% Determinism: det.
-
-% push_back//1
-% Appends a list to DCG output in O(1) using difference lists.
-% Determinism: det.
-
-% rebuild//1
-% Consumes equalities by aliasing Ids, enqueues Key-Id items, and merges to
-% canonicalize.
-% Only Id variables unify and Keys never do.
-% Determinism: det.
-
-% saturate//1
-% Iterates the driver to a length fixpoint and ignores alias-only steps.
-% Determinism: det.
-
-% saturate//2
-% Runs the driver with a step bound and stops early at a length fixpoint.
-% Determinism: det.
-% Note: The atom inf may be non-portable and a large integer bound is safer.
-
-% saturate/4
-% Pure driver that measures progress by the merged list length and ignores
-% alias-only steps.
-% Determinism: det.
-
-% unif/1
-% Recognizes A=B and performs backtrackable Id aliasing.
-% Intended to be called only by rebuild//1.
-% Determinism: semidet.
-
-% extract/1
-% Aliases each class Id to a representative Key and produces concrete terms.
-% This is the last standard step and no rewriting should follow.
-% Determinism: semidet.
-
-% extract//0
-% DCG wrapper for extract/1 that aliases Ids to representatives.
-% Succeeds iff every class has at least one Key.
-% Determinism: semidet.
-
-% extract/2
-% Semidet in-place extraction that aliases Ids and returns the node list
-% unchanged.
-% Determinism: semidet.
-
-% extract_node/1
-% Chooses one representative Key per Id from grouped keys and backtracks over
-% choices.
-% Fails on empty groups as a defensive check.
-% Determinism: semidet.
-
-% add_expr/2
-% Builds the left-associated chain 1+2+...+N for N>=1 without rewriting Keys.
-% Determinism: det.
-
-% example1/1
-% Builds a small graph, unions a with f(f(a)), adds f^4(a), and returns nodes.
-% Determinism: det.
-
-% example2/2
-% Builds and saturates an addition chain with comm and assoc and prints size
-% checks.
-% Determinism: det.
-
-% example3/3
-% Enumerates extracted results after saturation with all rules and removes
-% duplicates using distinct/1.
-% Determinism: nondet over extracted results.
-
-% Notes
-% Ids are logic variables that act as mutable unique identifiers.
-% Compare Ids with (==) and never by name or print-name.
-% Keys preserve variable identity and must not be alpha-renamed or unified
-% in rules.
-% Only rebuild//1, merge_nodes/2, and unif/1 may alias Ids.
-% DCG wrappers rely on system support for //2 and may need explicit wrappers
-% on some Prolog systems.
