@@ -88,24 +88,24 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 ---------------------------------------------------------------------- */
 
 %% lookup/2
-% lookup/2 finds the Id for a Key in a canonical ordset and compares Keys with
-% (==).
+% lookup/2 finds the Id for Key in a canonical ordset of Key-Id pairs and
+% compares Keys by identity with (==).
 
 %% add//2
-% add//2 adds a term as nodes via DCG and yields its class Id without aliasing
-% Ids.
+% add//2 inserts a term as nodes via DCG and yields its class Id without
+% aliasing Ids.
 
 %% add/4
-% add/4 adds a term to a node set and returns the updated set without aliasing
-% Ids.
+% add/4 inserts a term into a node set and returns the updated set without
+% aliasing Ids.
 
 %% add_node/3
 % add_node/3 inserts Node-Id into a canonical set or reuses the existing Id in
 % place.
 
 %% add_node/4
-% add_node/4 inserts Node-Id given as a pair or reuses the provided Id if
-% present.
+% add_node/4 inserts a provided Node-Id pair or reuses the provided Id when the
+% Key is present.
 
 %% union//2
 % union//2 aliases two class Ids via DCG and then re-canonicalizes the node
@@ -124,25 +124,27 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 
 %% merge_group/4
 % merge_group/4 unifies all Ids in a duplicate group with the head and flags
-% changes.
+% whether any change occurred.
 
 %% comm//2
-% comm//2 emits the commuted node B+A and AB=BA for a +(A,B) node.
+% comm//2 emits the commuted node B+A and the equality AB=BA for a +(A,B)
+% node.
 
 %% assoc//2
-% assoc//2 emits (A+B), (AB+C), and ABC=ABC_ for (A+(B+C)) using class(BC) from
-% Index.
+% assoc//2 emits (A+B), (AB+C), and ABC=ABC_ for (A+(B+C)) using class(BC)
+% from Index.
 
 %% assoc_//3
-% assoc_//3 iterates class(BC) and emits at most one triple per +(B,C) member.
+% assoc_//3 iterates class(BC) and emits at most one triple per +(B,C)
+% member.
 
 %% reduce//2
-% reduce//2 emits A=AB when class(B) contains the integer 0 and otherwise emits
-% nothing.
+% reduce//2 emits A=AB when class(B) contains the integer 0 and otherwise
+% emits nothing.
 
 %% constant_folding//2
-% constant_folding//2 folds numeric sums by emitting VC-C and C=AB when VA and
-% VB are numbers.
+% constant_folding//2 folds numeric sums by emitting VC-C and C=AB when VA
+% and VB are numbers.
 
 %% constant_folding_a//4
 % constant_folding_a//4 selects numeric VA from class(A) and delegates to
@@ -150,11 +152,11 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 
 %% constant_folding_b//4
 % constant_folding_b//4 pairs numeric VB with VA, computes VC is VA+VB, and
-% emits folds.
+% emits VC-C and C=AB.
 
 %% rules//3
-% rules//3 applies a list of rules to one node and concatenates their outputs in
-% order.
+% rules//3 applies a list of rules to one node and concatenates their outputs
+% in order.
 
 %% rule//3
 % rule//3 invokes one rule for a node and index and forwards its output
@@ -162,48 +164,51 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 
 %% make_index/2
 % make_index/2 builds an rbtree Id->[Keys] from canonical nodes and must be
-% rebuilt after aliasing.
+% rebuilt after any aliasing.
 
 %% match/4
-% match/4 runs rules over a worklist and returns scheduled matches in a stable
-% order.
+% match/4 runs rules over a worklist and returns scheduled matches in a
+% stable order.
 
 %% push_back//1
-% push_back//1 appends a list to DCG output using difference lists in O(1).
+% push_back//1 appends a list to DCG output using difference lists in O(1)
+% time.
 
 %% rebuild//1
-% rebuild//1 consumes equalities by aliasing Ids, enqueues pairs, and
+% rebuild//1 consumes equalities by aliasing Ids, enqueues pairs, and then
 % re-canonicalizes.
 
 %% saturate//1
-% saturate//1 runs the driver to a length fixpoint while ignoring alias-only
+% saturate//1 runs the driver to a length fixpoint and ignores alias-only
 % steps.
 
 %% saturate//2
-% saturate//2 runs the driver with a step bound and stops early on a fixpoint.
+% saturate//2 runs the driver with a step bound and stops early on a
+% fixpoint.
 
 %% saturate/4
-% saturate/4 is the pure driver used by saturate//2 and saturate//1.
+% saturate/4 is the pure driver used by saturate//2 and saturate//1 and
+% measures progress by the merged list length.
 
 %% unif/1
 % unif/1 recognizes A=B and performs Id aliasing and is only called by
 % rebuild//1.
 
 %% extract/1
-% extract/1 aliases each class Id to a representative Key and produces concrete
-% terms.
+% extract/1 aliases each class Id to a representative Key and produces
+% concrete terms as the final standard step.
 
 %% extract//0
-% extract//0 is the DCG wrapper around extract/1 and is the last standard step
-% to run.
+% extract//0 is the DCG wrapper around extract/1 and is the last standard
+% step to run.
 
 %% extract/2
-% extract/2 is the semidet in-place form that aliases and returns the node list
-% unchanged.
+% extract/2 is the semidet in-place form that aliases and returns the node
+% list unchanged.
 
 %% extract_node/1
 % extract_node/1 chooses a representative Key per class and backtracks over
-% choices.
+% choices and fails on empty groups.
 
 %% add_expr/2
 % add_expr/2 builds the left-associated addition chain 1+2+...+N for N>=1.
@@ -215,6 +220,7 @@ strict separation of concerns where only rebuild and merge_nodes unify Ids.
 %% example2/2
 % example2/2 builds and saturates an addition chain and prints size sanity
 % checks.
+% Note: Saturation uses the non-DCG driver in this example.
 
 %% example3/3
 % example3/3 enumerates extracted results after saturation and removes
