@@ -59,14 +59,14 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Find Id for Key in a canonical ordset of Key-Id pairs.
-%  - Pre: Pairs canonical (run merge_nodes/2 first).
-%  - Method: prune by standard order; confirm with (==). Binds Id only; never builds/unifies Keys; allocates nothing.
-%  - Determinism/Complexity: semidet, steadfast; O(N); no choicepoints on success.
+%  Lookup Id for Key in a canonical ordset of Key-Id.
+%  - Pre: Pairs canonical (after merge_nodes/2).
+%  - Method: prune by standard order, confirm with (==); binds Id only; no Key construction; no allocation.
+%  - Det/Big-O: semidet, steadfast; O(N); no choicepoints on success.
 %  Notes:
-%  - Non-canonical input may fail spuriously.
-%  - Ids are fresh logic variables (mutable class identifiers); compare by identity (==), never by print-name.
-%  - Keys keep variable identity (built by add/4; no alpha/variant normalization).
+%  - Non-canonical input may fail.
+%  - Ids are logic variables (class ids); compare by identity (==), never by name.
+%  - Keys preserve variable identity (no alpha/variant normalization).
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -347,28 +347,25 @@ rebuild(Matches) -->
    merge_nodes.
 %! saturate(+Rules)// is det.
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
-%  - Rules are pure producers (emit only Key-Id and (=)/2).
-%  - Alias-only steps are ignored (no change in length).
-%  Portability: calls saturate//2 with MaxSteps=inf.
-%  Warning: inf is an atom here; the driver uses arithmetic (N > 0), so some systems will error. On SWI-Prolog this raises a type error. Prefer saturate//2 with a large integer.
+%  - Pure producer; emits only Key-Id and (=)/2.
+%  - Alias-only steps (only A=B) do not count as progress.
+%  Portability: delegates to saturate//2 with MaxSteps=inf. On systems where N>0 over atoms errors (e.g., SWI-Prolog), prefer saturate//2 with a large integer.
 saturate(Rules) -->
    saturate(Rules, inf).
 %! saturate(+Rules, +MaxSteps)// is det.
-%  Run up to MaxSteps iterations; stop early when length stabilizes after rebuild/merge.
-%  - MaxSteps: integer >= 0 (or inf where supported).
-%  - Alias-only steps do not count as progress.
-%  Determinism: det.
-%  Warning: compared arithmetically (N > 0); non-numeric atoms (e.g., inf) may raise. Prefer a large integer on systems without inf.
+%  Run up to MaxSteps iterations; stop early when length stabilizes (after rebuild/merge).
+%  - MaxSteps: integer >= 0 (or inf if supported).
+%  - Alias-only steps are ignored.
+%  Det: det. On systems where N>0 over atoms errors, pass a large integer instead of inf.
 %! saturate(+Rules, +MaxSteps, +In, -Out) is det.
-%  Driver. Per iteration: build Index, apply Rules to Nodes, rebuild (alias Ids), then merge.
-%  - Only rebuild//1 and merge_nodes/2 may unify Ids.
-%  - Ids are logic vars (mutable); rebuild Index after aliasing; never compare by name/print-name.
-%  - MaxSteps: integer >= 0; use a large integer if inf is unsupported.
-%  Determinism: det. Nondet comes only from Rules.
-%  Notes:
+%  Driver. Each iteration: make_index/2, match/4, rebuild//1 (aliases Ids), merge_nodes/2.
+%  - Only rebuild//1 and merge_nodes/2 unify Ids.
+%  - Ids are logic variables (class ids); rebuild Index after aliasing; never compare by name.
+%  - MaxSteps: integer >= 0 (use a large integer if inf is unsupported).
+%  Det: det. Notes:
 %  - Progress is measured by list length; alias-only steps are ignored.
-%  - Worklist per step is the current canonical Nodes.
-%  - MaxSteps is compared arithmetically (N > 0); passing a non-numeric atom (e.g., inf) will raise on many systems (including SWI). Use a large integer instead.
+%  - Worklist is the current canonical Nodes.
+%  - N is compared arithmetically (N > 0); atoms (e.g., inf) will error on many systems.
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -388,49 +385,43 @@ saturate(Rules, N, In, Out) :-
    ).
 
 %! unif(+Eq) is semidet.
-%  True for Eq=(A=B); performs that unification (side effect).
-%  Only used by rebuild//1 via exclude/3; never call from rules or user code.
-%  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id variables.
-%  - Only Id variables may appear; Keys must not.
-%  Determinism: semidet; intentionally impure (Id unification).
-%  Notes:
-%  - The only explicit Id unification point outside merge_nodes/2.
-%  - Ids are logic variables (mutable unique identifiers), not predicate symbols.
+%  Recognize Eq=(A=B) and perform A=B (Id aliasing). Only used by rebuild//1; never call from rules/user code.
+%  - Uses (=)/2 (no occurs-check); safe for fresh, acyclic Id vars.
+%  - Only Id vars may appear; Keys must not.
+%  Det: semidet; intentionally impure. Notes: the only explicit Id unification outside merge_nodes/2.
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract exactly one concrete Prolog term per equivalence class by unifying each class Id with one of its Keys.
-%  This is the last standard step of using an e-graph: materialize concrete representatives for output or subsequent non-rewriting use.
-%  Effects: aliases Id variables via unification (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
-%  Determinism: semidet (fails only if some class has no Keys; should not happen after merge_nodes/2).
+%  Final step: choose a concrete representative Key for each class by unifying each class Id with one of its Keys.
+%  Effects: aliases Id variables (backtrackable). Discard bindings to continue analysis; to inspect without aliasing, examine Nodes directly.
+%  Det: semidet (fails only if a class has no Keys; should not happen after merge_nodes/2).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are fresh logic variables; compare by identity (==), never by print-name.
+%  - Ids are logic variables; compare by identity (==), never by name.
 extract(Nodes) :-
    extract(Nodes, Nodes).
 %! extract//0 is semidet.
-%  DCG wrapper for the final extraction step (aliases Ids). Use only at the end.
+%  DCG wrapper for the final extraction (aliases Ids). Use only as the last step.
 %  Succeeds iff every class has at least one Key; otherwise fails.
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
-%  For each Id->[Keys], unify the Id with one of its Keys (choose a concrete representative).
-%  This is the last standard step: aliases Ids; do not continue rewriting/saturation after this.
-%  Determinism: semidet (fails only if a class has no Keys; should not happen after merge_nodes/2).
+%  Alias each class Id with one of its Keys (choose representatives); returns the same list.
+%  Final standard step: do not continue rewriting/saturation after this.
+%  Det: semidet (fails only if some class has no Keys).
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are fresh logic variables; compare by identity (==), never by print-name.
+%  - Ids are logic variables; compare by identity (==).
 extract(Nodes, Nodes) :-
    transpose_pairs(Nodes, Pairs),
    group_pairs_by_key(Pairs, Groups),
    extract_node(Groups).
 %! extract_node(+Groups) is semidet.
-%  For each Id->[Keys] group, unify the Id with one of its Keys; fails on empty groups.
-%  Chooses concrete representatives (aliases Ids); core of extraction.
-%  With Groups from Nodes, groups are nonempty; failure indicates a corrupted index.
-%  Determinism: semidet; aliases Ids. Perform extraction only as the final step.
+%  For each Id->[Keys], unify Id with one member; fails on empty groups.
+%  Core of extraction; aliases Ids. Use only as the last step.
+%  Det: semidet.
 %  Notes:
-%  - Uses member/2 to pick a Key; Keys never unify with each other.
-%  - Ids are fresh logic variables; compare by identity (==).
+%  - Picks via member/2; Keys do not unify with each other.
+%  - Ids are logic variables; compare by identity (==).
 extract_node([Node-Nodes | Groups]) :-
    member(Node, Nodes),
    extract_node(Groups).
