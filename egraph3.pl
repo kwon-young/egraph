@@ -22,19 +22,23 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 Implementation predicates (internal)
-- lookup/2: O(N) read-only lookup in a canonical ordset of Key-Id; first prunes by standard order, then confirms with (==) to preserve variable identity. Pure; binds only the value.
-- add/4: worker behind add//2; builds Keys as F(ChildIds) (congruence) left-to-right and appends Node-Id pairs. Pure producer; no unification; may introduce duplicates.
-- add_node/4, add_node/3: ensure a Key has a class Id; reuse existing Id or insert Node-Id with a fresh Id. Pure except for allocating a fresh logic var.
-- merge_nodes//0, merge_nodes/2: canonicalize to one Key-Id per Key by sorting, grouping equal Keys, and unifying all Ids in each group into the first; iterate to a fixpoint after aliasing. Only unifies Id variables; backtrackable.
-- merge_group/4: unify all Ids in a Key-group into the first (representative); report whether any merge occurred. Deterministic.
-- make_index/2: build rbtree Id -> [Keys] from a canonicalized ordset. Assumes prior merge_nodes/2; Index must be rebuilt after any aliasing.
-- rules//3, rule//3: run DCG rules over a node with Index; rules must only emit Key-Id items and A=B equalities. No unification here.
+- lookup/2: O(N) read-only lookup in a canonical ordset of Key-Id. Prunes by standard order, then confirms with (==) to preserve variable identity. Pure; binds Val only; never touches Ids.
+- add/4: worker for add//2. Builds Keys as F(ChildIds) (congruence) left-to-right and emits Node-Id pairs. Pure producer; no unification; duplicates allowed (merged later).
+- add_node/4, add_node/3: ensure a Key has a class Id. Reuse existing Id or insert Node-Id with a fresh Id. Pure apart from allocating a fresh logic variable for the Id.
+- merge_nodes//0, merge_nodes/2: canonicalize to one Key-Id per Key by sorting, grouping equal Keys, and unifying all Ids in each group into the first (representative). Iterate to a fixpoint because aliasing may expose new duplicates. Only unifies Id variables; effects are backtrackable.
+- merge_group/4: unify all Ids in a group into the first; report whether any merge occurred. Det.
+- make_index/2: build rbtree Id -> [Keys] from a canonicalized ordset. Requires merge_nodes/2 beforehand. Rebuild after any aliasing.
+- rules//3, rule//3: run DCG rules over a Node with Index. Rules may only emit Key-Id items and (=)/2 equalities; no unification.
 - match/4: collect rule outputs over the current worklist given Index. Pure; no mutation.
 - push_back//1: append a list to the DCG output (difference-list scheduler) in O(1). Scheduling only; no deduplication.
-- rebuild//1: apply (=)/2 equalities (alias Ids), enqueue new items, then canonicalize; the only place where unification of Ids happens. Effects are logical/backtrackable.
-- unif/1: recognize and execute (=)/2 on class Ids (used only via exclude/3 in rebuild//1). Impure by design; never call from user rules.
-- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4: internal example rules/helpers; pure producers that never unify Ids directly.
-- extract/2, extract_node/1: validation helpers used by extract//0; may alias Ids via member/2, so use only for validation and discard any bindings.
+- rebuild//1: apply (=)/2 equalities (alias Ids), enqueue new items, then canonicalize. The only place where Id variables are unified. Effects are logical/backtrackable.
+- unif/1: recognize and execute (=)/2 on class Ids (used only via exclude/3 in rebuild//1). Deliberately impure; never call from user rules.
+- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4: internal example rules/helpers. Pure producers; never unify Ids directly.
+- extract/2, extract_node/1: validation helpers used by extract//0. May alias Ids via member/2; use only for validation and discard any bindings.
+
+Notes on mutable class Ids
+- Class Ids are fresh logic variables that act as mutable, unique class identifiers. They alias via unification only; never compare them by name.
+- Unifying Ids can instantiate variables embedded in Keys; always follow any aliasing with merge_nodes/2 (rebuild//1 already does this).
 
 Equality and identity
 - Key equality is determined after standard ordering and confirmed with (==), preserving variable identity.
