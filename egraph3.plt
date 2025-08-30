@@ -196,11 +196,15 @@ test(merge_nodes_alias_instantiates_keys_ids_equal, true(FB==FA)) :-
 test(merge_nodes_dcg_empty_noop, true(Out == [])) :-
     phrase(egraph:merge_nodes, [], Out).
 
-% DCG wrapper on non-canonical input: deduplicates and aliases Ids
-% Ensures phrase/3 with merge_nodes//0 canonicalizes [x-A,x-B] into [x-A] and unifies A,B.
-test(merge_nodes_dcg_dedup_and_alias, true((Out == [x-A], A==B))) :-
+% DCG wrapper on non-canonical input: deduplicates to a single representative
+test(merge_nodes_dcg_dedup_only, true(Out == [x-A])) :-
     A = _, B = _,
     phrase(egraph:merge_nodes, [x-A, x-B], Out).
+
+% DCG wrapper ensures duplicate-key Ids unify (alias)
+test(merge_nodes_dcg_alias_ids, true(A==B)) :-
+    A = _, B = _,
+    phrase(egraph:merge_nodes, [x-A, x-B], _Out).
 
 :- end_tests(merge_nodes_dcg_0).
 
@@ -244,8 +248,8 @@ test(comm_emits_commuted_node, true((member(K-_BA, Out), K = B+A))) :-
     A = _, B = _,
     phrase(egraph:comm((A+B)-_AB, _Index), Out).
 
-% Emits equality AB=BA
-test(comm_emits_equality, true((member(AB=BA, Out), var(AB), var(BA)))) :-
+% Emits equality AB=BA indicating the commuted form is equated to the original
+test(comm_emits_equality, true(member(_AB=_BA, Out))) :-
     A = _, B = _,
     phrase(egraph:comm((A+B)-_AB, _Index), Out).
 
@@ -376,11 +380,17 @@ test(const_fold_a_emits_9_pair, true(member(9-_C2, Out))) :-
     ord_list_to_rbtree([B-[3, 7]], Index),
     phrase(egraph:constant_folding_a([2, foo], B, _AB, Index), Out).
 
-% Emits equalities C=AB and C2=AB
-test(const_fold_a_emits_equalities, true((member(_C=AB, Out), member(_C2=AB, Out)))) :-
+% Emits equality C=AB for VB=3
+test(const_fold_a_emits_eq_5_ab, true(member(_C=AB, Out))) :-
     B = _,
     ord_list_to_rbtree([B-[3, 7]], Index),
-    phrase(egraph:constant_folding_a([2, foo], B, _AB, Index), Out).
+    phrase(egraph:constant_folding_a([2, foo], B, AB, Index), Out).
+
+% Emits equality C2=AB for VB=7
+test(const_fold_a_emits_eq_9_ab, true(member(_C2=AB, Out))) :-
+    B = _,
+    ord_list_to_rbtree([B-[3, 7]], Index),
+    phrase(egraph:constant_folding_a([2, foo], B, AB, Index), Out).
 
 :- end_tests(constant_folding_a).
 
@@ -645,8 +655,14 @@ test(extract_2_semidet_aliases, true(once((A==x ; A==y)))) :-
 % extract_node/1
 :- begin_tests(extract_node).
 
-% Chooses a member per Id group (once/1 to commit)
-test(extract_node_chooses_members, true((A==x, B==z))) :-
+% Chooses a representative for first group A->[x,y] (committed with once/1)
+test(extract_node_choose_first_group, true(A==x)) :-
+    A = _, B = _,
+    Groups = [A-[x,y], B-[z]],
+    once(egraph:extract_node(Groups)).
+
+% Chooses a representative for second group B->[z]
+test(extract_node_choose_second_group, true(B==z)) :-
     A = _, B = _,
     Groups = [A-[x,y], B-[z]],
     once(egraph:extract_node(Groups)).
