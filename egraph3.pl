@@ -62,7 +62,7 @@ Notes
 %  - Input must be canonical (see merge_nodes/2).
 %  - Prunes by standard order; confirms identity with (==) to preserve variable identity.
 %  - Binds Id only; fails if absent; steadfast; no allocation on success.
-%  Complexity: O(N) worst case. Pure w.r.t. Keys/Ids; no backtracking on success.
+%  Complexity: O(N) worst case. Pure w.r.t. Keys and Ids; no backtracking on success.
 %  Notes:
 %  - Undefined on non-canonical input; canonicalize via merge_nodes/2 first.
 %  - Ids are logic variables (class ids); never compare by print-name.
@@ -101,7 +101,7 @@ lookup(Item-V, [X1-V1]) :-
 %  - Atom/var: Key = Term; variable identity is part of the Key (no alpha/variant renaming).
 %  - Emits only Key-Id pairs; never unifies Ids. Duplicates are removed later by merge_nodes/2.
 %  Pre: In is an ordset (preferably canonical).
-%  Cost: build O(|Term|), insert O(N). Det; steadfast; pure w.r.t. Keys.
+%  Complexity: build O(|Term|), insert O(N). Det; steadfast; pure w.r.t. Keys.
 %  Notes:
 %  - Ids are fresh logic vars (mutable class identifiers).
 %  - DCG form is a pure producer (no side effects).
@@ -121,7 +121,7 @@ add(Term, Id, In, Out) :-
 %  - Uses standard order and (==) to preserve variable identity; no canonicalization here.
 %  - No Id unification; ord_add_element/3 preserves set semantics.
 %  Pre: In is canonical (from merge_nodes/2). Ids are logic vars (class ids).
-%  Complexity: O(N). Det; quasi-pure (no Id unification).
+%  Complexity: O(N). Det; quasi-pure (may allocate one fresh Id; no Id unification).
 %  Notes:
 %  - Do not call on non-canonical sets; canonicalize first via merge_nodes/2.
 %  - add_node/3 form (Node-Id, In, Out) is a thin wrapper over add_node/4.
@@ -150,7 +150,7 @@ union(A, B, In, Out) :-
 %  DCG shim for merge_nodes/2; emits nothing; only canonicalizes.
 %! merge_nodes(+In, -Out) is det.
 %  Canonicalize to one Key-Id per Key; fixpoint under Id aliasing.
-%  - sort/2 → group_pairs_by_key/2 → unify each group's Ids with the first; repeat if any merge occurred.
+%  - sort/2 → group_pairs_by_key/2 → unify each group's Ids with the first; repeat while any merge occurs.
 %  - Only Id vars unify; Keys never do. Id unification may instantiate variables inside Keys; the next pass collapses collisions.
 %  - Complexity: O(N log N) per pass; repeats until stable. Det.
 %  Notes:
