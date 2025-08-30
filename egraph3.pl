@@ -59,14 +59,14 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Look up Id for Key in a canonical ordset of Key-Id pairs.
-%  - Pre: Pairs are canonical (run merge_nodes/2 first).
-%  - Algo: prune by standard order, then confirm with (==). Binds Id only; never builds or unifies Keys.
-%  - Det/Cost: semidet, O(N); steadfast; no choicepoints on success.
+%  Find Id for Key in a canonical ordset of Key-Id pairs (Pairs).
+%  - Pre: Nodes are canonical (call merge_nodes/2 first).
+%  - Method: prune by standard order; confirm equality with (==). Binds Id only; never constructs/unifies Keys.
+%  - Det/Cost: semidet, O(N); steadfast; leaves no choicepoints on success.
 %  Notes:
-%  - Non-canonical input is a precondition violation and may yield spurious failure.
-%  - Ids are fresh logic vars (mutable class ids); compare by identity (==), never by name.
-%  - Keys are those produced by add/4.
+%  - Non-canonical input violates the precondition and can fail spuriously.
+%  - Ids are logic variables used as mutable class ids; compare by identity (==), never by name.
+%  - Keys come from add/4; variable identity is part of the Key.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
    compare(R4, Item, X4),
@@ -96,14 +96,15 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Build the Key for Term and ensure presence; return its class Id.
-%  - compound Term: Key = F(ChildIds) (left-to-right ⇒ stable congruence).
-%  - atom/var Term: Key = Term (variable identity is part of the Key).
-%  - Emits only Key-Id; never unifies Ids. merge_nodes/2 deduplicates.
-%  Pre: In is an ordset (prefer canonical).
+%  Construct Key for Term and ensure it exists; return its class Id.
+%  - Compound Term: Key = F(ChildIds) (left-to-right traversal ⇒ stable congruence).
+%  - Atom/var Term: Key = Term (variable identity is part of Key).
+%  - Emits only Key-Id; never unifies Ids. Deduplication happens in merge_nodes/2.
+%  Pre: In is an ordset (ideally canonical).
 %  Det/Cost: build O(|Term|); insertion O(N) via ord_add_element/3. det; steadfast; pure w.r.t. Keys.
 %  Notes:
-%  - Id is fresh when inserted; otherwise reused. DCG form is a pure producer.
+%  - If new, Id is a fresh logic var; if present, the existing Id is reused.
+%  - DCG form is a pure producer (no unification effects).
 add(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
@@ -115,15 +116,15 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node-Id is present in the canonical ordset.
-%  - If present: reuse Id and Out=In; else insert Node-Id with a fresh Id.
-%  - Respects standard order and (==) (variable identity); no canonicalization here.
-%  - Never unifies Ids; ord_add_element/3 preserves set semantics.
+%  Ensure Node-Id exists in the canonical ordset.
+%  - If present: reuse Id and keep Out=In; otherwise insert Node-Id with a fresh Id.
+%  - Obeys standard order and (==) (preserves variable identity); no canonicalization here.
+%  - Never unifies existing Ids; ord_add_element/3 preserves set semantics.
 %  Pre: In is canonical.
-%  Det/Cost: O(N). det; quasi‑pure (may introduce one fresh Id; no Id unification).
+%  Det/Cost: O(N). det; quasi‑pure (may create one fresh Id).
 %  Notes:
-%  - Out is canonical.
-%  - Compare Ids by identity (==); never by name/print-name.
+%  - Out remains canonical.
+%  - Compare Ids by identity (==); never by name.
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
@@ -146,13 +147,13 @@ union(A, B, In, Out) :-
 %  DCG call to merge_nodes/2; emits nothing. Pure producer.
 %  Note: On SWI-Prolog, DCG expansion calls merge_nodes/2 directly; no extra shim is needed.
 %! merge_nodes(+In, -Out) is det.
-%  Canonicalize Nodes to a single Key-Id per Key; loop to a fixpoint.
-%  - Steps: sort -> group_pairs_by_key -> unify all Ids in a group with the first.
+%  Canonicalize to one Key-Id per Key; repeat until no merges occur.
+%  - Steps: sort -> group_pairs_by_key -> unify all Ids in each group with the first (representative).
 %  - Only Id vars unify; Keys never do. Id unification may instantiate vars inside Keys; the next pass collapses collisions.
-%  Cost: O(N log N) per pass; repeats while merges occur.
+%  Cost: O(N log N) per pass; repeats while merges exist.
 %  Notes:
 %  - Out is canonical (sorted; one Key-Id per Key).
-%  - Terminates: the number of distinct Id vars strictly decreases on any merge.
+%  - Terminates: each merge strictly decreases the number of distinct Id vars.
 %  - Representative Id is the first after sorting; do not rely on it across backtracking.
 %  - Rebuild any Id→[Keys] index after this (Ids may have aliased).
 merge_nodes(In, Out) :-
@@ -278,7 +279,7 @@ constant_folding_b([], _, _, _) --> [].
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply each Rule(Node,Index)// in Rules (list of DCG nonterminals) to Node using Index; append outputs in rule order.
 %  - Node is Key-Id; rules may emit only Key-Id items and (=)/2 between Ids.
-%  Uses library(dcg/high_order):sequence//2. Index: rbtree Id -> [Keys]; read-only.
+%  - Uses sequence//2 from library(dcg/high_order). Index: rbtree Id -> [Keys]; read-only.
 %  Notes:
 %  - Pure producer; steadfast; Ids are opaque mutable identifiers (do not inspect/bind).
 %  - Output order: per-node, then per-rule. Do not rely on representative Ids.
@@ -303,7 +304,7 @@ rule(Index, Node, Rule) -->
 %  Impl: transpose_pairs/2 flips Key-Id to Id-Key; Keys are stored as-is (no unification).
 %  Notes:
 %  - Result is an rbtree(Id->[Keys]) with nonempty value lists; rebuild after any Id aliasing.
-%  - Intended for the current iteration only.
+%  - Intended for the current iteration only; discard and rebuild after each rebuild//1 or merge.
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
