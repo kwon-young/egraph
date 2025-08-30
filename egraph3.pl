@@ -38,6 +38,33 @@ Notes
 :- use_module(library(ordsets)).
 :- use_module(library(rbtrees)).
 
+%% Predicate reference (concise; implementation)
+%% Ids are logic variables acting as mutable unique identifiers; only (=)/2 aliases them. Keys preserve variable identity (use (==)).
+%% - lookup/2                 Find Id by Key in canonical ordset; prune by order, confirm with (==); semidet, O(N).
+%% - add//2, add/4            Ensure node for Term; for compounds build F(ChildIds); emit Key-Id only (no aliasing).
+%% - add_node/3,/4            Insert Node-Id if absent; reuse Id if present; Out remains canonical; no Id unification.
+%% - union//2, union/4        Alias two Ids via (=)/2, then merge_nodes/2 to re-canonicalize.
+%% - merge_nodes//0, /2       Dedupe to one Key-Id per Key; unify duplicate Ids; repeat until stable.
+%% - merge_group/4            Helper: unify all tail Ids with head; report if any merge occurred.
+%% - comm//2                  From (A+B)-AB emit B+A-BA and AB=BA.
+%% - assoc//2, assoc_//3      From (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_; restricted by class(BC) from Index.
+%%                            NOTE: if BC absent, a cut currently makes the rule fail instead of emitting nothing.
+%% - reduce//2                If class(B) contains integer 0, emit A=AB.
+%% - constant_folding//2      For numeric VA∈class(A), VB∈class(B): emit VC-C and C=AB where VC is VA+VB.
+%%   constant_folding_a//4,
+%%   constant_folding_b//4    Staged numeric search used by constant_folding//2.
+%% - rules//3, rule//3        Apply rules to a node in given order; pure producers.
+%% - make_index/2             Build rbtree Id -> [Keys]; rebuild after any Id aliasing.
+%% - match/4                  Run rules over a worklist; outputs ordered by worklist then per-rule.
+%% - push_back//1             Append list to DCG output (scheduling helper).
+%% - rebuild//1               Consume (=)/2 (alias Ids), enqueue Key-Id, then merge_nodes//0.
+%% - saturate//1,//2,/4       Iterate make_index → match → rebuild → merge to a length fixpoint; alias-only steps don’t count as progress.
+%% - unif/1                   Perform A=B aliasing; only Id variables should appear.
+%% - extract/1,//0,/2         Alias each class Id with a representative Key to obtain concrete Prolog terms.
+%%   extract_node/1           Choose a representative per class; backtracks; fails on empty groups.
+%% Notes:
+%% - The goal of extract is to obtain a concrete Prolog term per class; it is the last standard step—do not rewrite after extraction.
+
 %! lookup(+Key-?Id, +Pairs) is semidet.
 %  Lookup Id for Key in a canonical ordset of Key-Id pairs (no Key construction).
 %  - Pre: Pairs is canonical (after merge_nodes/2).
