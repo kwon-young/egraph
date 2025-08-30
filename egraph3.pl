@@ -280,7 +280,9 @@ to their +(2) counterparts and other systems may require explicit wrappers.
 %! lookup(+Key-?Id, +Pairs) is semidet.
 %  Find Id for Key in a canonical ordset of Key-Id pairs using (==) on Keys.
 %  - Pre: Pairs canonical (run merge_nodes/2 after aliasing).
-%  - Method: prune by standard order; confirm Key identity with (==); only binds Id.
+%  - Method: prune by standard order.
+%  - Confirm Key identity with (==).
+%  - Only the Id argument is bound.
 %  - Determinism/Complexity: semidet; steadfast; O(N); no choice points.
 %  Notes:
 %  - Non-canonical input may fail by design (precondition is canonical).
@@ -648,7 +650,9 @@ extract(Nodes) :-
 %  Prefer extract/1 outside DCGs.
 %! extract(+Nodes, -Nodes) is semidet.
 %  Alias each class Id with one of its Keys (a representative) and return Nodes unchanged.
-%  Goal: obtain a concrete Prolog term per class; this is the last standard step; stop rewriting/saturation afterward.
+%  Goal: obtain a concrete Prolog term per class.
+%  This is the last standard step.
+%  Stop rewriting and saturation after extraction.
 %  Det: semidet; fails only if some class has no Keys; nondet over representative choice.
 %  Notes:
 %  - Only Id variables unify; Keys never unify with each other.
