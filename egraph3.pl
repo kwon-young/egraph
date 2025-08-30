@@ -171,10 +171,10 @@ comm((A+B)-AB, _Nodes) -->
    [B+A-BA, AB=BA].
 comm(_, _) --> [].
 %! assoc(+Node, +Index)// is nondet.
-%  Associativity for +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
-%  Restrict to members of class(BC) via Index; emit at most one triple per match; otherwise emit nothing.
-%  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only here.
-%  Notes: AB and ABC_ are fresh; unification deferred to rebuild//1. Rules must not inspect or bind Ids; no side effects.
+%  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
+%  - Restrict to members of class(BC) via Index; emit at most one triple per match.
+%  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
+%  Notes: AB and ABC_ are fresh; unification deferred to rebuild//1. Rules must not inspect or bind Ids.
 assoc((A+BC)-ABC, Index) -->
    !,
    {rb_lookup(BC, Nodes, Index)},
