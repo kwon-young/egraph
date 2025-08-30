@@ -22,19 +22,19 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 Implementation predicates (internal)
-- lookup/2 (semidet, pure): O(N) read-only lookup in a canonical ordset of Key-Id. Prunes by standard order; confirms with (==) to preserve variable identity. Binds Id only; never inspects/unifies Ids.
-- add/4 (det, pure): worker for add//2. Builds Key as F(ChildIds) left-to-right (congruence) and emits Node-Id pairs. No unification; duplicates allowed (merged later).
-- add_node/4, add_node/3 (det, pure except fresh Id allocation): ensure a Key has a class Id. Reuse existing Id or insert Node-Id with a fresh logic variable Id.
-- merge_nodes//0, merge_nodes/2 (det, logical effects): canonicalize to one Key-Id per Key by sorting, grouping equal Keys, and unifying all Ids in each group into the first (representative). Iterate to a fixpoint because aliasing may expose new duplicates. Only Id variables unify; effects are backtrackable.
-- merge_group/4 (det, logical effects): unify all Ids in a group into the first; Changed=true iff the group had >1 Id.
-- make_index/2 (det, pure): build rbtree Id -> [Keys] from a canonicalized ordset. Requires merge_nodes/2 beforehand. Rebuild after any Id aliasing.
-- rules//3, rule//3 (nondet, pure): apply DCG rules to a Node with Index. Rules may only emit Key-Id items and (=)/2 equalities; never unify.
-- match/4 (det, pure): collect rule outputs over the current worklist with Index. No mutation.
-- push_back//1 (det, pure): O(1) append to the DCG output (difference-list scheduler). Scheduling only; no deduplication.
-- rebuild//1 (det, logical effects): apply (=)/2 equalities (alias Ids), enqueue new items, then canonicalize. The only place where Id variables are unified.
+- lookup/2 (semidet, pure): O(N) read-only lookup in canonical ordset of Key-Id. Prunes by standard order, confirms with (==) to preserve variable identity. Binds Id only; never inspects/unifies Ids.
+- add/4 (det, pure): worker for add//2. Builds Key F(ChildIds) left-to-right (congruence). Emits Node-Id only; duplicates merged later.
+- add_node/4, add_node/3 (det, pure except fresh Id allocation): ensure a Key has a class Id. Reuse existing Id or insert Node-Id with a fresh logic variable.
+- merge_nodes//0, merge_nodes/2 (det, logical effects): canonicalize to one Key-Id per Key by sort → group → unify all Ids in each group into the first (representative). Iterate to a fixpoint; aliasing may expose new duplicates. Only Id variables unify; effects are backtrackable.
+- merge_group/4 (det, logical effects): unify all Ids in a group into the first; Changed=true iff group had >1 Id.
+- make_index/2 (det, pure): build rbtree Id->[Keys] from a canonical ordset. Call after merge_nodes/2. Rebuild after any Id aliasing.
+- rules//3, rule//3 (nondet, pure): apply DCG rules to a Node with Index. Rules may only emit Key-Id and (=)/2; never unify.
+- match/4 (det, pure): collect rule outputs over the current worklist with Index. No mutation/unification.
+- push_back//1 (det, pure): O(1) append to the DCG output (difference list). Scheduling only; no deduplication.
+- rebuild//1 (det, logical effects): apply (=)/2 equalities (alias Ids), enqueue items, then canonicalize. This is the only place Id variables are unified.
 - unif/1 (semidet, impure by design): true for Eq=(A=B); performs the unification. Used only via exclude/3 in rebuild//1; never call from user rules.
-- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): internal example rules/helpers. Emit only nodes and equalities; never unify Ids directly.
-- extract/2, extract_node/1 (semidet, may alias Ids): validation helpers used by extract//0. May bind/alias Ids via member/2; use only for validation and discard any bindings.
+- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): example rules/helpers. Emit only nodes and equalities; never unify Ids directly.
+- extract/2, extract_node/1 (semidet, may alias Ids): validation helpers used by extract//0. May bind/alias Ids via member/2; use only for validation and discard bindings.
 
 Notes on mutable class Ids
 - Class Ids are fresh logic variables that act as mutable, unique class identifiers. They alias via unification only; never compare them by name.
