@@ -56,13 +56,13 @@ Notes
 :- use_module(library(rbtrees)).
 
 %! lookup(+Key-?Id, +Pairs) is semidet.
-%  Steadfast, read-only lookup of Id for Key in a canonical ordset.
-%  - Uses standard order to prune; confirms identity with (==) to preserve variable identity.
-%  - Only binds Id; never instantiates Key or any Id in Pairs; fails if Key is absent.
-%  - Pairs must be a strictly ordered ordset (as from merge_nodes/2 or sort/2 on canonical data).
+%  Read-only Id lookup for Key in a canonical ordset (Pairs).
+%  - Prunes by standard order; confirms identity with (==) to preserve variable identity.
+%  - Only binds Id; Key and stored Ids are never mutated; fails if Key is absent.
+%  - Pairs must be a strictly ordered ordset (as from merge_nodes/2).
 %  Notes:
-%  - Ids are Prolog variables used as mutable class identifiers (by aliasing); never compare by print-name.
-%  - No unification occurs here; effects are purely logical and backtrackable.
+%  - Ids are logic variables acting as mutable class identifiers; never compare by print-name.
+%  - No unification here; effects are purely logical/backtrackable.
 %  Determinism: semidet; steadfast.
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -93,12 +93,12 @@ lookup(Item-V, [X1-V1]) :-
 
 %! add(+Term, -Id)// is det.
 %! add(+Term, -Id, +In, -Out) is det.
-%  Insert Term and return its class Id; reuse an existing class if Key already exists.
-%  - Compound: build Key = F(ChildIds) left-to-right (stable arg order; congruence).
-%  - Atom/var: Key = Term; preserve variable identity (no variant/alpha normalization).
-%  - Pure producer: emits only Key-Id pairs; performs no unification. Duplicates are later removed by merge_nodes/2.
-%  - DCG threads a difference list; add/4 is the worker (foldl/4 builds ChildIds).
-%  Effect: allocate a fresh Id only when Key is new. Id aliasing elsewhere may instantiate vars inside Keys; follow with merge_nodes/2.
+%  Insert Term and return its class Id; reuse existing class if Key already exists.
+%  - Compound: Key = F(ChildIds), built left-to-right (stable arg order; congruence).
+%  - Atom/var: Key = Term; preserve variable identity (no alpha/variant normalization).
+%  - Pure producer: only emits Key-Id; no unification. Duplicates removed by merge_nodes/2.
+%  - add//2 is a DCG; add/4 is the worker; foldl/4 builds ChildIds.
+%  Effect: fresh Id allocated only for new Keys. Id aliasing may instantiate vars in Keys; follow with merge_nodes/2.
 %  Determinism: det; pure w.r.t. Keys.
 add(Term, Id, In, Out) :-
    (  compound(Term)
@@ -111,13 +111,13 @@ add(Term, Id, In, Out) :-
 
 %! add_node(+Node-?Id, +In, -Out) is det.
 %! add_node(+Node, -Id, +In, -Out) is det.
-%  Ensure Node has a class Id; reuse if present, otherwise insert Node-Id with a fresh Id.
-%  - In/Out are canonical ordsets of Key-Id; prune by order and confirm identity with (==) to preserve variable identity.
-%  - Performs no unification and no canonicalization; call merge_nodes/2 after any Id aliasing elsewhere.
-%  Effect: allocate a fresh Id only when Node is new; Out = In if Node already exists. Pure w.r.t. Keys.
+%  Ensure Node has a class Id; reuse if present, else insert Node-Id with a fresh Id.
+%  - In/Out are canonical ordsets; prune by order and confirm identity with (==) to preserve variable identity.
+%  - No unification and no canonicalization here; call merge_nodes/2 after any Id aliasing elsewhere.
+%  Effect: fresh Id only when Node is new; Out=In if Node already exists. Pure w.r.t. Keys.
 %  Notes:
-%  - In must be an ordset (ord_add_element/3 preserves order).
-%  - Ids are Prolog variables acting as mutable class identifiers; never compare by print-name.
+%  - In must be an ordset; ord_add_element/3 preserves order.
+%  - Ids are logic variables used as mutable class identifiers; never compare by print-name.
 %  Determinism: det; quasi-pure (no Id unification).
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -262,25 +262,21 @@ constant_folding_b([VB | BNodes], VA, AB, Index) -->
 constant_folding_b([], _, _, _) --> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
-%  Apply each DCG Rule(Node,Index)// to Node using Index; nondet over Rules.
-%  - Node is Key-Id; Id is an opaque class identifier (logic variable).
-%  - Rules is a list of DCG nonterminals Rule//2.
-%  - Rules must only emit Key-Id items and (=)/2 equalities; no unification.
-%  - Outputs are appended to the DCG stream; rebuild//1 later consumes them.
-%  - Uses sequence/2 (library(dcg/high_order)) to iterate rules in order.
-%  Notes:
-%  - Keep Rules pure; all unification must go through rebuild//1 via (=)/2 items.
-%  - Ids are mutable via unification; never compare by print-name.
-%  Determinism: nondet over Rules; each Rule is called once per Node (node order, then rule order).
+%  Apply each Rule(Node,Index)// to Node using Index; nondet over Rules.
+%  - Node is Key-Id; Id is an opaque class Id (logic variable).
+%  - Rules is a list of DCG nonterminals Rule//2; they may only emit Key-Id items and (=)/2 equalities.
+%  - Appends outputs to the DCG stream; rebuild//1 consumes them.
+%  - Iteration uses sequence/2 (library(dcg/high_order)).
+%  Determinism: nondet over Rules; each Rule runs once per Node (node order, then rule order).
 rules(Rules, Index, Node) -->
    sequence(rule(Index, Node), Rules).
 %! rule(+Index, +Node, :Rule)// is nondet.
-%  Meta-call a single DCG rule Rule(Node,Index)// on Node.
-%  - Node is Key-Id; Id is an opaque class identifier (logic variable).
+%  Call a single DCG rule Rule(Node,Index)// on Node.
+%  - Node is Key-Id; Id is an opaque class Id (logic variable).
 %  - Rule is a DCG nonterminal Rule//2 (compiles to Rule/4).
-%  - Rule must not perform unification; only emit nodes and (=)/2 items.
+%  - Rule must not unify; only emit nodes and (=)/2 items.
 %  Notes: Called by rules//3; keep pure and do not inspect or modify Ids.
-%  Determinism: matches the determinism of Rule//2.
+%  Determinism: as Rule//2.
 rule(Index, Node, Rule) -->
    call(Rule, Node, Index).
 
@@ -301,7 +297,7 @@ make_index(In, Index) :-
 %! match(+Rules, +Worklist, +Index, -Matches) is det.
 %  Run Rules over Worklist to produce Matches (Key-Id items and (=)/2 equalities).
 %  - Worklist is the current node set (ordset of Key-Id pairs).
-%  - Rules must not perform unification; only emit nodes and equalities.
+%  - Rules must not unify; only emit nodes and equalities.
 %  - Matches are consumed by rebuild//1 (the only place Id variables unify).
 %  - Output order: Worklist order, then per-node rule order.
 %  Notes: Implemented via foldl/4 with rules//3; purely accumulative and steadfast.
@@ -369,13 +365,13 @@ saturate(Rules, N, In, Out) :-
    ).
 
 %! unif(+Eq) is semidet.
-%  True for Eq=(A=B); performs the unification as a side-effect.
+%  True for Eq = (A=B); performs that unification as a side-effect.
 %  - Use with exclude/3 to apply equalities and drop them from a worklist.
 %  Effect: intentionally unifies class Id variables; fails for non-(=)/2 items. Effects are logical/backtrackable.
 %  Notes:
 %  - Deliberately impure and used only by rebuild//1. Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
 %  - Never call from user rules; this is a rebuild helper.
-%  - Ids are Prolog variables acting as mutable unique identifiers (by aliasing).
+%  - Ids are logic variables acting as mutable unique identifiers (by aliasing).
 %  Determinism: semidet.
 unif(A=B) :- A=B.
 
