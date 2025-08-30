@@ -1,36 +1,36 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms. Classes are identified by fresh logic variables (Ids) that act as mutable, backtrackable unique identifiers.
+E-graphs for Prolog terms. Each equivalence class is identified by a fresh logic variable (an Id) that acts as a mutable, backtrackable unique identifier.
 
-Key ideas
-- Nodes: canonical ordset of Key-Id. Key is an atom/var or a compound F(ChildIds).
-- Keys preserve variable identity; do not alpha/variant-normalize. Use (==) after order pruning.
-- Ids are opaque logic variables; the only mutation is aliasing via (=)/2.
+Core concepts
+- Nodes: canonical ordset of Key-Id pairs. Key is an atom/var or a compound F(ChildIds).
+- Identity: Keys preserve variable identity; do not alpha/variant-normalize. Confirm equality with (==) after order pruning.
+- Ids: opaque logic variables; the only mutation is aliasing via (=)/2.
 - Canonicalization: merge_nodes/2 keeps at most one Key-Id per Key; rerun after any Id aliasing.
 
 Execution model (DCG pipeline)
-- Rules are pure producers: they emit only Key-Id items and equalities A=B; they must not inspect or bind Ids.
+- Rules are pure producers: they emit only Key-Id items and equalities A=B; they do not inspect or bind Ids.
 - Only rebuild//1 and merge_nodes/2 perform Id aliasing. rebuild//1 consumes A=B, enqueues items, then canonicalizes.
 
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract//0, extract/1.
 
 Driver
-- saturate//1, saturate//2, saturate/4 iterate: make_index → match → rebuild → merge until size stabilizes. Alias-only steps (only A=B) do not count as progress.
-- SWI-Prolog note: saturate//1 uses MaxSteps=inf; prefer saturate//2 with a large integer bound if arithmetic over 'inf' is unsupported.
+- saturate//1, saturate//2, saturate/4 iterate: make_index → match → rebuild → merge until the node count stabilizes. Alias-only steps (only A=B) do not count as progress.
+- Portability: saturate//1 uses MaxSteps=inf; on systems without arithmetic over 'inf', use saturate//2 with a large integer bound.
 
 Id discipline
 - Compare Ids by identity (==); never by name/print-name; do not serialize them.
-- Unifying Ids may instantiate variables inside Keys; always re-merge (rebuild//1 does).
+- Unifying Ids may instantiate variables inside Keys; always re-merge (rebuild//1 handles this).
 - lookup/2 expects canonical input; non-canonical lists may fail spuriously.
 
 Known limitations
 - Keys are intentionally variable-identity sensitive; variant-equal keys with different variables are distinct.
-- assoc//2 currently uses a cut; when BC is absent from the Index the rule fails instead of emitting nothing. Tests document the intended behavior (“no output”).
+- BUG: assoc//2 has a cut; if BC is absent from the Index the rule fails instead of emitting no output. Tests document the intended behavior (“no output”).
 
 Notes
-- The goal of extract is to alias each class Id with a concrete representative Key to obtain a standard Prolog term per class. Extraction is the last standard step; do not run rewriting after it.
+- extract aliases each class Id with a representative Key to materialize a concrete Prolog term per class. It is the last standard step; do not perform rewriting after extraction.
 */
 
 
