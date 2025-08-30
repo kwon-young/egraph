@@ -1,7 +1,7 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
 
 /** <module> egraph
-E-graphs for Prolog terms. Keys preserve variable identity; class Ids are fresh logic variables used as mutable, backtrackable identifiers.
+E-graphs for Prolog terms. Keys preserve variable identity; class Ids are fresh logic variables used as mutable, backtrackable, unique identifiers (opaque Ids).
 
 Core model
 - Nodes: ordset of Key-Id. Key is atom/var or F(ChildIds). Variable identity in Keys is significant (no alpha/variant normalization).
@@ -191,7 +191,7 @@ comm(_, _) --> [].
 %  Associativity of +/2: from (A+(B+C))-ABC emit (A+B)-AB, (AB+C)-ABC_, and ABC=ABC_.
 %  - Restrict to members of class(BC) via Index; may emit multiple triples (one per matching B+C member).
 %  Index: rbtree Id -> [Keys]; rebuilt each iteration; read-only.
-%  - If BC is absent in Index, intended behavior is "no output" (DCG succeeds with []). BUG: the cut causes failure instead.
+%  - BUG: If BC is absent in Index the cut (!) prevents fallback, so the rule fails instead of emitting [] (intended behavior).
 %  Notes:
 %  - AB and ABC_ are fresh; unification is deferred to rebuild//1 (Ids only).
 %  - The Id for BC confines the search; never unify Keys here.
@@ -388,7 +388,7 @@ saturate(Rules, N, In, Out) :-
 unif(A=B) :- A=B.
 
 %! extract(-Nodes) is semidet.
-%  Extract one concrete Prolog term per class (materialize) by unifying each class Id with a representative Key. This is the last standard step of using an e-graph; do not run rewriting after this.
+%  Goal: extract concrete Prolog terms from the e-graph. Materialize one term per class by unifying each class Id with a representative Key. This is the last standard step; do not run rewriting after this.
 %  Effects: aliases Id variables (backtrackable). To inspect without aliasing, read Nodes directly.
 %  Semidet: fails only if a class has no Keys (should not happen after merge_nodes/2).
 %  Notes:
