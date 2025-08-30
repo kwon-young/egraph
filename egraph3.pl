@@ -21,7 +21,7 @@ Caveats
 Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
-Implementation predicates (internal)
+Implementation predicates (quick reference)
 - lookup/2 (semidet, pure, steadfast): On canonical Pairs, find Id for Key by standard-order pruning then (==) confirmation. Binds Id only; never constructs/unifies Keys or allocates Ids. Pre: canonical (merge_nodes/2). Cost: O(N).
 - add//2, add/4 (det, pure wrt Keys): Build Key=F(ChildIds) left-to-right (stable congruence) and emit only Key-Id. No Id unification; duplicates removed by merge_nodes/2. Pre: In is an ordset.
 - add_node/4, add_node/3 (det, quasi-pure): Ensure Node has a class Id; reuse if present, else insert Node-Id with a fresh Id var. No canonicalization or Id unification. Pre: In canonical.
@@ -392,7 +392,7 @@ saturate(Rules, N, In, Out) :-
 %  Only called from rebuild//1 via exclude/3; do not call from rules or user code.
 %  - Uses (=)/2 (no occurs-check); safe because Ids are fresh, acyclic logic variables.
 %  - Only Id variables should appear here; Keys must not be unified.
-%  Det: semidet; intentionally impure (Id unification). Do not call from rewrite rules.
+%  Det: semidet; intentionally impure (Id unification).
 %  Notes:
 %  - The only place outside merge_nodes/2 where Ids are explicitly unified on purpose.
 %  - Mutable Ids: aliasing happens here or in merge_nodes/2 only. Keep Keys as pure data.
