@@ -22,21 +22,21 @@ Public API
 - add//2, union//2, saturate//1, saturate//2, extract/1, extract//0.
 
 Implementation predicates (internal)
-- lookup/2 (semidet, pure, steadfast): Return Id for Key from a canonical ordset. Prunes by standard order; confirms Key identity with (==). Binds only Id; fails if absent. Pre: canonical (merge_nodes/2). O(N).
-- add//2, add/4 (det, pure w.r.t. Keys): Build Key = F(ChildIds) left‑to‑right (stable arg order ⇒ congruence) and emit Key-Id. Never binds Ids; duplicates are removed by merge_nodes/2. Pre: In is an ordset.
-- add_node/4, add_node/3 (det, quasi‑pure): Ensure Node has a class Id in the ordset. Reuse if present; otherwise insert Node-Id with a fresh logic var. No canonicalization or Id unification.
-- merge_nodes//0, merge_nodes/2 (det, logical effects): Canonicalize to one Key‑Id per Key: sort → group → unify group Ids with a representative; repeat while merges occur. Only Id vars unify; Keys never do. Terminates because the number of distinct Ids strictly decreases.
+- lookup/2 (semidet, pure, steadfast): Return Id for Key from a canonical ordset. Prunes by standard order; confirms with (==). Binds Id only. Pre: canonical via merge_nodes/2. Cost O(N).
+- add//2, add/4 (det, pure w.r.t. Keys): Build Key = F(ChildIds) left‑to‑right (stable arg order ⇒ congruence) and emit Key-Id. No Id unification. Duplicates removed by merge_nodes/2. Pre: In is an ordset.
+- add_node/4, add_node/3 (det, quasi‑pure): Ensure Node has a class Id; reuse if present, else insert Node-Id with a fresh Id var. No canonicalization or Id unification.
+- merge_nodes//0, merge_nodes/2 (det, logical effects): Canonicalize to one Key‑Id per Key: sort → group → unify group Ids with a representative; repeat until stable. Only Id vars unify; Keys never do. Terminates because distinct Id count strictly decreases.
 - merge_group/4 (det, logical effects): For Key-[H|T], unify each Id in T with H; Changed=true iff T \= []. Representative is H.
-- make_index/2 (det, pure): Build rbtree Id→[Keys] from canonical Nodes. The rbtree key is the Id variable itself (by identity, not print-name). Rebuild after any Id aliasing. O(N log N). Keys stored as-is.
-- rules//3, rule//3 (nondet, pure): Apply each DCG Rule(Node,Index)// to Node using Index. Rules may emit only Key‑Id items and (=)/2 equalities; must not inspect or bind Ids. Output order: per-node, then per-rule.
-- match/4 (det, pure): Run Rules over Worklist using Index; collect Key‑Id items and (=)/2 equalities in Matches. No unification here. Output order follows worklist, then per-rule.
+- make_index/2 (det, pure): Build rbtree Id→[Keys] from canonical Nodes. The rbtree key is the Id variable (by identity, not print-name). Rebuild after aliasing. Cost O(N log N). Keys stored as-is.
+- rules//3, rule//3 (nondet, pure): Apply each Rule(Node,Index)// to Node using Index. May emit only Key‑Id items and (=)/2 equalities; must not inspect or bind Ids. Output order: per-node, then per-rule.
+- match/4 (det, pure): Run Rules over Worklist using Index; produce scheduled Matches (nodes and (=)/2). No unification here. Output order follows worklist, then per-rule.
 - push_back//1 (det, pure): Append a list to DCG output in O(1) via difference lists; scheduling only.
-- rebuild//1 (det, logical effects): Apply (=)/2 equalities (alias Ids), enqueue Key‑Id items, then canonicalize (merge_nodes//0). Only Ids unify; Keys never do.
-- unif/1 (semidet, impure by design): True for Eq=(A=B) and performs A=B (no occurs‑check). Intended only for rebuild//1 via exclude/3. Safe for fresh, acyclic Ids. Never call from rules.
-- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): Example rewrite rules/helpers. Pure producers: emit nodes/equalities only; no in‑place rewrites; use Index to restrict search; must not inspect or bind Ids.
+- rebuild//1 (det, logical effects): Apply (=)/2 equalities (alias Ids), enqueue nodes, then canonicalize (merge_nodes//0). Only Ids unify; Keys never do.
+- unif/1 (semidet, impure by design): True for Eq=(A=B); performs A=B (no occurs‑check). Intended only for rebuild//1 via exclude/3. Safe for fresh, acyclic Ids. Never call from rules.
+- comm//2, assoc//2, assoc_//3, reduce//2, constant_folding//2, constant_folding_a//4, constant_folding_b//4 (nondet, pure): Example rewrite rules/helpers. Pure producers; no in‑place rewrites; consult Index only; must not inspect/bind Ids.
 - extract/2, extract_node/1 (semidet, aliases Ids): Validation helpers for extract//0. Intentionally alias Ids via member/2; discard bindings after use.
-- saturate/4 (det, driver): Iterate with a step bound. Rebuild the Id→[Keys] index each iteration; only Ids may unify (during rebuild/merge). Stop when length is unchanged; alias‑only steps do not count as progress.
-- DCG bridging: DCG nonterminals expand to extra arguments and are pure producers. Note: merge_nodes//0 must delegate to merge_nodes/2; rebuild//1 assumes this DCG shim exists.
+- saturate/4 (det, driver): Iterate with a step bound. Rebuild Id→[Keys] each iteration; only Ids may unify (during rebuild/merge). Stop when length is unchanged; alias‑only steps are not progress.
+- DCG bridging: DCG nonterminals are pure producers. merge_nodes//0 must delegate to merge_nodes/2; rebuild//1 assumes this shim exists.
 
 Notes on mutable class Ids
 - Class Ids are fresh logic variables that act as mutable, unique class identifiers. They alias via unification only; never compare them by name.
