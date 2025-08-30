@@ -863,3 +863,188 @@ example3(N, Expr, R) :-
 
 % The goal of extract is to extract a concrete Prolog term per class and it is
 % the last standard step of using an egraph.
+
+/* ----------------------------------------------------------------------
+   Implementation documentation (concise; one sentence per line).
+---------------------------------------------------------------------- */
+
+% lookup/2
+% Finds the Id for a Key in a canonical ordset using (==) on Keys.
+% Fails on non-canonical inputs by design.
+% Determinism: semidet.
+% Note: Keys preserve variable identity and variant-equal Keys do not match.
+
+% add//2
+% Inserts a term as nodes via DCG and yields its class Id without aliasing.
+% Builds child Ids left to right for compound terms.
+% Determinism: det.
+
+% add/4
+% Inserts a term into a node set and returns the updated set without aliasing.
+% Allocates at most one fresh Id and reuses an existing Id when present.
+% Determinism: det.
+
+% add_node/3
+% Inserts Node-Id into a canonical set or reuses the existing Id when present.
+% Keeps the set canonical and does not alias Ids.
+% Determinism: det.
+
+% add_node/4
+% Inserts the provided Node-Id pair or reuses the provided Id when the Key
+% is already present.
+% Determinism: det.
+
+% union//2
+% Aliases two class Ids via DCG and then re-canonicalizes the set.
+% Only Id variables unify and Keys never do.
+% Determinism: det.
+
+% union/4
+% Unifies two class Ids in place and merges duplicate Keys deterministically.
+% Only Id variables unify and Keys never do.
+% Determinism: det.
+
+% merge_nodes//0
+% DCG wrapper around merge_nodes/2 that emits nothing and performs no aliasing.
+% Determinism: det.
+
+% merge_nodes/2
+% Deduplicates by Key, unifies duplicate Ids with the head, and repeats until
+% stable.
+% Returns a canonical ordset sorted by standard order.
+% Determinism: det.
+
+% merge_group/4
+% Unifies all Ids in a duplicate group with the head and updates the change
+% flag.
+% Determinism: det.
+
+% comm//2
+% For +(A,B)-AB emits B+A-BA and AB=BA without inspecting or binding Ids.
+% Emits exactly two outputs per match.
+% Determinism: nondet over matches but one pair per input node.
+
+% assoc//2
+% For (A+(B+C))-ABC uses class(BC) from Index to emit (A+B)-AB, (AB+C)-ABC_,
+% and ABC=ABC_.
+% Determinism: nondet over class(BC) members.
+% Note: A cut causes failure when BC is absent and the intended behavior is
+% to emit nothing.
+
+% assoc_//3
+% Iterates members of class(BC) and emits at most one triple per +(B,C) member.
+% Determinism: nondet over members.
+
+% reduce//2
+% Emits A=AB when class(B) contains the integer 0 and otherwise emits nothing.
+% Uses strict term equality and does not match 0.0.
+% Determinism: semidet.
+
+% constant_folding//2
+% Folds numeric sums VA and VB to VC by emitting VC-C and C=AB.
+% Skips non-numeric members and supports mixed numeric types.
+% Determinism: nondet over numeric members.
+
+% constant_folding_a//4
+% Selects numeric VA from class(A) and delegates to constant_folding_b//4.
+% Determinism: nondet over numeric VA.
+
+% constant_folding_b//4
+% Pairs numeric VB with VA, computes VC is VA+VB, and emits VC-C and C=AB.
+% Determinism: nondet over numeric VB.
+
+% rules//3
+% Applies a list of rules to one node using Index and concatenates outputs
+% in rule order.
+% Determinism: follows the combined nondet of the rules.
+
+% rule//3
+% Invokes one Rule(Node,Index)//2 and forwards its outputs unchanged.
+% Determinism: follows the rule.
+
+% make_index/2
+% Builds an rbtree Id->[Keys] from canonical nodes.
+% Rebuild after any Id aliasing since Ids are the map keys.
+% Determinism: det.
+
+% match/4
+% Runs rules over a worklist using Index and produces scheduled matches in
+% stable order.
+% Determinism: det.
+
+% push_back//1
+% Appends a list to DCG output in O(1) using difference lists.
+% Determinism: det.
+
+% rebuild//1
+% Consumes equalities by aliasing Ids, enqueues Key-Id items, and merges to
+% canonicalize.
+% Only Id variables unify and Keys never do.
+% Determinism: det.
+
+% saturate//1
+% Iterates the driver to a length fixpoint and ignores alias-only steps.
+% Determinism: det.
+
+% saturate//2
+% Runs the driver with a step bound and stops early at a length fixpoint.
+% Determinism: det.
+% Note: The atom inf may be non-portable and a large integer bound is safer.
+
+% saturate/4
+% Pure driver that measures progress by the merged list length and ignores
+% alias-only steps.
+% Determinism: det.
+
+% unif/1
+% Recognizes A=B and performs backtrackable Id aliasing.
+% Intended to be called only by rebuild//1.
+% Determinism: semidet.
+
+% extract/1
+% Aliases each class Id to a representative Key and produces concrete terms.
+% This is the last standard step and no rewriting should follow.
+% Determinism: semidet.
+
+% extract//0
+% DCG wrapper for extract/1 that aliases Ids to representatives.
+% Succeeds iff every class has at least one Key.
+% Determinism: semidet.
+
+% extract/2
+% Semidet in-place extraction that aliases Ids and returns the node list
+% unchanged.
+% Determinism: semidet.
+
+% extract_node/1
+% Chooses one representative Key per Id from grouped keys and backtracks over
+% choices.
+% Fails on empty groups as a defensive check.
+% Determinism: semidet.
+
+% add_expr/2
+% Builds the left-associated chain 1+2+...+N for N>=1 without rewriting Keys.
+% Determinism: det.
+
+% example1/1
+% Builds a small graph, unions a with f(f(a)), adds f^4(a), and returns nodes.
+% Determinism: det.
+
+% example2/2
+% Builds and saturates an addition chain with comm and assoc and prints size
+% checks.
+% Determinism: det.
+
+% example3/3
+% Enumerates extracted results after saturation with all rules and removes
+% duplicates using distinct/1.
+% Determinism: nondet over extracted results.
+
+% Notes
+% Ids are logic variables that act as mutable unique identifiers.
+% Compare Ids with (==) and never by name or print-name.
+% Keys preserve variable identity and must not be alpha-renamed or unified
+% in rules.
+% Only rebuild//1, merge_nodes/2, and unif/1 may alias Ids.
+% DCG wrappers rely on system support for //2 and may need explicit wrappers
+% on some Prolog systems.
