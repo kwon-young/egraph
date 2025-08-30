@@ -762,18 +762,16 @@ test(extract_node_fails_on_empty_group, fail) :-
 % add_expr/2
 :- begin_tests(add_expr).
 
-% BUG: add_expr/2 claims right-association in the docs, but produces a left-associated chain (1+2)+3.
-% This test encodes the intended right-associated result and currently fails.
-test(add_expr_right_assoc, [fail]) :-
-    egraph:add_expr(3, Expr),
-    Expr == 1+(2+3).
+% Builds a left-associated chain: for N=3 yields (1+2)+3
+test(left_assoc_n3, true(Expr == (1+2)+3)) :-
+    egraph:add_expr(3, Expr).
 
 % N=1 yields 1
-test(add_expr_n1_is_1, true(Expr == 1)) :-
+test(n1_is_1, true(Expr == 1)) :-
     egraph:add_expr(1, Expr).
 
 % N=0 is outside the domain (N >= 1); the predicate should fail
-test(add_expr_n0_fails, fail) :-
+test(n0_out_of_domain, fail) :-
     egraph:add_expr(0, _).
 
 :- end_tests(add_expr).
@@ -804,11 +802,9 @@ test(example1_ids_aliased_by_union, true(A==FFA)) :-
 % example2/2
 :- begin_tests(example2).
 
-% BUG: example2/2 uses add_expr/2 which currently builds a left-associated sum; the intended right-associated result is 1+(2+3).
-% This test encodes the intended behavior and currently fails.
-test(example2_returns_expr, [fail]) :-
-    with_output_to(string(_), egraph:example2(3, Expr)),
-    Expr == 1+(2+3).
+% Returns left-associated expression built by add_expr/2 for N=3
+test(returns_left_assoc_expr, true(Expr == (1+2)+3)) :-
+    with_output_to(string(_), egraph:example2(3, Expr)).
 
 :- end_tests(example2).
 
