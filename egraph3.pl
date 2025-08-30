@@ -143,7 +143,7 @@ union(A, B, In, Out) :-
 %  - Effects: only Id unifications; Keys never unify. Determinism: det.
 %  Notes:
 %    - Key equality preserves variable identity (confirm with (==) after ordering).
-%    - Another pass runs if any group had >1 Id or resorting reveals new duplicates.
+%    - Repeat if any group had >1 Id or if resorting after aliasing reveals new duplicates.
 %    - Terminates: each pass either unifies at least one pair of Ids or leaves the set unchanged; the set is finite.
 %    - merge_nodes//0 is called by rebuild//1 and must delegate to merge_nodes/2.
 merge_nodes(In, Out) :-
