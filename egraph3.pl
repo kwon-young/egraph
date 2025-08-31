@@ -366,6 +366,9 @@ merge_group([], [], In, In).
 %  - Keys must never appear on the left/right of (=)/2.
 %  - DCG call to merge_nodes//0 expands to merge_nodes/2.
 rebuild([A=B | T], In, Out) :-
+   write_term('Unifying:', [A=B]), nl,
+   ( get_attr(A, cost, C1) -> format('  LHS has cost ~w~n', [C1]) ; format('  LHS has no cost~n', []) ),
+   ( get_attr(B, cost, C2) -> format('  RHS has cost ~w~n', [C2]) ; format('  RHS has no cost~n', []) ),
    A = B,
    rebuild(T, In, Out).
 rebuild([N-Id | T], In, Out) :-
