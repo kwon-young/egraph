@@ -1,4 +1,5 @@
-:- module(egraph, [add//2, union//2, saturate//1, saturate//2, extract/1, extract//0]).
+:- module(egraph, [add//2, union//2, saturate//1, saturate//2,
+                   extract/3, extract//2]).
 
 /** <module> egraph
 E-graphs for Prolog terms where class identifiers are logic variables.
@@ -59,12 +60,19 @@ Other systems may require explicit wrappers for these DCG rules.
 :- use_module(library(ordsets)).
 :- use_module(library(rbtrees)).
 
-attr_unify_hook(XSet, Y) :-
-   (  get_attr(Y, egraph, YSet)
-   -> append(XSet, YSet, Set),
-      put_attr(Y, egraph, Set)
+cost:attr_unify_hook(XCost, Y) :-
+   (  get_attr(Y, cost, YCost)
+   -> Cost is min(XCost, YCost),
+      put_attr(Y, cost, Cost)
    ;  var(Y)
-   -> put_attr(Y, egraph, XSet)
+   -> put_attr(Y, cost, XCost)
+   ;  true
+   ).
+const:attr_unify_hook(XConst, Y) :-
+   (  get_attr(Y, const, YConst)
+   -> XConst =:= YConst
+   ;  var(Y)
+   -> put_attr(Y, const, XConst)
    ;  true
    ).
 
@@ -143,7 +151,19 @@ add_node(Node-Id, In, Out) :-
 add_node(Node, Id, In, Out) :-
    (  lookup(Node-Id, In)
    -> Out = In
-   ;  ord_add_element(In, Node-Id, Out)
+   ;  ord_add_element(In, Node-Id, Out),
+      (  compound(Node)
+      -> compound_name_arguments(Node, _, Args),
+         maplist([ArgId, ArgCost]>>get_attr(ArgId, cost, ArgCost), Args, Costs),
+         sumlist(Costs, Sum),
+         Cost is Sum + 1
+      ;  Cost = 1
+      ),
+      put_attr(Id, cost, Cost),
+      (  number(Node)
+      -> put_attr(Id, const, Node)
+      ;  true
+      )
    ).
 
 %! comm(+Node, +Index)// is nondet.
@@ -246,7 +266,10 @@ constant_folding_a(_, _, _, _, _) ==> [].
 %  The emitted VC-C is a new Key-Id pair; equality C=AB is consumed by
 %  rebuild//1.
 constant_folding_b([VB | BNodes], Op, VA, AB, Index), number(VB) ==>
-   {Expr =.. [Op, VA, VB], VC is Expr},
+   {  Expr =.. [Op, VA, VB],
+      VC is Expr,
+      put_attr(C, cost, 1)
+   },
    [VC-C, C=AB],
    constant_folding_b(BNodes, Op, VA, AB, Index).
 constant_folding_b(_, _, _, _, _) ==> [].
@@ -416,47 +439,21 @@ saturate(Rules, N, In, Out) :-
    ;  Out = In
    ).
 
-%! extract(-Nodes) is semidet.
-%  The goal of extract is to unify each class Id with a representative Key
-%  to materialize a concrete Prolog term per class and it is the last
-%  standard step.
-%  Effects: aliases Id variables (backtrackable). To inspect without aliasing, read Nodes directly.
-%  Fails only if a class has no Keys (should not happen after merge_nodes/2).
-%  Notes:
-%  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are logic variables; compare by identity (==), never by name/print-name.
-extract(Nodes) :-
-   extract(Nodes, Nodes).
-%! extract//0 is semidet.
-%  DCG wrapper for extract/1.
-%  Final step: alias Ids to materialize one concrete Prolog term per class.
-%  It is the last standard step of using an egraph.
-%  Nondet over representative choice; succeeds iff every class has at least one Key.
-%  Prefer extract/1 outside DCGs.
-%! extract(+Nodes, -Nodes) is semidet.
-%  Alias each class Id with one of its Keys (a representative) and return Nodes unchanged.
-%  Goal: obtain a concrete Prolog term per class.
-%  This is the last standard step.
-%  Stop rewriting and saturation after extraction.
-%  Det: semidet; fails only if some class has no Keys; nondet over representative choice.
-%  Notes:
-%  - Only Id variables unify; Keys never unify with each other.
-%  - Ids are logic variables; compare by identity (==), never by print-name.
-extract(Nodes, Nodes) :-
-   transpose_pairs(Nodes, Pairs),
-   group_pairs_by_key(Pairs, Groups),
-   extract_node(Groups).
-%! extract_node(+Groups) is semidet.
-%  For each Id->[Keys], unify Id with one member; backtracks over choices; fails on empty groups.
-%  Core of extraction; aliases Ids. Use only as the last step.
-%  Det: semidet; nondet over representative choice.
-%  Notes:
-%  - Picks a representative via member/2; Keys do not unify with each other.
-%  - Ids are logic variables; compare by identity (==), never by print-name.
-extract_node([Node-Nodes | Groups]) :-
-   member(Node, Nodes),
-   extract_node(Groups).
-extract_node([]).
+extract(Id, Term, Nodes) :-
+   extract(Id, Term, Nodes, Nodes).
+extract(Id, Term, Nodes, Nodes) :-
+   make_index(Nodes, Index),
+   ord_list_to_rbtree(Nodes, Tree),
+   extract_id(Index, Tree, Id, Term).
+extract_id(Index, Tree, Id, Term) :-
+   rb_lookup(Id, Nodes, Index),
+   maplist({Tree}/[Node, Cost-Node]>>(
+      rb_lookup(Node, NodeId, Tree),
+      get_attr(NodeId, cost, Cost)
+   ), Nodes, Pairs),
+   keysort(Pairs, Sorted),
+   member(_Cost-Node, Sorted),
+   mapargs(extract_id(Index, Tree), Node, Term).
 
 %! example1(-G) is det.
 %  Demo: add a, f(f(a)), union them, then add f^4(a); returns the graph G.
@@ -492,9 +489,9 @@ example2(N, Expr) :-
 %  Enumerate possible results R after saturating with all rules, then validate via extract//0.
 %  Uses distinct/1 (SWI-Prolog) to remove duplicates.
 %  Determinism: nondet over alternative extractions R.
-example3(N, Expr, R) :-
+example3(N, Expr, T) :-
    distinct(R, phrase((
       add(Expr, R),
       saturate([comm, assoc, reduce, constant_folding], N),
-      extract
+      extract(R, T)
    ), [], _)).
