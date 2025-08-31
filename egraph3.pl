@@ -1,5 +1,5 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2,
-                   extract/3, extract//2]).
+                   extract/4, extract//3]).
 
 /** <module> egraph
 E-graphs for Prolog terms where class identifiers are logic variables.
@@ -65,7 +65,8 @@ cost:attr_unify_hook(XCost, Y) :-
    -> Cost is min(XCost, YCost),
       put_attr(Y, cost, Cost)
    ;  var(Y)
-   -> put_attr(Y, cost, XCost)
+   -> print_term(XCost-Y, []), nl,
+      put_attr(Y, cost, XCost)
    ;  true
    ).
 const:attr_unify_hook(XConst, Y) :-
@@ -216,14 +217,12 @@ assoc_(_, _, _) ==> [].
 %  - Unification happens in rebuild//1 (Ids only); rules must not inspect or bind Ids.
 %  - Use strict term equality (==) to match integer 0 and not 0.0.
 %  Determinism: semidet; pure producer.
-reduce(A+B-AB, Index),
-      rb_lookup(B, Nodes, Index),
-      once((member(Node, Nodes), Node == 0)) ==>
+reduce(A+B-AB, _Index), get_attr(B, const, 0) ==>
    [A=AB].
-reduce(A*B-AB, Index),
-      rb_lookup(B, Nodes, Index),
-      once((member(Node, Nodes), Node == 1)) ==>
+reduce(A*B-AB, _Index), get_attr(B, const, 1) ==>
    [A=AB].
+reduce(_*B-AB, _Index), get_attr(B, const, 0) ==>
+   [B=AB].
 reduce(_, _) ==> [].
 %! constant_folding(+Node, +Index)// is nondet.
 %  Fold ground numeric sums for +/2 into a constant.
@@ -234,45 +233,21 @@ reduce(_, _) ==> [].
 %    producer.
 %  - Unification deferred to rebuild//1 (Ids only). Non-numeric members are skipped.
 %  Determinism: nondet; no side effects; must not inspect or bind Ids.
-constant_folding((A+B)-AB, Index) ==>
-   { rb_lookup(A, ANodes, Index) },
-   constant_folding_a(ANodes, +, B, AB, Index).
-constant_folding((A*B)-AB, Index) ==>
-   { rb_lookup(A, ANodes, Index) },
-   constant_folding_a(ANodes, *, B, AB, Index).
-constant_folding(_, _) ==> [].
-%! constant_folding_a(+ClassA, +B, -AB, +Index)// is nondet.
-%  Pick numeric VA in class(A), then search class(B) for numeric VB.
-%  - Staged search avoids building pairs eagerly; guarded with number/1.
-%  Notes:
-%  - Pure producer; unification deferred to rebuild//1 (Ids only).
-%  - Guards ensure only ground numeric values reach is/2 in the next stage.
-%  Determinism: nondet over numeric members of class(A) and class(B); no side effects.
-constant_folding_a([VA | ANodes], Op, B, AB, Index), number(VA) ==>
-   {rb_lookup(B, BNodes, Index)},
-   constant_folding_b(BNodes, Op, VA, AB, Index),
-   constant_folding_a(ANodes, Op, B, AB, Index).
-constant_folding_a(_, _, _, _, _) ==> [].
-%! constant_folding_b(+ClassB, +VA, -AB, +Index)// is nondet.
-%  For each numeric VB in class(B), compute VC is VA+VB and emit VC-C, C=AB.
-%  Notes:
-%  - number/1 guards ensured by constant_folding_a//4.
-%  - Supports mixed numeric types; result type follows is/2 semantics.
-%  - Emits exactly two outputs per numeric pair: VC-C and C=AB.
-%  - Pure producer; unification is deferred to rebuild//1 (Ids only).
-%  - Rules must not inspect or bind Ids.
-%  Note: Index is unused; kept to match the Rule//2 interface.
-%  Determinism: nondet over numeric members of class(B); no side effects.
-%  The emitted VC-C is a new Key-Id pair; equality C=AB is consumed by
-%  rebuild//1.
-constant_folding_b([VB | BNodes], Op, VA, AB, Index), number(VB) ==>
-   {  Expr =.. [Op, VA, VB],
-      VC is Expr,
-      put_attr(C, cost, 1)
+constant_folding((A+B)-AB, _Index),
+      get_attr(A, const, VA), get_attr(B, const, VB) ==>
+   {  VC is VA+VB,
+      put_attr(C, cost, 1),
+      put_attr(C, const, VC)
    },
-   [VC-C, C=AB],
-   constant_folding_b(BNodes, Op, VA, AB, Index).
-constant_folding_b(_, _, _, _, _) ==> [].
+   [VC-C, C=AB].
+constant_folding((A*B)-AB, _Index),
+      get_attr(A, const, VA), get_attr(B, const, VB) ==>
+   {  VC is VA*VB,
+      put_attr(C, cost, 1),
+      put_attr(C, const, VC)
+   },
+   [VC-C, C=AB].
+constant_folding(_, _) ==> [].
 
 %! rules(+Rules, +Index, +Node)// is nondet.
 %  Apply Rules to Node using Index; append outputs in rule order.
@@ -428,6 +403,7 @@ saturate(Rules, N, In, Out) :-
       rebuild(Matches, In, Tmp),
       length(In, Len1),
       length(Tmp, Len2),
+      print_term(Len1-Len2, []), nl,
       (  Len1 \== Len2
       -> (  N == inf
          -> N1 = N
@@ -439,21 +415,36 @@ saturate(Rules, N, In, Out) :-
    ;  Out = In
    ).
 
-extract(Id, Term, Nodes) :-
-   extract(Id, Term, Nodes, Nodes).
-extract(Id, Term, Nodes, Nodes) :-
-   make_index(Nodes, Index),
-   ord_list_to_rbtree(Nodes, Tree),
-   extract_id(Index, Tree, Id, Term).
-extract_id(Index, Tree, Id, Term) :-
-   rb_lookup(Id, Nodes, Index),
-   maplist({Tree}/[Node, Cost-Node]>>(
-      rb_lookup(Node, NodeId, Tree),
-      get_attr(NodeId, cost, Cost)
-   ), Nodes, Pairs),
-   keysort(Pairs, Sorted),
-   member(_Cost-Node, Sorted),
-   mapargs(extract_id(Index, Tree), Node, Term).
+% extract(Id, Term, Nodes) :-
+%    extract(Id, Term, Nodes, Nodes).
+% extract(Id, Term, Nodes, Nodes) :-
+%    make_index(Nodes, Index),
+%    ord_list_to_rbtree(Nodes, Tree),
+%    extract_id(Index, Tree, Id, Term).
+% extract_id(Index, Tree, Id, Term) :-
+%    rb_lookup(Id, Nodes, Index),
+%    maplist({Tree}/[Node, Cost-Node]>>(
+%       rb_lookup(Node, NodeId, Tree),
+%       get_attr(NodeId, cost, Cost)
+%    ), Nodes, Pairs),
+%    keysort(Pairs, Sorted),
+%    member(_Cost-Node, Sorted),
+%    (  compound(Node)
+%    -> mapargs(extract_id(Index, Tree), Node, Term)
+%    ;  Term = Node
+%    ).
+extract(Id, Id, Cost, Nodes) :-
+   extract(Id, Id, Cost, Nodes, Nodes).
+extract(Id, Id, Cost, Nodes, Nodes) :-
+   maplist([Node-NodeId, (Cost-Node)-NodeId]>>get_attr(NodeId, cost, Cost),
+           Nodes, CostNodes),
+   make_index(CostNodes, Index),
+   rb_visit(Index, Pairs),
+   foldl([NodeId-SubCostNodes, CostIn, CostOut]>>(
+      keysort(SubCostNodes, Sort),
+      member(Cost-NodeId, Sort),
+      CostOut is CostIn + Cost
+   ), Pairs, 0, Cost).
 
 %! example1(-G) is det.
 %  Demo: add a, f(f(a)), union them, then add f^4(a); returns the graph G.
