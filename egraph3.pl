@@ -1,5 +1,5 @@
 :- module(egraph, [add//2, union//2, saturate//1, saturate//2,
-                   extract/4, extract//3]).
+                   extract/1, extract//0]).
 
 :- use_module(library(dcg/high_order)).
 :- use_module(library(ordsets)).
@@ -82,23 +82,30 @@ comm((A+B)-AB, _Nodes) ==>
 comm((A*B)-AB, _Nodes) ==>
    [B*A-BA, AB=BA].
 comm(_, _) ==> [].
+
 assoc((A+BC)-ABC, Index) ==>
    {rb_lookup(BC, Nodes, Index)},
-   assoc_(Nodes, A, ABC).
+   assoc_(Nodes, +, A, ABC).
+assoc((A*BC)-ABC, Index) ==>
+   {rb_lookup(BC, Nodes, Index)},
+   assoc_(Nodes, *, A, ABC).
 assoc(_, _) ==> [].
-assoc_([(B+C) | Nodes], A, ABC) ==>
+assoc_([(B+C) | Nodes], +, A, ABC) ==>
    {  put_attr(AB, cost, [A+B]),
       put_attr(ABC_, cost, [AB+C])
    },
    [A+B-AB, AB+C-ABC_, ABC=ABC_],
-   assoc_(Nodes, A, ABC).
-assoc_([(B*C) | Nodes], A, ABC) ==>
+   assoc_(Nodes, +, A, ABC).
+assoc_([(B*C) | Nodes], *, A, ABC) ==>
    {  put_attr(AB, cost, [A*B]),
       put_attr(ABC_, cost, [AB*C])
    },
    [A*B-AB, AB*C-ABC_, ABC=ABC_],
-   assoc_(Nodes, A, ABC).
-assoc_(_, _, _) ==> [].
+   assoc_(Nodes, *, A, ABC).
+assoc_([_ | Nodes], Op, A, ABC) ==>
+   assoc_(Nodes, Op, A, ABC).
+assoc_([], _, _, _) ==> [].
+
 reduce(A+B-AB, _Index), get_attr(B, const, 0) ==>
    [A=AB].
 reduce(A*B-AB, _Index), get_attr(B, const, 1) ==>
@@ -106,6 +113,29 @@ reduce(A*B-AB, _Index), get_attr(B, const, 1) ==>
 reduce(_*B-AB, _Index), get_attr(B, const, 0) ==>
    [B=AB].
 reduce(_, _) ==> [].
+
+factorize(A+A-AA, _Index) ==>
+   {  put_attr(Two, const, 2),
+      put_attr(Two, cost, [0.9]),
+      put_attr(A2, cost, [A*Two])
+   },
+   [2-Two, A*Two-A2, A2=AA].
+factorize(A+BA-AA, Index) ==>
+   { rb_lookup(BA, Nodes, Index) },
+   factorize(Nodes, A, AA).
+factorize(_, _) ==> [].
+factorize([B*A | Nodes], A, AA) ==>
+   {  put_attr(One, const, 1),
+      put_attr(One, cost, [0.9]),
+      put_attr(B1, cost, [B+One]),
+      put_attr(B1A, cost, [B1*A])
+   },
+   [1-One, B+One-B1, B1*A-B1A, B1A=AA],
+   factorize(Nodes, A, AA).
+factorize([_ | Nodes], A, AA) ==>
+   factorize(Nodes, A, AA).
+factorize([], _, _) ==> [].
+
 constant_folding((A+B)-AB, _Index),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA+VB,
@@ -185,18 +215,18 @@ saturate(Rules, N, In, Out) :-
    ;  Out = In
    ).
 
-extract(Id, Id, Cost, Nodes) :-
-   extract(Id, Id, Cost, Nodes, Nodes).
-extract(Id, Id, Cost, Nodes, Nodes) :-
-   maplist([Node-NodeId, (Cost-Node)-NodeId]>>merge_cost(Node, Cost),
+extract(Nodes) :-
+   extract(Nodes, Nodes).
+extract(Nodes, Nodes) :-
+   maplist([Node-NodeId, (Cost-Node)-NodeId]>>(merge_cost(Node, Cost) -> true ; Cost = inf),
            Nodes, CostNodes),
    make_index(CostNodes, Index),
    rb_visit(Index, Pairs),
-   foldl([NodeId-SubCostNodes, CostIn, CostOut]>>(
+   maplist([NodeId-SubCostNodes]>>(
       keysort(SubCostNodes, Sort),
-      member(Cost-NodeId, Sort),
-      CostOut is CostIn + Cost
-   ), Pairs, 0, Cost).
+      member(Cost-NodeId, Sort)
+   ), Pairs).
+:- table get_cost/2.
 get_cost(Id, Cost) :-
    get_attr(Id, cost, Costs),
    foldl(merge_cost, Costs, inf, Cost).
@@ -205,6 +235,7 @@ merge_cost(Node, Cost) :-
    -> merge_cost(Node, inf, Cost)
    ;  Cost = 1
    ).
+:- table merge_cost/3.
 merge_cost(Cost, In, Out) :-
    (  compound(Cost)
    -> Cost =.. [_ | Ids],
