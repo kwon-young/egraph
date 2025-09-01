@@ -85,28 +85,30 @@ comm((A*B)-AB, _Nodes, UnifsIn, UnifsOut) ==>
    [B*A-BA].
 comm(_, _, Unifs, Unifs) ==> [].
 
-assoc((A+BC)-ABC, Index) ==>
+assoc((A+BC)-ABC, Index, UnifsIn, UnifsOut) ==>
    {rb_lookup(BC, Nodes, Index)},
-   assoc_(Nodes, +, A, ABC).
-assoc((A*BC)-ABC, Index) ==>
+   assoc_(Nodes, +, A, ABC, UnifsIn, UnifsOut).
+assoc((A*BC)-ABC, Index, UnifsIn, UnifsOut) ==>
    {rb_lookup(BC, Nodes, Index)},
-   assoc_(Nodes, *, A, ABC).
-assoc(_, _) ==> [].
-assoc_([(B+C) | Nodes], +, A, ABC) ==>
+   assoc_(Nodes, *, A, ABC, UnifsIn, UnifsOut).
+assoc(_, _, Unifs, Unifs) ==> [].
+assoc_([(B+C) | Nodes], +, A, ABC, UnifsIn, UnifsOut) ==>
    {  put_attr(AB, cost, [A+B]),
-      put_attr(ABC_, cost, [AB+C])
+      put_attr(ABC_, cost, [AB+C]),
+      UnifsTmp = [ABC=ABC_ | UnifsIn]
    },
-   [A+B-AB, AB+C-ABC_, ABC=ABC_],
-   assoc_(Nodes, +, A, ABC).
-assoc_([(B*C) | Nodes], *, A, ABC) ==>
+   [A+B-AB, AB+C-ABC_],
+   assoc_(Nodes, +, A, ABC, UnifsTmp, UnifsOut).
+assoc_([(B*C) | Nodes], *, A, ABC, UnifsIn, UnifsOut) ==>
    {  put_attr(AB, cost, [A*B]),
-      put_attr(ABC_, cost, [AB*C])
+      put_attr(ABC_, cost, [AB*C]),
+      UnifsTmp = [ABC=ABC_ | UnifsIn]
    },
-   [A*B-AB, AB*C-ABC_, ABC=ABC_],
-   assoc_(Nodes, *, A, ABC).
-assoc_([_ | Nodes], Op, A, ABC) ==>
-   assoc_(Nodes, Op, A, ABC).
-assoc_([], _, _, _) ==> [].
+   [A*B-AB, AB+C-ABC_],
+   assoc_(Nodes, *, A, ABC, UnifsTmp, UnifsOut).
+assoc_([_ | Nodes], Op, A, ABC, UnifsIn, UnifsOut) ==>
+   assoc_(Nodes, Op, A, ABC, UnifsIn, UnifsOut).
+assoc_([], _, _, _, Unifs, Unifs) ==> [].
 
 reduce(A+B-AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
    { UnifsOut = [A=AB | UnifsIn] },
