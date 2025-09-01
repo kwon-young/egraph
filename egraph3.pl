@@ -77,11 +77,13 @@ add_node(Node, Id, In, Out) :-
 get(Name, Id, Value) :-
    get_attr(Id, Name, Value).
 
-comm((A+B)-AB, _Nodes) ==>
-   [B+A-BA, AB=BA].
-comm((A*B)-AB, _Nodes) ==>
-   [B*A-BA, AB=BA].
-comm(_, _) ==> [].
+comm((A+B)-AB, _Nodes, UnifsIn, UnifsOut) ==>
+   { UnifsOut = [AB=BA | UnifsIn] },
+   [B+A-BA].
+comm((A*B)-AB, _Nodes, UnifsIn, UnifsOut) ==>
+   { UnifsOut = [AB=BA | UnifsIn] },
+   [B*A-BA].
+comm(_, _, Unifs, Unifs) ==> [].
 
 assoc((A+BC)-ABC, Index) ==>
    {rb_lookup(BC, Nodes, Index)},
@@ -106,51 +108,58 @@ assoc_([_ | Nodes], Op, A, ABC) ==>
    assoc_(Nodes, Op, A, ABC).
 assoc_([], _, _, _) ==> [].
 
-reduce(A+B-AB, _Index), get_attr(B, const, 0) ==>
-   [A=AB].
-reduce(A*B-AB, _Index), get_attr(B, const, 1) ==>
-   [A=AB].
-reduce(_*B-AB, _Index), get_attr(B, const, 0) ==>
-   [B=AB].
-reduce(_, _) ==> [].
+reduce(A+B-AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
+   { UnifsOut = [A=AB | UnifsIn] },
+   [].
+reduce(A*B-AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 1) ==>
+   { UnifsOut = [A=AB | UnifsIn] },
+   [].
+reduce(_*B-AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
+   { UnifsOut = [B=AB | UnifsIn] },
+   [].
+reduce(_, _, Unifs, Unifs) ==> [].
 
-factorize(A+A-AA, _Index) ==>
+factorize(A+A-AA, _Index, UnifsIn, UnifsOut) ==>
    {  put_attr(Two, const, 2),
       put_attr(Two, cost, [0.9]),
-      put_attr(A2, cost, [A*Two])
+      put_attr(A2, cost, [A*Two]),
+      UnifsOut = [A2=AA | UnifsIn]
    },
-   [2-Two, A*Two-A2, A2=AA].
-factorize(A+BA-AA, Index) ==>
+   [2-Two, A*Two-A2].
+factorize(A+BA-AA, Index, UnifsIn, UnifsOut) ==>
    { rb_lookup(BA, Nodes, Index) },
-   factorize(Nodes, A, AA).
-factorize(_, _) ==> [].
-factorize([B*A | Nodes], A, AA) ==>
+   factorize(Nodes, A, AA, UnifsIn, UnifsOut).
+factorize(_, _, Unifs, Unifs) ==> [].
+factorize([B*A | Nodes], A, AA, UnifsIn, UnifsOut) ==>
    {  put_attr(One, const, 1),
       put_attr(One, cost, [0.9]),
       put_attr(B1, cost, [B+One]),
-      put_attr(B1A, cost, [B1*A])
+      put_attr(B1A, cost, [B1*A]),
+      UnifsTmp = [B1A=AA | UnifsIn]
    },
-   [1-One, B+One-B1, B1*A-B1A, B1A=AA],
-   factorize(Nodes, A, AA).
-factorize([_ | Nodes], A, AA) ==>
-   factorize(Nodes, A, AA).
-factorize([], _, _) ==> [].
+   [1-One, B+One-B1, B1*A-B1A],
+   factorize(Nodes, A, AA, UnifsTmp, UnifsOut).
+factorize([_ | Nodes], A, AA, UnifsIn, UnifsOut) ==>
+   factorize(Nodes, A, AA, UnifsIn, UnifsOut).
+factorize([], _, _, Unifs, Unifs) ==> [].
 
-constant_folding((A+B)-AB, _Index),
+constant_folding((A+B)-AB, _Index, UnifsIn, UnifsOut),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA+VB,
       put_attr(C, const, VC),
-      put_attr(C, cost, [1])
+      put_attr(C, cost, [1]),
+      UnifsOut = [C=AB | UnifsIn]
    },
-   [VC-C, C=AB].
-constant_folding((A*B)-AB, _Index),
+   [VC-C].
+constant_folding((A*B)-AB, _Index, UnifsIn, UnifsOut),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA*VB,
       put_attr(C, const, VC),
-      put_attr(C, cost, [1])
+      put_attr(C, cost, [1]),
+      UnifsOut = [C=AB | UnifsIn]
    },
-   [VC-C, C=AB].
-constant_folding(_, _) ==> [].
+   [VC-C].
+constant_folding(_, _, Unifs, Unifs) ==> [].
 
 rules([Rule | Rules], Index, Node, UnifsIn, UnifsOut) -->
    call(Rule, Index, Node, Rule, UnifsIn, Unifs),
