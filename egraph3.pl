@@ -152,18 +152,22 @@ constant_folding((A*B)-AB, _Index),
    [VC-C, C=AB].
 constant_folding(_, _) ==> [].
 
-rules(Rules, Index, Node) -->
-   sequence(rule(Index, Node), Rules).
-rule(Index, Node, Rule) -->
-   call(Rule, Node, Index).
+rules([Rule | Rules], Index, Node, UnifsIn, UnifsOut) -->
+   call(Rule, Index, Node, Rule, UnifsIn, Unifs),
+   rules(Rules, Index, Node, Unifs, UnifsOut).
+rules([], _, _, Unifs, Unifs) --> [].
+% rules(Rules, Index, Node) -->
+%    sequence(rule(Index, Node), Rules).
+% rule(Index, Node, Rule) -->
+%    call(Rule, Node, Index).
 
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
    group_pairs_by_key(Pairs, Groups),
    ord_list_to_rbtree(Groups, Index).
 
-match(Rules, Worklist, Index, Matches) :-
-   foldl(rules(Rules, Index), Worklist, Matches, []).
+match(Rules, Worklist, Index, Matches, Unifs) :-
+   foldl(rules(Rules, Index), Worklist, Unifs, [], Matches, []).
 
 union(A, B, In, Out) :-
    A = B,
@@ -187,21 +191,25 @@ merge_group([Node-[H | T] | Nodes], [Node-H | Worklist], In, Out) :-
    merge_group(Nodes, Worklist, Tmp, Out).
 merge_group([], [], In, In).
 
-rebuild([A=B | T], In, Out) :-
-   A = B,
-   rebuild(T, In, Out).
-rebuild([N-Id | T], In, Out) :-
-   rebuild(T, [N-Id | In], Out).
-rebuild([], In, Out) :-
-   merge_nodes(In, Out).
+% rebuild([A=B | T], In, Out) :-
+%    A = B,
+%    rebuild(T, In, Out).
+% rebuild([N-Id | T], In, Out) :-
+%    rebuild(T, [N-Id | In], Out).
+% rebuild([], In, Out) :-
+%    merge_nodes(In, Out).
+rebuild(Matches, Unifs, In, Out) :-
+   maplist(call, Unifs),
+   append(Matches, In, Tmp),
+   merge_nodes(Tmp, Out).
               
 saturate(Rules) -->
    saturate(Rules, inf).
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
-      match(Rules, In, Index, Matches),
-      rebuild(Matches, In, Tmp),
+      match(Rules, In, Index, Matches, Unifs),
+      rebuild(Matches, Unifs, In, Tmp),
       length(In, Len1),
       length(Tmp, Len2),
       (  Len1 \== Len2
