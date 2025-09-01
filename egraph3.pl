@@ -62,11 +62,11 @@ Other systems may require explicit wrappers for these DCG rules.
 
 cost:attr_unify_hook(XCost, Y) :-
    (  get_attr(Y, cost, YCost)
-   -> Cost is min(XCost, YCost),
-      put_attr(Y, cost, Cost)
+   -> append(XCost, YCost, Cost),
+      list_to_ord_set(Cost, Set),
+      put_attr(Y, cost, Set)
    ;  var(Y)
-   -> print_term(XCost-Y, []), nl,
-      put_attr(Y, cost, XCost)
+   -> put_attr(Y, cost, XCost)
    ;  true
    ).
 const:attr_unify_hook(XConst, Y) :-
@@ -154,18 +154,17 @@ add_node(Node, Id, In, Out) :-
    -> Out = In
    ;  ord_add_element(In, Node-Id, Out),
       (  compound(Node)
-      -> compound_name_arguments(Node, _, Args),
-         maplist([ArgId, ArgCost]>>get_attr(ArgId, cost, ArgCost), Args, Costs),
-         sumlist(Costs, Sum),
-         Cost is Sum + 1
+      -> Cost = Node
+      ;  number(Node)
+      -> put_attr(Id, const, Node),
+         Cost = 1
       ;  Cost = 1
       ),
-      put_attr(Id, cost, Cost),
-      (  number(Node)
-      -> put_attr(Id, const, Node)
-      ;  true
-      )
+      put_attr(Id, cost, [Cost])
    ).
+
+get(Name, Id, Value) :-
+   get_attr(Id, Name, Value).
 
 %! comm(+Node, +Index)// is nondet.
 %  Commutativity of +/2: for (A+B)-AB emit B+A-BA and AB=BA without binding Ids.
@@ -203,9 +202,15 @@ assoc(_, _) ==> [].
 %  - Members are Keys from Index; unification happens later in rebuild//1 (Ids only).
 %  Determinism: nondet over Members; tail-recursive; no side effects.
 assoc_([(B+C) | Nodes], A, ABC) ==>
+   {  put_attr(AB, cost, [A+B]),
+      put_attr(ABC_, cost, [AB+C])
+   },
    [A+B-AB, AB+C-ABC_, ABC=ABC_],
    assoc_(Nodes, A, ABC).
 assoc_([(B*C) | Nodes], A, ABC) ==>
+   {  put_attr(AB, cost, [A*B]),
+      put_attr(ABC_, cost, [AB*C])
+   },
    [A*B-AB, AB*C-ABC_, ABC=ABC_],
    assoc_(Nodes, A, ABC).
 assoc_(_, _, _) ==> [].
@@ -236,15 +241,15 @@ reduce(_, _) ==> [].
 constant_folding((A+B)-AB, _Index),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA+VB,
-      put_attr(C, cost, 1),
-      put_attr(C, const, VC)
+      put_attr(C, const, VC),
+      put_attr(C, cost, [1])
    },
    [VC-C, C=AB].
 constant_folding((A*B)-AB, _Index),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA*VB,
-      put_attr(C, cost, 1),
-      put_attr(C, const, VC)
+      put_attr(C, const, VC),
+      put_attr(C, cost, [1])
    },
    [VC-C, C=AB].
 constant_folding(_, _) ==> [].
@@ -366,15 +371,13 @@ merge_group([], [], In, In).
 %  - Keys must never appear on the left/right of (=)/2.
 %  - DCG call to merge_nodes//0 expands to merge_nodes/2.
 rebuild([A=B | T], In, Out) :-
-   write_term('Unifying:', [A=B]), nl,
-   ( get_attr(A, cost, C1) -> format('  LHS has cost ~w~n', [C1]) ; format('  LHS has no cost~n', []) ),
-   ( get_attr(B, cost, C2) -> format('  RHS has cost ~w~n', [C2]) ; format('  RHS has no cost~n', []) ),
    A = B,
    rebuild(T, In, Out).
 rebuild([N-Id | T], In, Out) :-
    rebuild(T, [N-Id | In], Out).
 rebuild([], In, Out) :-
    merge_nodes(In, Out).
+              
 %! saturate(+Rules)// is det.
 %  Iterate Rules to a length fixpoint (after rebuild/merge).
 %  - Pure producer; emits only Key-Id and (=)/2.
@@ -406,7 +409,6 @@ saturate(Rules, N, In, Out) :-
       rebuild(Matches, In, Tmp),
       length(In, Len1),
       length(Tmp, Len2),
-      print_term(Len1-Len2, []), nl,
       (  Len1 \== Len2
       -> (  N == inf
          -> N1 = N
@@ -418,28 +420,10 @@ saturate(Rules, N, In, Out) :-
    ;  Out = In
    ).
 
-% extract(Id, Term, Nodes) :-
-%    extract(Id, Term, Nodes, Nodes).
-% extract(Id, Term, Nodes, Nodes) :-
-%    make_index(Nodes, Index),
-%    ord_list_to_rbtree(Nodes, Tree),
-%    extract_id(Index, Tree, Id, Term).
-% extract_id(Index, Tree, Id, Term) :-
-%    rb_lookup(Id, Nodes, Index),
-%    maplist({Tree}/[Node, Cost-Node]>>(
-%       rb_lookup(Node, NodeId, Tree),
-%       get_attr(NodeId, cost, Cost)
-%    ), Nodes, Pairs),
-%    keysort(Pairs, Sorted),
-%    member(_Cost-Node, Sorted),
-%    (  compound(Node)
-%    -> mapargs(extract_id(Index, Tree), Node, Term)
-%    ;  Term = Node
-%    ).
 extract(Id, Id, Cost, Nodes) :-
    extract(Id, Id, Cost, Nodes, Nodes).
 extract(Id, Id, Cost, Nodes, Nodes) :-
-   maplist([Node-NodeId, (Cost-Node)-NodeId]>>get_attr(NodeId, cost, Cost),
+   maplist([Node-NodeId, (Cost-Node)-NodeId]>>merge_cost(Node, Cost),
            Nodes, CostNodes),
    make_index(CostNodes, Index),
    rb_visit(Index, Pairs),
@@ -448,6 +432,22 @@ extract(Id, Id, Cost, Nodes, Nodes) :-
       member(Cost-NodeId, Sort),
       CostOut is CostIn + Cost
    ), Pairs, 0, Cost).
+get_cost(Id, Cost) :-
+   get_attr(Id, cost, Costs),
+   foldl(merge_cost, Costs, inf, Cost).
+merge_cost(Node, Cost) :-
+   (  compound(Node)
+   -> merge_cost(Node, inf, Cost)
+   ;  Cost = 1
+   ).
+merge_cost(Cost, In, Out) :-
+   (  compound(Cost)
+   -> Cost =.. [_ | Ids],
+      maplist(get_cost, Ids, Costs),
+      sum_list([1 | Costs], RealCost)
+   ;  RealCost = Cost
+   ),
+   Out is min(In, RealCost).
 
 %! example1(-G) is det.
 %  Demo: add a, f(f(a)), union them, then add f^4(a); returns the graph G.
