@@ -1,9 +1,10 @@
-:- module(egraph, [add//2, union//2, saturate//1, saturate//2,
+:- module(egraph, [add_term//2, union//2, saturate//1, saturate//2,
                    extract/1, extract//0]).
 
 :- use_module(library(dcg/high_order)).
 :- use_module(library(ordsets)).
 :- use_module(library(rbtrees)).
+:- use_module(library(clpBNR)).
 
 cost:attr_unify_hook(XCost, Y) :-
    (  get_attr(Y, cost, YCost)
@@ -49,10 +50,10 @@ lookup(Item-V, [X1-V1, X2-V2|Xs]) :-
 lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
 
-add(Term, Id, In, Out) :-
+add_term(Term, Id, In, Out) :-
    (  compound(Term)
    -> Term =.. [F | Args],
-      foldl(add, Args, Ids, In, Tmp),
+      foldl(add_term, Args, Ids, In, Tmp),
       Node =.. [F | Ids],
       add_node(Node, Id, Tmp, Out)
    ;  add_node(Term, Id, In, Out)
@@ -61,29 +62,22 @@ add(Term, Id, In, Out) :-
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
 add_node(Node, Id, In, Out) :-
-   (  lookup(Node-Id, In)
+   (  lookup(Node-node(Id, _Cost), In)
    -> Out = In
-   ;  ord_add_element(In, Node-Id, Out),
-      (  compound(Node)
-      -> Cost = Node
-      ;  number(Node)
-      -> put_attr(Id, const, Node),
-         Cost = 1
-      ;  Cost = 1
-      ),
-      put_attr(Id, cost, [Cost])
+   ;  ord_add_element(In, Node-node(Id, 1), Out),
+      (  number(Node)
+      -> put_attr(Id, const, Node)
+      ;  true
+      )
    ).
 
-get(Name, Id, Value) :-
-   get_attr(Id, Name, Value).
-
-comm((A+B)-AB, _Nodes, UnifsIn, UnifsOut) ==>
-   { UnifsOut = [AB=BA | UnifsIn] },
-   [B+A-BA].
-comm((A*B)-AB, _Nodes, UnifsIn, UnifsOut) ==>
-   { UnifsOut = [AB=BA | UnifsIn] },
-   [B*A-BA].
-comm(_, _, Unifs, Unifs) ==> [].
+comm((A+B)-node(AB, ABCost), _Index, UnifsIn, UnifsOut) ==>
+   { UnifsIn = [AB=BA | UnifsOut] },
+   [B+A-node(BA, ABCost)].
+comm((A*B)-node(AB, ABCost), _Index, UnifsIn, UnifsOut) ==>
+   { UnifsIn = [AB=BA | UnifsOut] },
+   [B*A-node(BA, ABCost)].
+comm(_, _, UnifsIn, UnifsOut) ==> {UnifsOut = UnifsIn}.
 
 assoc((A+BC)-ABC, Index, UnifsIn, UnifsOut) ==>
    {rb_lookup(BC, Nodes, Index)},
@@ -91,94 +85,79 @@ assoc((A+BC)-ABC, Index, UnifsIn, UnifsOut) ==>
 assoc((A*BC)-ABC, Index, UnifsIn, UnifsOut) ==>
    {rb_lookup(BC, Nodes, Index)},
    assoc_(Nodes, *, A, ABC, UnifsIn, UnifsOut).
-assoc(_, _, Unifs, Unifs) ==> [].
-assoc_([(B+C) | Nodes], +, A, ABC, UnifsIn, UnifsOut) ==>
-   {  put_attr(AB, cost, [A+B]),
-      put_attr(ABC_, cost, [AB+C]),
-      UnifsTmp = [ABC=ABC_ | UnifsIn]
-   },
-   [A+B-AB, AB+C-ABC_],
-   assoc_(Nodes, +, A, ABC, UnifsTmp, UnifsOut).
-assoc_([(B*C) | Nodes], *, A, ABC, UnifsIn, UnifsOut) ==>
-   {  put_attr(AB, cost, [A*B]),
-      put_attr(ABC_, cost, [AB*C]),
-      UnifsTmp = [ABC=ABC_ | UnifsIn]
-   },
-   [A*B-AB, AB+C-ABC_],
-   assoc_(Nodes, *, A, ABC, UnifsTmp, UnifsOut).
+assoc(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+assoc_([(B+C) | Nodes], +, A, node(ABC, ABCCost), UnifsIn, UnifsOut) ==>
+   { UnifsIn = [ABC=ABC_ | UnifsTmp] },
+   [A+B-node(AB, 1), AB+C-node(ABC_, ABCCost)],
+   assoc_(Nodes, +, A, node(ABC, ABCCost), UnifsTmp, UnifsOut).
+assoc_([(B*C) | Nodes], *, A, node(ABC, ABCCost), UnifsIn, UnifsOut) ==>
+   { UnifsIn = [ABC=ABC_ | UnifsTmp] },
+   [A*B-node(AB, 1), AB+C-node(ABC_, ABCCost)],
+   assoc_(Nodes, *, A, node(ABC, ABCCost), UnifsTmp, UnifsOut).
 assoc_([_ | Nodes], Op, A, ABC, UnifsIn, UnifsOut) ==>
    assoc_(Nodes, Op, A, ABC, UnifsIn, UnifsOut).
-assoc_([], _, _, _, Unifs, Unifs) ==> [].
+assoc_([], _, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
 reduce(A+B-AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
-   { UnifsOut = [A=AB | UnifsIn] },
+   { UnifsIn = [A=AB | UnifsOut] },
    [].
 reduce(A*B-AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 1) ==>
-   { UnifsOut = [A=AB | UnifsIn] },
+   { UnifsIn = [A=AB | UnifsOut] },
    [].
 reduce(_*B-AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
-   { UnifsOut = [B=AB | UnifsIn] },
+   { UnifsIn = [B=AB | UnifsOut] },
    [].
-reduce(_, _, Unifs, Unifs) ==> [].
+reduce(_, _, UnifsIn, UnifsOut) ==> {UnifsOut = UnifsIn}.
 
-factorize(A+A-AA, _Index, UnifsIn, UnifsOut) ==>
+factorize(A+A-node(AA, _AACost), _Index, UnifsIn, UnifsOut) ==>
    {  put_attr(Two, const, 2),
-      put_attr(Two, cost, [0.9]),
-      put_attr(A2, cost, [A*Two]),
-      UnifsOut = [A2=AA | UnifsIn]
+      UnifsIn = [A2=AA | UnifsOut]
    },
-   [2-Two, A*Two-A2].
+   [2-node(Two, 1), A*Two-node(A2, 0.9)].
 factorize(A+BA-AA, Index, UnifsIn, UnifsOut) ==>
    { rb_lookup(BA, Nodes, Index) },
    factorize(Nodes, A, AA, UnifsIn, UnifsOut).
-factorize(_, _, Unifs, Unifs) ==> [].
-factorize([B*A | Nodes], A, AA, UnifsIn, UnifsOut) ==>
+factorize(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+factorize([B*A | Nodes], A, node(AA, AACost), UnifsIn, UnifsOut) ==>
    {  put_attr(One, const, 1),
-      put_attr(One, cost, [0.9]),
-      put_attr(B1, cost, [B+One]),
-      put_attr(B1A, cost, [B1*A]),
-      UnifsTmp = [B1A=AA | UnifsIn]
+      UnifsIn = [B1A=AA | UnifsTmp]
    },
-   [1-One, B+One-B1, B1*A-B1A],
-   factorize(Nodes, A, AA, UnifsTmp, UnifsOut).
+   [1-node(One, 1), B+One-node(B1, 1), B1*A-node(B1A, 0.9)],
+   factorize(Nodes, A, node(AA, AACost), UnifsTmp, UnifsOut).
 factorize([_ | Nodes], A, AA, UnifsIn, UnifsOut) ==>
    factorize(Nodes, A, AA, UnifsIn, UnifsOut).
-factorize([], _, _, Unifs, Unifs) ==> [].
+factorize([], _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
-constant_folding((A+B)-AB, _Index, UnifsIn, UnifsOut),
+constant_folding((A+B)-node(AB, _ABCost), _Index, UnifsIn, UnifsOut),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA+VB,
       put_attr(C, const, VC),
-      put_attr(C, cost, [1]),
-      UnifsOut = [C=AB | UnifsIn]
+      UnifsIn = [C=AB | UnifsOut]
    },
-   [VC-C].
-constant_folding((A*B)-AB, _Index, UnifsIn, UnifsOut),
+   [VC-node(C, 1)].
+constant_folding((A*B)-node(AB, _ABCost), _Index, UnifsIn, UnifsOut),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA*VB,
       put_attr(C, const, VC),
-      put_attr(C, cost, [1]),
-      UnifsOut = [C=AB | UnifsIn]
+      UnifsIn = [C=AB | UnifsOut]
    },
-   [VC-C].
-constant_folding(_, _, Unifs, Unifs) ==> [].
+   [VC-node(C, 1)].
+constant_folding(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
-rules([Rule | Rules], Index, Node, UnifsIn, UnifsOut) -->
-   call(Rule, Index, Node, Rule, UnifsIn, Unifs),
-   rules(Rules, Index, Node, Unifs, UnifsOut).
-rules([], _, _, Unifs, Unifs) --> [].
-% rules(Rules, Index, Node) -->
-%    sequence(rule(Index, Node), Rules).
-% rule(Index, Node, Rule) -->
-%    call(Rule, Node, Index).
+rules([Rule | Rules], Index, Node, Unifs) -->
+   call(Rule, Node, Index, Unifs, UnifsRest),
+   rules(Rules, Index, Node, UnifsRest).
+rules([], _, _, []) --> [].
 
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
-   group_pairs_by_key(Pairs, Groups),
+   maplist([node(Id, _Cost)-Node, Id-Node]>>true, Pairs, IdPairs),
+   group_pairs_by_key(IdPairs, Groups),
    ord_list_to_rbtree(Groups, Index).
 
 match(Rules, Worklist, Index, Matches, Unifs) :-
-   foldl(rules(Rules, Index), Worklist, Unifs, [], Matches, []).
+   foldl(rules(Rules, Index), Worklist, AllUnifs, Matches, []),
+   append(AllUnifs, Unifs).
 
 union(A, B, In, Out) :-
    A = B,
@@ -193,8 +172,9 @@ merge_nodes(In, Out) :-
    ;  Out = Sort
    ).
 
-merge_group([Node-[H | T] | Nodes], [Node-H | Worklist], In, Out) :-
-   maplist(=(H), T),
+merge_group([Sig-[H | T] | Nodes], [Sig-Node | Worklist], In, Out) :-
+   foldl([node(Id, Cost), node(Id, PrevCost), node(Id, MinCost)]>>
+         (MinCost is min(Cost, PrevCost)), T, H, Node),
    (  T == []
    -> Tmp = In
    ;  Tmp = true
@@ -202,13 +182,6 @@ merge_group([Node-[H | T] | Nodes], [Node-H | Worklist], In, Out) :-
    merge_group(Nodes, Worklist, Tmp, Out).
 merge_group([], [], In, In).
 
-% rebuild([A=B | T], In, Out) :-
-%    A = B,
-%    rebuild(T, In, Out).
-% rebuild([N-Id | T], In, Out) :-
-%    rebuild(T, [N-Id | In], Out).
-% rebuild([], In, Out) :-
-%    merge_nodes(In, Out).
 rebuild(Matches, Unifs, In, Out) :-
    maplist(call, Unifs),
    append(Matches, In, Tmp),
@@ -237,39 +210,39 @@ saturate(Rules, N, In, Out) :-
 extract(Nodes) :-
    extract(Nodes, Nodes).
 extract(Nodes, Nodes) :-
-   maplist([Node-NodeId, (Cost-Node)-NodeId]>>(merge_cost(Node, Cost) -> true ; Cost = inf),
-           Nodes, CostNodes),
-   make_index(CostNodes, Index),
-   rb_visit(Index, Pairs),
-   maplist([NodeId-SubCostNodes]>>(
-      keysort(SubCostNodes, Sort),
-      member(Cost-NodeId, Sort)
-   ), Pairs).
-:- table get_cost/2.
-get_cost(Id, Cost) :-
-   get_attr(Id, cost, Costs),
-   foldl(merge_cost, Costs, inf, Cost).
-merge_cost(Node, Cost) :-
+   transpose_pairs(Nodes, Pairs),
+   maplist([node(Id, Cost)-Node, Id-node(Cost, Node)]>>true, Pairs, IdPairs),
+   group_pairs_by_key(IdPairs, ClassNodes),
+   maplist([Id-_Node]>>({Cost >= 0}, put_attr(Id, cost, Cost)), ClassNodes),
+   maplist(compute_class_cost, ClassNodes, NewClassNodes),
+   maplist(extract_class, NewClassNodes).
+extract_class(Id-Nodes) :-
+   sort(Nodes, SortedNodes),
+   member(node(_Cost, Id), SortedNodes).
+
+compute_class_cost(Id-Nodes, Id-NewNodes) :-
+   maplist(compute_node_cost, Nodes, NewNodes, NodeCosts),
+   foldl([NodeCost, Cost, MinCost]>>
+         {MinCost is min(NodeCost, Cost)},
+         NodeCosts, inf, ClassCost),
+   get_attr(Id, cost, ClassCost).
+compute_node_cost(node(Offset, Node), node(Cost, Node), Cost) :-
    (  compound(Node)
-   -> merge_cost(Node, inf, Cost)
-   ;  Cost = 1
+   -> Node =.. [_ | Ids],
+      foldl([Id, In, Out]>>(
+         get_attr(Id, cost, IdCost),
+         {Out is In + IdCost}
+      ), Ids, 0, CCost),
+      { Cost is CCost + Offset }
+   ;  Cost = Offset
    ).
-:- table merge_cost/3.
-merge_cost(Cost, In, Out) :-
-   (  compound(Cost)
-   -> Cost =.. [_ | Ids],
-      maplist(get_cost, Ids, Costs),
-      sum_list([1 | Costs], RealCost)
-   ;  RealCost = Cost
-   ),
-   Out is min(In, RealCost).
 
 example1(G) :-
    phrase((
-      add(a, A),
-      add(f(f(a)), FFA),
+      add_term(a, A),
+      add_term(f(f(a)), FFA),
       union(A, FFA),
-      add(f(f(f(f(a)))), _FFFFA)
+      add_term(f(f(f(f(a)))), _FFFFA)
    ), [], G).
 
 
@@ -278,15 +251,15 @@ add_expr(N, Add) :-
 
 example2(N, Expr) :-
    add_expr(N, Expr),
-   phrase(add(Expr, _), [], G),
+   phrase(add_term(Expr, _), [], G),
    time(saturate([comm, assoc], G, G1)),
    length(G1, N1),
    Num is 3**(N) - 2**(N+1) + 1 + N,
    print_term(N1-Num, []), nl.
 
-example3(N, Expr, T) :-
+example3(N, Expr, R) :-
    distinct(R, phrase((
-      add(Expr, R),
-      saturate([comm, assoc, reduce, constant_folding], N),
-      extract(R, T)
+      add_term(Expr, R),
+      saturate([comm, assoc, reduce, factorize, constant_folding], N),
+      extract
    ), [], _)).
