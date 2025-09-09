@@ -214,7 +214,11 @@ extract(Nodes, Nodes) :-
 extract_class(Id-Nodes) :-
    % make sure that costs are instantiated
    sort(Nodes, SortedNodes),
-   member(node(_Cost, Id), SortedNodes).
+   member(node(_Cost, Id), SortedNodes),
+   (  var(Id)
+   -> del_attr(Id, cost)
+   ;  true
+   ).
 
 compute_class_cost(Id-Nodes, Id-NewNodes) :-
    maplist(compute_node_cost, Nodes, NewNodes, NodeCosts),
