@@ -264,6 +264,7 @@ example2(N, Expr) :-
 example3(N, Expr, R) :-
    distinct(R, phrase((
       add_term(Expr, R),
-      saturate([comm, assoc, reduce, factorize1, factorize2, constant_folding], N),
+      saturate([comm, assoc, factorize1, factorize2, constant_folding], N),
+      saturate([reduce], N), % reduce with comm+assoc+factorize explodes
       extract
    ), [], _)).
