@@ -85,7 +85,7 @@ assoc_([(B+C) | Nodes], +, A, node(ABC, ABCCost), UnifsIn, UnifsOut) ==>
    assoc_(Nodes, +, A, node(ABC, ABCCost), UnifsTmp, UnifsOut).
 assoc_([(B*C) | Nodes], *, A, node(ABC, ABCCost), UnifsIn, UnifsOut) ==>
    { UnifsIn = [ABC=ABC_ | UnifsTmp] },
-   [A*B-node(AB, 1), AB+C-node(ABC_, ABCCost)],
+   [A*B-node(AB, 1), AB*C-node(ABC_, ABCCost)],
    assoc_(Nodes, *, A, node(ABC, ABCCost), UnifsTmp, UnifsOut).
 assoc_([_ | Nodes], Op, A, ABC, UnifsIn, UnifsOut) ==>
    assoc_(Nodes, Op, A, ABC, UnifsIn, UnifsOut).
