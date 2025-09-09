@@ -6,15 +6,8 @@
 :- use_module(library(rbtrees)).
 :- use_module(library(clpBNR)).
 
-cost:attr_unify_hook(XCost, Y) :-
-   (  get_attr(Y, cost, YCost)
-   -> append(XCost, YCost, Cost),
-      list_to_ord_set(Cost, Set),
-      put_attr(Y, cost, Set)
-   ;  var(Y)
-   -> put_attr(Y, cost, XCost)
-   ;  true
-   ).
+cost:attr_unify_hook(_, _) :-
+   true.
 const:attr_unify_hook(XConst, Y) :-
    (  get_attr(Y, const, YConst)
    -> XConst =:= YConst
@@ -113,7 +106,9 @@ factorize(A+A-node(AA, _AACost), _Index, UnifsIn, UnifsOut) ==>
    {  put_attr(Two, const, 2),
       UnifsIn = [A2=AA | UnifsOut]
    },
-   [2-node(Two, 1), A*Two-node(A2, 0.9)].
+   % make sure to use rationals for fractional costs
+   % so that clpBNR cost variables always bounds to concrete values
+   [2-node(Two, 1), A*Two-node(A2, 9r10)].
 factorize(A+BA-AA, Index, UnifsIn, UnifsOut) ==>
    { rb_lookup(BA, Nodes, Index) },
    factorize(Nodes, A, AA, UnifsIn, UnifsOut).
@@ -122,7 +117,7 @@ factorize([B*A | Nodes], A, node(AA, AACost), UnifsIn, UnifsOut) ==>
    {  put_attr(One, const, 1),
       UnifsIn = [B1A=AA | UnifsTmp]
    },
-   [1-node(One, 1), B+One-node(B1, 1), B1*A-node(B1A, 0.9)],
+   [1-node(One, 1), B+One-node(B1, 1), B1*A-node(B1A, 9r10)],
    factorize(Nodes, A, node(AA, AACost), UnifsTmp, UnifsOut).
 factorize([_ | Nodes], A, AA, UnifsIn, UnifsOut) ==>
    factorize(Nodes, A, AA, UnifsIn, UnifsOut).
@@ -217,6 +212,7 @@ extract(Nodes, Nodes) :-
    maplist(compute_class_cost, ClassNodes, NewClassNodes),
    maplist(extract_class, NewClassNodes).
 extract_class(Id-Nodes) :-
+   % make sure that costs are instantiated
    sort(Nodes, SortedNodes),
    member(node(_Cost, Id), SortedNodes).
 
