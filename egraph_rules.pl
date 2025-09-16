@@ -24,9 +24,9 @@ rule_test(a+b, comm_add, [a+b, b+a]).
 rule_test(a*b, comm_mul, [a*b, b*a]).
 rule_test((a+b)+c, assoc_add, [(a+b)+c, a+(b+c)]).
 rule_test((a*b)*c, assoc_mul, [(a*b)*c, a*(b*c)]).
-rule_test(a+0, reduce_add0, [a+0, a]).
-rule_test(a*1, reduce_mul1, [a*1, a]).
-rule_test(a*0, reduce_mul0, [a*0, 0]).
+rule_test(a+0, reduce_add0, [0]).
+rule_test(a*1, reduce_mul1, [a]).
+rule_test(a*0, reduce_mul0, [0]).
 rule_test(a+a, factorize_aa, [a+a, 2*a]).
 rule_test(a+b*a, factorize_aba, [a+b*a, a*(b+1)]).
 rule_test(2+3, constant_folding, [5, 2+3]).
