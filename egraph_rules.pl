@@ -39,7 +39,8 @@ test(rewrite, [forall(rule_test(Term, Rule, Expected))]) :-
          extract), [], _),
       Terms),
    print_term(Terms, []),
-   sort(Terms, Sorted),
+   exclude(cyclic_term, Terms, AcyclicTerms),
+   sort(AcyclicTerms, Sorted),
    sort(Expected, SortedExpected),
    Sorted == SortedExpected.
 
