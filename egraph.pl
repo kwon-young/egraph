@@ -67,32 +67,23 @@ add_node(Node, Id, In, Out) :-
       )
    ).
 
-comm((A+B)-node(AB, ABCost), _Index, UnifsIn, UnifsOut) ==>
+comm(A+B, node(AB, _ABCost), _Index, UnifsIn, UnifsOut) ==>
    { UnifsIn = [AB=BA | UnifsOut] },
-   [B+A-node(BA, ABCost)].
-comm((A*B)-node(AB, ABCost), _Index, UnifsIn, UnifsOut) ==>
-   { UnifsIn = [AB=BA | UnifsOut] },
-   [B*A-node(BA, ABCost)].
-comm(_, _, UnifsIn, UnifsOut) ==> {UnifsOut = UnifsIn}.
+   [B+A-node(BA, 1)].
+comm(_, _, _, UnifsIn, UnifsOut) ==> {UnifsOut = UnifsIn}.
 
-assoc((A+BC)-ABC, Index, UnifsIn, UnifsOut) ==>
+assoc(A+BC, ABC, Index, UnifsIn, UnifsOut) ==>
    {rb_lookup(BC, Nodes, Index)},
-   assoc_(Nodes, +, A, ABC, UnifsIn, UnifsOut).
-assoc((A*BC)-ABC, Index, UnifsIn, UnifsOut) ==>
-   {rb_lookup(BC, Nodes, Index)},
-   assoc_(Nodes, *, A, ABC, UnifsIn, UnifsOut).
-assoc(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
-assoc_([(B+C) | Nodes], +, A, node(ABC, ABCCost), UnifsIn, UnifsOut) ==>
-   { UnifsIn = [ABC=ABC_ | UnifsTmp] },
-   [A+B-node(AB, 1), AB+C-node(ABC_, ABCCost)],
-   assoc_(Nodes, +, A, node(ABC, ABCCost), UnifsTmp, UnifsOut).
-assoc_([(B*C) | Nodes], *, A, node(ABC, ABCCost), UnifsIn, UnifsOut) ==>
-   { UnifsIn = [ABC=ABC_ | UnifsTmp] },
-   [A*B-node(AB, 1), AB*C-node(ABC_, ABCCost)],
-   assoc_(Nodes, *, A, node(ABC, ABCCost), UnifsTmp, UnifsOut).
-assoc_([_ | Nodes], Op, A, ABC, UnifsIn, UnifsOut) ==>
-   assoc_(Nodes, Op, A, ABC, UnifsIn, UnifsOut).
-assoc_([], _, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+   assoc_(Nodes, A+BC, ABC, UnifsIn, UnifsOut).
+assoc(_, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+assoc_([Node | Nodes], Pat, Top, UnifsIn, UnifsOut) ==>
+   assoc__(Node, Pat, Top, UnifsIn, UnifsTmp),
+   assoc_(Nodes, Pat, Top, UnifsTmp, UnifsOut).
+assoc_([], _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+assoc__(B+C, A+_BC, node(ABC, _ABCCost), UnifsIn, UnifsOut) ==>
+   { UnifsIn = [ABC=ABC_ | UnifsOut] },
+   [A+B-node(AB, 1), AB+C-node(ABC_, 1)].
+assoc__(_, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
 reduce(A+B-node(AB, _), _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
    { UnifsIn = [A=AB | UnifsOut] },
@@ -143,9 +134,9 @@ constant_folding((A*B)-node(AB, _ABCost), _Index, UnifsIn, UnifsOut),
    [VC-node(C, 1)].
 constant_folding(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
-rules([Rule | Rules], Index, Node, Unifs) -->
-   call(Rule, Node, Index, Unifs, UnifsRest),
-   rules(Rules, Index, Node, UnifsRest).
+rules([Rule | Rules], Index, Pat-node(Id, Cost), Unifs) -->
+   call(Rule, Pat, Id, Index, Unifs, UnifsRest),
+   rules(Rules, Index, Pat-node(Id, Cost), UnifsRest).
 rules([], _, _, []) --> [].
 
 make_index(In, Index) :-
@@ -172,14 +163,16 @@ merge_nodes(In, Out) :-
    ).
 
 merge_group([Sig-[H | T] | Nodes], [Sig-Node | Worklist], In, Out) :-
-   foldl([node(Id, Cost), node(Id, PrevCost), node(Id, MinCost)]>>
-         (MinCost is min(Cost, PrevCost)), T, H, Node),
+   foldl(merge_node, T, H, Node),
    (  T == []
    -> Tmp = In
    ;  Tmp = true
    ),
    merge_group(Nodes, Worklist, Tmp, Out).
 merge_group([], [], In, In).
+
+merge_node(node(Id, Cost), node(Id, PrevCost), node(Id, MinCost)) :-
+   MinCost is min(Cost, PrevCost).
 
 rebuild(Matches, Unifs, In, Out) :-
    maplist(call, Unifs),

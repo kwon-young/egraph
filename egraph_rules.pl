@@ -38,6 +38,7 @@ test(rewrite, [forall(rule_test(Term, Rule, Expected))]) :-
          saturate([Rule]),
          extract), [], _),
       Terms),
+   print_term(Terms, []),
    sort(Terms, Sorted),
    sort(Expected, SortedExpected),
    Sorted == SortedExpected.
