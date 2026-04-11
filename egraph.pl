@@ -140,10 +140,14 @@ rules([Rule | Rules], Index, Pat-node(Id, Cost), UnifsIn, UnifsOut) -->
 rules([], _, _, Unifs, Unifs) --> [].
 
 make_index(In, Index) :-
-   transpose_pairs(In, Pairs),
-   maplist([node(Id, _Cost)-Node, Id-Node]>>true, Pairs, IdPairs),
+   index_pairs(In, UnsortedPairs),
+   keysort(UnsortedPairs, IdPairs),
    group_pairs_by_key(IdPairs, Groups),
    ord_list_to_rbtree(Groups, Index).
+
+index_pairs([], []).
+index_pairs([Node-node(Id, _Cost)|T0], [Id-Node|T1]) :-
+   index_pairs(T0, T1).
 
 match([], _, _, Unifs, Unifs) --> [].
 match([Node | Rest], Rules, Index, UnifsIn, UnifsOut) -->
