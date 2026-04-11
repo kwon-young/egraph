@@ -6,9 +6,9 @@
 compile(rewrite(Name, Left, LeftOptions, Right, RightOptions) :- Body) -->
    {  term_nodes(Left-Id, LeftNodes),
       LeftNodes = [Pat-_ | T],
-      right_nodes(Right-_, RightNodes, Left-LeftNodes)
+      right_nodes(Right-RightId, RightNodes, Left-LeftNodes)
    },
-   compile_nodes(T, Name, Pat, [], Id, LeftOptions, RightNodes, RightOptions, Body).
+   compile_nodes(T, Name, Pat, [], Id, LeftOptions, RightNodes, RightOptions, RightId, Body).
 
 common_variables(A, B) :-
    term_variables(A, VAs),
@@ -17,7 +17,7 @@ common_variables(A, B) :-
    list_to_ord_set(VBs, BSet),
    ord_intersect(ASet, BSet).
 
-compile_nodes([NextPat-node(NextId, _) | Nodes], Name, Pat, Pats, Id, LeftOptions, Right, RightOptions, SubBody) ==>
+compile_nodes([NextPat-node(NextId, _) | Nodes], Name, Pat, Pats, Id, LeftOptions, Right, RightOptions, RightId, SubBody) ==>
    {
       append(Pats, [_UnifsIn, _UnifsOut], Args),
       Head =.. [Name, Pat, Id, Index | Args],
@@ -36,12 +36,12 @@ compile_nodes([NextPat-node(NextId, _) | Nodes], Name, Pat, Pats, Id, LeftOption
    },
    assert_rule(HeadGuard ==> Body),
    default_clause(Head),
-   compile_iter_nodes(Nodes, NewName, NextPat, AllPats, Id, LeftRest, Right, RightOptions, SubBody).
-compile_nodes([], Name, Pat, Pats, Id, LeftOptions, RightNodes, RightOptions, SubBody) ==>
+   compile_iter_nodes(Nodes, NewName, NextPat, AllPats, Id, LeftRest, Right, RightOptions, RightId, SubBody).
+compile_nodes([], Name, Pat, Pats, Id, LeftOptions, RightNodes, RightOptions, RightId, SubBody) ==>
    {
       append(Pats, [UnifsIn, UnifsOut], Args),
       Head =.. [Name, Pat, Id, _Index | Args],
-      (  last(RightNodes, _-node(NewId, Cost))
+      (  last(RightNodes, _-node(_LastId, Cost))
       -> select_option(cost(Cost), RightOptions, RightRest, 1)
       ;  RightRest = RightOptions
       ),
@@ -50,7 +50,7 @@ compile_nodes([], Name, Pat, Pats, Id, LeftOptions, RightNodes, RightOptions, Su
       -> true
       ;  RightBody = true
       ),
-      foldl(mkconj, [SubBody, RightBody, UnifsIn = [Id=NewId | UnifsOut]],
+      foldl(mkconj, [SubBody, RightBody, UnifsIn = [Id=RightId | UnifsOut]],
             true, PrologBody),
       Body = (
          { PrologBody },
@@ -63,7 +63,7 @@ compile_nodes([], Name, Pat, Pats, Id, LeftOptions, RightNodes, RightOptions, Su
    },
    assert_rule(HeadGuard ==> Body),
    default_clause(Head).
-compile_iter_nodes(Nodes, Name, Pat, Pats, Id, LeftOptions, Right, RightOptions, Body) -->
+compile_iter_nodes(Nodes, Name, Pat, Pats, Id, LeftOptions, Right, RightOptions, RightId, Body) -->
    {
       same_length(Pats, Pats_),
       append(Pats_, [UnifsIn, UnifsOut], Args),
@@ -76,7 +76,7 @@ compile_iter_nodes(Nodes, Name, Pat, Pats, Id, LeftOptions, Right, RightOptions,
    },
    assert_rule(Head ==> (SubSubCall, SubCall)),
    default_clause(Head, []),
-   compile_nodes(Nodes, NewName, Pat, Pats, Id, LeftOptions, Right, RightOptions, Body).
+   compile_nodes(Nodes, NewName, Pat, Pats, Id, LeftOptions, Right, RightOptions, RightId, Body).
 
 default_clause(Head) -->
    default_clause(Head, _).
