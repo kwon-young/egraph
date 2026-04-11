@@ -1,10 +1,14 @@
 :- module(egraph_compile, []).
 
 :- use_module(library(dcg/high_order)).
+:- use_module(egraph, [lookup/2]).
 
 compile(rewrite(Name, Left, LeftOptions, Right, RightOptions) :- Body) -->
-   {term_nodes(Left-Id, [Pat-_ | T])},
-   compile_nodes(T, Name, Pat, [], Id, LeftOptions, Right, RightOptions, Body).
+   {  term_nodes(Left-Id, LeftNodes),
+      LeftNodes = [Pat-_ | T],
+      right_nodes(Right-_, RightNodes, Left-LeftNodes)
+   },
+   compile_nodes(T, Name, Pat, [], Id, LeftOptions, RightNodes, RightOptions, Body).
 
 common_variables(A, B) :-
    term_variables(A, VAs),
@@ -33,17 +37,15 @@ compile_nodes([NextPat-node(NextId, _) | Nodes], Name, Pat, Pats, Id, LeftOption
    assert_rule(HeadGuard ==> Body),
    default_clause(Head),
    compile_iter_nodes(Nodes, NewName, NextPat, AllPats, Id, LeftRest, Right, RightOptions, SubBody).
-compile_nodes([], Name, Pat, Pats, Id, LeftOptions, Right, RightOptions, SubBody) ==>
+compile_nodes([], Name, Pat, Pats, Id, LeftOptions, RightNodes, RightOptions, SubBody) ==>
    {
       append(Pats, [UnifsIn, UnifsOut], Args),
       Head =.. [Name, Pat, Id, _Index | Args],
-      term_nodes(Right-NewId, RightNodes),
-      (  RightNodes = [_-node(_, Cost) | RightTail]
-      -> select_option(cost(Cost), RightOptions, RightRest, 1),
-         maplist(=(_-node(_, 1)), RightTail)
+      (  last(RightNodes, _-node(NewId, Cost))
+      -> select_option(cost(Cost), RightOptions, RightRest, 1)
       ;  RightRest = RightOptions
       ),
-      reverse(RightNodes, RRightNodes),
+      convlist([_-node(_, 1), _]>>true, RightNodes, _),
       (  comma_list(RightBody, RightRest)
       -> true
       ;  RightBody = true
@@ -52,7 +54,7 @@ compile_nodes([], Name, Pat, Pats, Id, LeftOptions, Right, RightOptions, SubBody
             true, PrologBody),
       Body = (
          { PrologBody },
-         RRightNodes
+         RightNodes
       ),
       (  comma_list(Guard, LeftOptions)
       -> HeadGuard = (Head, Guard)
@@ -101,14 +103,34 @@ term_nodes(T-Id, Nodes) :-
    phrase(term_nodes(T-Id), Nodes).
 term_nodes(T-Id), compound(T) ==>
    [Node-node(Id, _Cost)],
-   {  T =.. [F | Args],
-      pairs_keys_values(Pairs, Args, Ids)
-   },
-   sequence(term_nodes, Pairs),
-   { Node =.. [F | Ids] }.
+   { pairs_args(T, Node, Pairs) },
+   sequence(term_nodes, Pairs).
 term_nodes(T-Id), var(T) ==> {T = Id}.
 term_nodes(T-Id) ==>
    [T-node(Id, _Cost)].
+
+right_nodes(T-Id, Nodes, LeftNodes) :-
+   phrase(right_nodes(LeftNodes, T-Id), Nodes).
+right_nodes(LeftNodes, T-Id), compound(T) ==>
+   { pairs_args(T, Node, Pairs) },
+   sequence(right_nodes(LeftNodes), Pairs),
+   add_right_node(Node, Id, LeftNodes).
+right_nodes(LeftNodes, T-Id) ==>
+   add_right_node(T, Id, LeftNodes).
+
+add_right_node(Node, Id, Left-LeftNodes) -->
+   (  { lookup(Node-node(Id, _), LeftNodes) }
+   -> []
+   ;  { contains_var(Node, Left) }
+   -> { Node = Id }
+   ;  [Node-node(Id, _Cost)]
+   ).
+   
+pairs_args(T1, T2, Pairs) :-
+   T1 =.. [F | Args],
+   pairs_keys_values(Pairs, Args, Ids),
+   T2 =.. [F | Ids].
+
 
 user:term_expansion(egraph:rewrite(Name, A, B), Clauses) :-
    phrase(compile(rewrite(Name, A, [], B, []) :- true), Clauses).

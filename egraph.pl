@@ -1,5 +1,5 @@
 :- module(egraph, [add_term//2, union//2, saturate//1, saturate//2,
-                   extract/1, extract//0]).
+                   extract/1, extract//0, lookup/2]).
 
 :- use_module(library(dcg/high_order)).
 :- use_module(library(ordsets)).
@@ -67,7 +67,7 @@ add_node(Node, Id, In, Out) :-
       )
    ).
 
-comm(A+B, node(AB, _ABCost), _Index, UnifsIn, UnifsOut) ==>
+comm(A+B, AB, _Index, UnifsIn, UnifsOut) ==>
    { UnifsIn = [AB=BA | UnifsOut] },
    [B+A-node(BA, 1)].
 comm(_, _, _, UnifsIn, UnifsOut) ==> {UnifsOut = UnifsIn}.
@@ -80,7 +80,7 @@ assoc_([Node | Nodes], Pat, Top, UnifsIn, UnifsOut) ==>
    assoc__(Node, Pat, Top, UnifsIn, UnifsTmp),
    assoc_(Nodes, Pat, Top, UnifsTmp, UnifsOut).
 assoc_([], _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
-assoc__(B+C, A+_BC, node(ABC, _ABCCost), UnifsIn, UnifsOut) ==>
+assoc__(B+C, A+_BC, ABC, UnifsIn, UnifsOut) ==>
    { UnifsIn = [ABC=ABC_ | UnifsOut] },
    [A+B-node(AB, 1), AB+C-node(ABC_, 1)].
 assoc__(_, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
@@ -174,8 +174,12 @@ merge_group([], [], In, In).
 merge_node(node(Id, Cost), node(Id, PrevCost), node(Id, MinCost)) :-
    MinCost is min(Cost, PrevCost).
 
+apply_unifs([]).
+apply_unifs([A=A | L]) :-
+   apply_unifs(L).
+
 rebuild(Matches, Unifs, In, Out) :-
-   maplist(call, Unifs),
+   apply_unifs(Unifs),
    append(Matches, In, Tmp),
    merge_nodes(Tmp, Out).
               
