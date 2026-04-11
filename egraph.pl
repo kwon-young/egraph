@@ -85,54 +85,56 @@ assoc__(B+C, A+_BC, ABC, UnifsIn, UnifsOut) ==>
    [A+B-node(AB, 1), AB+C-node(ABC_, 1)].
 assoc__(_, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
-reduce(A+B-node(AB, _), _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
+reduce(A+B, AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
    { UnifsIn = [A=AB | UnifsOut] },
    [].
-reduce(A*B-node(AB, _), _Index, UnifsIn, UnifsOut), get_attr(B, const, 1) ==>
+reduce(A*B, AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 1) ==>
    { UnifsIn = [A=AB | UnifsOut] },
    [].
-reduce(_*B-node(AB, _), _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
+reduce(_*B, AB, _Index, UnifsIn, UnifsOut), get_attr(B, const, 0) ==>
    { UnifsIn = [B=AB | UnifsOut] },
    [].
-reduce(_, _, UnifsIn, UnifsOut) ==> {UnifsOut = UnifsIn}.
+reduce(_, _, _, UnifsIn, UnifsOut) ==> {UnifsOut = UnifsIn}.
 
-factorize1(A+A-node(AA, _AACost), _Index, UnifsIn, UnifsOut) ==>
+factorize1(A+A, AA, _Index, UnifsIn, UnifsOut) ==>
    {  put_attr(Two, const, 2),
       UnifsIn = [A2=AA | UnifsOut]
    },
    % make sure to use rationals for fractional costs
    % so that clpBNR cost variables always bounds to concrete values
    [2-node(Two, 1), A*Two-node(A2, 9r10)].
-factorize1(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
-factorize2(A+BA-AA, Index, UnifsIn, UnifsOut) ==>
+factorize1(_, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+
+factorize2(A+BA, AA, Index, UnifsIn, UnifsOut) ==>
    { rb_lookup(BA, Nodes, Index) },
-   factorize2(Nodes, A, AA, UnifsIn, UnifsOut).
-factorize2(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
-factorize2([B*A | Nodes], A, node(AA, AACost), UnifsIn, UnifsOut) ==>
+   factorize2_(Nodes, A, AA, UnifsIn, UnifsOut).
+factorize2(_, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+
+factorize2_([B*A | Nodes], A, AA, UnifsIn, UnifsOut) ==>
    {  put_attr(One, const, 1),
       UnifsIn = [B1A=AA | UnifsTmp]
    },
    [1-node(One, 1), B+One-node(B1, 1), B1*A-node(B1A, 9r10)],
-   factorize2(Nodes, A, node(AA, AACost), UnifsTmp, UnifsOut).
-factorize2([_ | Nodes], A, AA, UnifsIn, UnifsOut) ==>
-   factorize2(Nodes, A, AA, UnifsIn, UnifsOut).
-factorize2([], _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+   factorize2_(Nodes, A, AA, UnifsTmp, UnifsOut).
+factorize2_([_ | Nodes], A, AA, UnifsIn, UnifsOut) ==>
+   factorize2_(Nodes, A, AA, UnifsIn, UnifsOut).
+factorize2_([], _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
-constant_folding((A+B)-node(AB, _ABCost), _Index, UnifsIn, UnifsOut),
+constant_folding(A+B, AB, _Index, UnifsIn, UnifsOut),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA+VB,
       put_attr(C, const, VC),
       UnifsIn = [C=AB | UnifsOut]
    },
    [VC-node(C, 1)].
-constant_folding((A*B)-node(AB, _ABCost), _Index, UnifsIn, UnifsOut),
+constant_folding(A*B, AB, _Index, UnifsIn, UnifsOut),
       get_attr(A, const, VA), get_attr(B, const, VB) ==>
    {  VC is VA*VB,
       put_attr(C, const, VC),
       UnifsIn = [C=AB | UnifsOut]
    },
    [VC-node(C, 1)].
-constant_folding(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
+constant_folding(_, _, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
 rules([Rule | Rules], Index, Pat-node(Id, Cost), UnifsIn, UnifsOut) -->
    call(Rule, Pat, Id, Index, UnifsIn, UnifsTmp),
