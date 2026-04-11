@@ -156,23 +156,25 @@ union(A, B, In, Out) :-
 merge_nodes(In, Out) :-
    sort(In, Sort),
    group_pairs_by_key(Sort, Groups),
-   merge_group(Groups, Tmp, false, Merged),
+   merge_groups(Groups, Tmp, false, Merged),
    (  Merged == true
    -> merge_nodes(Tmp, Out)
    ;  Out = Sort
    ).
 
-merge_group([Sig-[H | T] | Nodes], [Sig-Node | Worklist], In, Out) :-
-   foldl(merge_node, T, H, Node),
+merge_groups([Sig-[H | T] | Nodes], [Sig-Node | Worklist], In, Out) :-
+   merge_group(T, H, Node),
    (  T == []
    -> Tmp = In
    ;  Tmp = true
    ),
-   merge_group(Nodes, Worklist, Tmp, Out).
-merge_group([], [], In, In).
+   merge_groups(Nodes, Worklist, Tmp, Out).
+merge_groups([], [], In, In).
 
-merge_node(node(Id, Cost), node(Id, PrevCost), node(Id, MinCost)) :-
-   MinCost is min(Cost, PrevCost).
+merge_group([], Node, Node).
+merge_group([node(Id, Cost) | T], node(Id, PrevCost), Out) :-
+   MinCost is min(Cost, PrevCost),
+   merge_group(T, node(Id, MinCost), Out).
 
 apply_unifs([]).
 apply_unifs([A=A | L]) :-
