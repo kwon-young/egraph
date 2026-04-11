@@ -146,7 +146,7 @@ make_index(In, Index) :-
    ord_list_to_rbtree(Groups, Index).
 
 match(Rules, Worklist, Index, Matches, Unifs) :-
-   foldl(rules(Rules, Index), Worklist, AllUnifs, Matches, []),
+   foldl(rules(Rules, Index), Worklist, AllUnifs, Matches, Worklist),
    append(AllUnifs, Unifs).
 
 union(A, B, In, Out) :-
@@ -178,10 +178,9 @@ apply_unifs([]).
 apply_unifs([A=A | L]) :-
    apply_unifs(L).
 
-rebuild(Matches, Unifs, In, Out) :-
+rebuild(Matches, Unifs, Out) :-
    apply_unifs(Unifs),
-   append(Matches, In, Tmp),
-   merge_nodes(Tmp, Out).
+   merge_nodes(Matches, Out).
               
 saturate(Rules) -->
    saturate(Rules, inf).
@@ -189,7 +188,7 @@ saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
       match(Rules, In, Index, Matches, Unifs),
-      rebuild(Matches, Unifs, In, Tmp),
+      rebuild(Matches, Unifs, Tmp),
       length(In, Len1),
       length(Tmp, Len2),
       (  Len1 \== Len2
