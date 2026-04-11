@@ -134,10 +134,10 @@ constant_folding((A*B)-node(AB, _ABCost), _Index, UnifsIn, UnifsOut),
    [VC-node(C, 1)].
 constant_folding(_, _, UnifsIn, UnifsOut) ==> {UnifsIn = UnifsOut}.
 
-rules([Rule | Rules], Index, Pat-node(Id, Cost), Unifs) -->
-   call(Rule, Pat, Id, Index, Unifs, UnifsRest),
-   rules(Rules, Index, Pat-node(Id, Cost), UnifsRest).
-rules([], _, _, []) --> [].
+rules([Rule | Rules], Index, Pat-node(Id, Cost), UnifsIn, UnifsOut) -->
+   call(Rule, Pat, Id, Index, UnifsIn, UnifsTmp),
+   rules(Rules, Index, Pat-node(Id, Cost), UnifsTmp, UnifsOut).
+rules([], _, _, Unifs, Unifs) --> [].
 
 make_index(In, Index) :-
    transpose_pairs(In, Pairs),
@@ -145,9 +145,10 @@ make_index(In, Index) :-
    group_pairs_by_key(IdPairs, Groups),
    ord_list_to_rbtree(Groups, Index).
 
-match(Rules, Worklist, Index, Matches, Unifs) :-
-   foldl(rules(Rules, Index), Worklist, AllUnifs, Matches, Worklist),
-   append(AllUnifs, Unifs).
+match([], _, _, Unifs, Unifs) --> [].
+match([Node | Rest], Rules, Index, UnifsIn, UnifsOut) -->
+   rules(Rules, Index, Node, UnifsIn, UnifsTmp),
+   match(Rest, Rules, Index, UnifsTmp, UnifsOut).
 
 union(A, B, In, Out) :-
    A = B,
@@ -189,7 +190,7 @@ saturate(Rules) -->
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
-      match(Rules, In, Index, Matches, Unifs),
+      match(In, Rules, Index, Unifs, [], Matches, In),
       rebuild(Matches, Unifs, Tmp),
       length(In, Len1),
       length(Tmp, Len2),
