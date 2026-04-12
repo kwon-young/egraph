@@ -6,9 +6,13 @@
 compile(rewrite(Name, Left, LeftOptions, Right, RightOptions) :- Body) -->
    {  term_nodes(Left-Id, LeftNodes),
       LeftNodes = [Pat-_ | T],
-      right_nodes(Right-RightId, RightNodes, Left-LeftNodes)
+      right_nodes(Right-RightId, RightNodes, Left-LeftNodes),
+      maplist(expand_prop, LeftOptions, LeftExpanded)
    },
-   compile_nodes(T, Name, Pat, [], Id, LeftOptions, RightNodes, RightOptions, RightId, Body).
+   compile_nodes(T, Name, Pat, [], Id, LeftExpanded, RightNodes, RightOptions, RightId, Body).
+
+expand_prop(const(Id, Value), Expanded) =>
+   Expanded = get_attr(Id, const, Value).
 
 common_variables(A, B) :-
    term_variables(A, VAs),
@@ -46,7 +50,9 @@ compile_nodes([], Name, Pat, Pats, Id, LeftOptions, RightNodes, RightOptions, Ri
       ;  RightRest = RightOptions
       ),
       convlist([_-node(_, 1), _]>>true, RightNodes, _),
-      (  comma_list(RightBody, RightRest)
+      maplist(collect_const_attrs(RightNodes), RightRest, ConstAttrs),
+      
+      (  comma_list(RightBody, ConstAttrs)
       -> true
       ;  RightBody = true
       ),
@@ -131,6 +137,11 @@ pairs_args(T1, T2, Pairs) :-
    pairs_keys_values(Pairs, Args, Ids),
    T2 =.. [F | Ids].
 
+collect_const_attrs(RightNodes, const(Value), put_attr(Id, const, Value)) :-
+   (  lookup(Value-node(Id, _), RightNodes)
+   -> true
+   ;  existence_error(rhs_node, Value)
+   ).
 
 user:term_expansion(egraph:rewrite(Name, A, B), Clauses) :-
    phrase(compile(rewrite(Name, A, [], B, []) :- true), Clauses).

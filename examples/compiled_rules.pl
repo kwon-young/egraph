@@ -8,13 +8,13 @@ egraph:rewrite(comm_add, A+B, B+A).
 egraph:rewrite(comm_mul, A*B, B*A).
 egraph:rewrite(assoc_add, A+(B+C), (A+B)+C).
 egraph:rewrite(assoc_mul, A*(B*C), (A*B)*C).
-egraph:rewrite(reduce_add0, A+B, [get_attr(B, const, 0)], A, []).
-egraph:rewrite(reduce_mul1, A*B, [get_attr(B, const, 1)], A, []).
-egraph:rewrite(reduce_mul0, _*B, [get_attr(B, const, 0)], B, []).
+egraph:rewrite(reduce_add0, A+B, [const(B, 0)], A, []).
+egraph:rewrite(reduce_mul1, A*B, [const(B, 1)], A, []).
+egraph:rewrite(reduce_mul0, _*B, [const(B, 0)], B, []).
 egraph:rewrite(factorize_aa, A+A, 2*A, [cost(9r10)]).
 egraph:rewrite(factorize_aba, A+B*A, A*(B+1), [cost(9r10)]).
-egraph:rewrite(constant_folding, A+B, [get_attr(A, const, VA), get_attr(B, const, VB)],
-               C, [put_attr(C, const, VC)]) :-
+egraph:rewrite(constant_folding, A+B, [const(A, VA), const(B, VB)],
+               VC, [const(VC)]) :-
    VC is VA+VB.
 egraph:rewrite(operator_fusion, array{op: array{op: A+B}+C}, array{op: A+B+C}).
 
