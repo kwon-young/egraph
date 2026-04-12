@@ -1,7 +1,7 @@
-:- module(egraph_rules, [comm_add//5, comm_mul//5, assoc_add//5, assoc_mul//5,
-                         reduce_add0//5, reduce_mul1//5, reduce_mul0//5,
-                         factorize_aa//5, factorize_aba//5,
-                         constant_folding//5, operator_fusion//5]).
+:- module(compiled_rules, [comm_add//5, comm_mul//5, assoc_add//5, assoc_mul//5,
+                           reduce_add0//5, reduce_mul1//5, reduce_mul0//5,
+                           factorize_aa//5, factorize_aba//5,
+                           constant_folding//5, operator_fusion//5]).
 :- use_module('../prolog/egraph.pl').
 
 egraph:rewrite(comm_add, A+B, B+A).

@@ -1,7 +1,7 @@
 :- module(egraph_compile, []).
 
 :- use_module(library(dcg/high_order)).
-:- use_module(egraph, [lookup/2]).
+:- use_module('../egraph.pl', [lookup/2]).
 
 compile(rewrite(Name, Left, LeftOptions, Right, RightOptions) :- Body) -->
    {  term_nodes(Left-Id, LeftNodes),
@@ -121,7 +121,7 @@ right_nodes(LeftNodes, T-Id) ==>
 add_right_node(Node, Id, Left-LeftNodes) -->
    (  { lookup(Node-node(Id, _), LeftNodes) }
    -> []
-   ;  { contains_var(Node, Left) }
+   ;  { var(Node), contains_var(Node, Left) }
    -> { Node = Id }
    ;  [Node-node(Id, _Cost)]
    ).
