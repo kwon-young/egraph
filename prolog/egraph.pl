@@ -48,16 +48,15 @@ lookup(Item-V, [X1-V1, X2-V2|Xs]) :-
 lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
 
-add_term(Term, Id, In, Out) :-
-   (  var(Term)
-   -> add_node('$VAR'(Term), Id, In, Out)
-   ;  compound(Term)
-   -> Term =.. [F | Args],
-      foldl(add_term, Args, Ids, In, Tmp),
-      Node =.. [F | Ids],
-      add_node(Node, Id, Tmp, Out)
-   ;  add_node(Term, Id, In, Out)
-   ).
+add_term(Term, Id), var(Term) ==>
+   add_node('$VAR'(Term), Id).
+add_term(Term, Id), compound(Term) ==>
+   { Term =.. [F | Args] },
+   foldl(add_term, Args, Ids),
+   { Node =.. [F | Ids] },
+   add_node(Node, Id).
+add_term(Term, Id) ==>
+   add_node(Term, Id).
 
 add_node(Node-Id, In, Out) :-
    add_node(Node, Id, In, Out).
@@ -91,9 +90,8 @@ match([Node | Rest], Rules, Index, UnifsIn, UnifsOut) -->
    rules(Rules, Index, Node, UnifsIn, UnifsTmp),
    match(Rest, Rules, Index, UnifsTmp, UnifsOut).
 
-union(A, B, In, Out) :-
-   A = B,
-   merge_nodes(In, Out).
+union(A, A) -->
+   merge_nodes.
 
 merge_nodes(In, Out) :-
    sort(In, Sort),
