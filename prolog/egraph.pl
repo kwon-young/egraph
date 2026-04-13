@@ -27,7 +27,7 @@ Main predicates:
 :- use_module(library(dcg/high_order)).
 :- use_module(library(ordsets)).
 :- use_module(library(rbtrees)).
-:- use_module(library(clpBNR)).
+:- use_module(library(clpr)).
 
 :- use_module(egraph/compile).
 
@@ -240,9 +240,10 @@ extract_class(Id-Nodes) :-
 
 compute_class_cost(Id-Nodes, Id-NewNodes) :-
    maplist(compute_node_cost, Nodes, NewNodes, NodeCosts),
+   NodeCosts = [FirstCost | RestCosts],
    foldl([NodeCost, Cost, MinCost]>>
-         {MinCost is min(NodeCost, Cost)},
-         NodeCosts, inf, ClassCost),
+         {MinCost = min(NodeCost, Cost)},
+         RestCosts, FirstCost, ClassCost),
    get_attr(Id, cost, ClassCost).
 compute_node_cost(node(Offset, Node), node(Cost, Node), Cost) :-
    (  Node = '$VAR'(_)
@@ -251,8 +252,8 @@ compute_node_cost(node(Offset, Node), node(Cost, Node), Cost) :-
    -> Node =.. [_ | Ids],
       foldl([Id, In, Out]>>(
          get_attr(Id, cost, IdCost),
-         {Out is In + IdCost}
+         {Out = In + IdCost}
       ), Ids, 0, CCost),
-      { Cost is CCost + Offset }
+      { Cost = CCost + Offset }
    ;  Cost = Offset
    ).
