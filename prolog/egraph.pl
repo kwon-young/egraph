@@ -1,6 +1,29 @@
 :- module(egraph, [add_term//2, union//2, saturate//1, saturate//2,
                    extract/1, extract//0, lookup/2]).
 
+/** <module> E-graph implementation for term rewriting and saturation
+
+This module implements an E-graph (Equivalence Graph) data structure, 
+commonly used for efficient term rewriting, congruence closure, and 
+e-matching. The E-graph state is typically threaded through operations 
+using DCG notation.
+
+Rewrite rules are automatically compiled into efficient DCG predicates 
+via term expansion. See the `egraph_compile` module for full details. 
+The supported rule declarations are:
+  * egraph:rewrite(Name, Lhs, Rhs)
+  * egraph:rewrite(Name, Lhs, Rhs, RhsOptions)
+  * egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions)
+  * egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions) :- Body
+
+Main predicates:
+  * add_term//2: Adds a term to the E-graph, returning its e-class ID.
+  * union//2: Merges two e-classes.
+  * saturate//1, saturate//2: Applies compiled rewrite rules to the E-graph until saturation or an iteration limit is reached.
+  * extract/1, extract//0: Extracts the optimal term(s) from the E-graph based on term costs.
+  * lookup/2: Retrieves an e-class node from a sorted list of E-graph nodes.
+*/
+
 :- use_module(library(dcg/high_order)).
 :- use_module(library(ordsets)).
 :- use_module(library(rbtrees)).
@@ -20,6 +43,14 @@ const:attr_unify_hook(XConst, Y) :-
    -> put_attr(Y, const, XConst)
    ;  true
    ).
+
+%!  lookup(+Pair, +SortedPairs) is semidet.
+%
+%   Retrieves a value from a sorted list of pairs using standard term comparison.
+%   The search is unrolled for performance. Adapted from ord_memberchk/2.
+%
+%   @arg Pair A `Key-Value` pair where `Key` is the target key to find, and `Value` is unified with the associated value.
+%   @arg SortedPairs A list of Key-Value pairs sorted by Key.
 
 lookup(Item-V, [X1-V1, X2-V2, X3-V3, X4-V4|Xs]) :-
    !,
@@ -47,6 +78,16 @@ lookup(Item-V, [X1-V1, X2-V2|Xs]) :-
    ).
 lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
+
+%!  add_term(+Term, -Id)// is det.
+%
+%   Adds a term to the E-graph, returning its e-class ID.
+%   Compound terms are recursively traversed and their arguments 
+%   are added to the E-graph first. Variables are represented using 
+%   '$VAR'/1 wrappers.
+%
+%   @arg Term The term to be added.
+%   @arg Id   The e-class ID representing the added term.
 
 add_term(Term, Id), var(Term) ==>
    add_node('$VAR'(Term), Id).
@@ -90,6 +131,13 @@ match([Node | Rest], Rules, Index, UnifsIn, UnifsOut) -->
    rules(Rules, Index, Node, UnifsIn, UnifsTmp),
    match(Rest, Rules, Index, UnifsTmp, UnifsOut).
 
+%!  union(+Id1, +Id2)// is det.
+%
+%   Merges two e-classes by unifying their IDs and merging their underlying nodes.
+%
+%   @arg Id1 The first e-class ID.
+%   @arg Id2 The second e-class ID.
+
 union(A, A) -->
    merge_nodes.
 
@@ -124,8 +172,24 @@ rebuild(Matches, Unifs, Out) :-
    apply_unifs(Unifs),
    merge_nodes(Matches, Out).
               
+%!  saturate(+Rules)// is det.
+%
+%   Applies a list of compiled rewrite rules to the E-graph until saturation
+%   is reached.
+%
+%   @arg Rules A list of compiled rewrite rule names to apply.
+
 saturate(Rules) -->
    saturate(Rules, inf).
+
+%!  saturate(+Rules, +N)// is det.
+%
+%   Applies a list of compiled rewrite rules to the E-graph up to N times
+%   or until saturation is reached.
+%
+%   @arg Rules A list of compiled rewrite rule names to apply.
+%   @arg N     The maximum number of iterations (or `inf` for no limit).
+
 saturate(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
@@ -144,6 +208,13 @@ saturate(Rules, N, In, Out) :-
    ;  Out = In
    ).
 
+%!  extract(+Nodes) is det.
+%!  extract// is det.
+%
+%   Extracts the optimal term(s) from the E-graph based on term costs.
+%
+%   @arg Nodes A list of E-graph nodes representing the state.
+
 extract(Nodes) :-
    extract(Nodes, Nodes).
 extract(Nodes, Nodes) :-
@@ -153,6 +224,7 @@ extract(Nodes, Nodes) :-
    maplist([Id-_Node]>>({Cost >= 0}, put_attr(Id, cost, Cost)), ClassNodes),
    maplist(compute_class_cost, ClassNodes, NewClassNodes),
    maplist(extract_class, NewClassNodes).
+
 extract_class(Id-Nodes) :-
    % make sure that costs are instantiated
    sort(Nodes, SortedNodes),

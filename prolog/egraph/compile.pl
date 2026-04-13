@@ -1,5 +1,39 @@
 :- module(egraph_compile, []).
 
+/** <module> E-graph rewrite rule compiler
+
+This module provides the term expansion infrastructure for compiling
+declarative E-graph rewrite rules into efficient DCG predicates. 
+These compiled predicates operate directly on the E-graph state during
+saturation.
+
+Rewrite rules are declared using the following forms, which are automatically
+compiled via term expansion:
+
+  * `egraph:rewrite(Name, Lhs, Rhs)`
+  * `egraph:rewrite(Name, Lhs, Rhs, RhsOptions)`
+  * `egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions)`
+  * `egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions) :- Body`
+
+Arguments:
+  * `Name`: The atom used to identify and apply the rule. This name should be unique across all rules.
+  * `Lhs`: The left-hand side pattern to match in the E-graph.
+  * `Rhs`: The right-hand side pattern to insert into the E-graph.
+  * `LhsOptions`: A list of conditions for the matched nodes. Options include:
+    * `const(Var, Value)`: Matches only if the e-class `Var` represents the constant `Value`.
+  * `RhsOptions`: A list of attributes for the newly created nodes. Options include:
+    * `const(Value)`: Mark `Value` as a constant to the corresponding new e-class.
+    * `cost(Cost)`: Sets a custom structural cost for the inserted `Rhs` root node.
+  * `Body`: An optional Prolog body executed during the rewrite, typically used to evaluate arbitrary conditions or compute values for `Rhs` attributes.
+
+Pattern Interpretation:
+Patterns are written exactly as standard Prolog terms, mirroring how terms are added via `add_term//2`:
+  * Literals (atoms, numbers, strings) match exact atomic values (e.g., `0` in `A + 0`, or `"foo"` in `g("foo")`).
+  * Compound terms match the exact structural shape of complex terms in the E-graph (e.g., `A * (B + C)` or `f(X, Y)`).
+  * Prolog variables act as wildcards matching any arbitrary subterm (e.g., `A` in `A + B`).
+  * To match actual Prolog variables, use the `'$VAR'(X)` wrapper (e.g., `f('$VAR'(X))`).
+*/
+
 :- use_module(library(dcg/high_order)).
 :- use_module('../egraph.pl', [lookup/2]).
 
