@@ -1,7 +1,8 @@
 :- module(compiled_rules, [comm_add//5, comm_mul//5, assoc_add//5, assoc_mul//5,
                            reduce_add0//5, reduce_mul1//5, reduce_mul0//5,
                            factorize_aa//5, factorize_aba//5,
-                           constant_folding//5, operator_fusion//5]).
+                           constant_folding//5, operator_fusion//5,
+                           var_match//5]).
 :- use_module('../prolog/egraph.pl').
 
 egraph:rewrite(comm_add, A+B, B+A).
@@ -17,6 +18,7 @@ egraph:rewrite(constant_folding, A+B, [const(A, VA), const(B, VB)],
                VC, [const(VC)]) :-
    VC is VA+VB.
 egraph:rewrite(operator_fusion, array{op: array{op: A+B}+C}, array{op: A+B+C}).
+egraph:rewrite(var_match, f('$VAR'(X)), g('$VAR'(X))).
 
 add_expr(N, Add) :-
    numlist(1, N, L), L = [H|T], foldl([B, A, A+B]>>true, T, H, Add).
@@ -43,6 +45,7 @@ rule_test(a+a, factorize_aa, [a+a, 2*a]).
 rule_test(a+b*a, factorize_aba, [a+b*a, a*(b+1)]).
 rule_test(2+3, constant_folding, [5, 2+3]).
 rule_test(array{op: array{op: 1+2}+3}, operator_fusion, [array{op: 1+2+3}, array{op: array{op: 1+2}+3}]).
+rule_test(f(X), var_match, [f(X), g(X)]).
 
 test(rewrite, [forall(rule_test(Term, Rule, Expected))]) :-
    findall(T-Term,

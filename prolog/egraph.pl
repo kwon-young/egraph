@@ -49,7 +49,9 @@ lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
 
 add_term(Term, Id, In, Out) :-
-   (  compound(Term)
+   (  var(Term)
+   -> add_node('$VAR'(Term), Id, In, Out)
+   ;  compound(Term)
    -> Term =.. [F | Args],
       foldl(add_term, Args, Ids, In, Tmp),
       Node =.. [F | Ids],
@@ -156,7 +158,11 @@ extract(Nodes, Nodes) :-
 extract_class(Id-Nodes) :-
    % make sure that costs are instantiated
    sort(Nodes, SortedNodes),
-   member(node(_Cost, Id), SortedNodes),
+   member(node(_Cost, Node), SortedNodes),
+   (  Node = '$VAR'(Var)
+   -> Id = Var
+   ;  Id = Node
+   ),
    (  var(Id)
    -> del_attr(Id, cost)
    ;  true
@@ -169,7 +175,9 @@ compute_class_cost(Id-Nodes, Id-NewNodes) :-
          NodeCosts, inf, ClassCost),
    get_attr(Id, cost, ClassCost).
 compute_node_cost(node(Offset, Node), node(Cost, Node), Cost) :-
-   (  compound(Node)
+   (  Node = '$VAR'(_)
+   -> Cost = Offset
+   ;  compound(Node)
    -> Node =.. [_ | Ids],
       foldl([Id, In, Out]>>(
          get_attr(Id, cost, IdCost),

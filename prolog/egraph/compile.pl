@@ -107,6 +107,8 @@ assert_rule(Rule) -->
 
 term_nodes(T-Id, Nodes) :-
    phrase(term_nodes(T-Id), Nodes).
+term_nodes('$VAR'(Var)-Id) ==> !,
+   ['$VAR'(Var)-node(Id, _Cost)].
 term_nodes(T-Id), compound(T) ==>
    [Node-node(Id, _Cost)],
    { pairs_args(T, Node, Pairs) },
@@ -117,6 +119,8 @@ term_nodes(T-Id) ==>
 
 right_nodes(T-Id, Nodes, LeftNodes) :-
    phrase(right_nodes(LeftNodes, T-Id), Nodes).
+right_nodes(LeftNodes, '$VAR'(Var)-Id) ==> !,
+   add_right_node('$VAR'(Var), Id, LeftNodes).
 right_nodes(LeftNodes, T-Id), compound(T) ==>
    { pairs_args(T, Node, Pairs) },
    sequence(right_nodes(LeftNodes), Pairs),
