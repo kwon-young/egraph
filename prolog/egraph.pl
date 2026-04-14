@@ -91,6 +91,17 @@ lookup(Item-V, [X1-V1]) :-
 
 add_term(Term, Id), var(Term) ==>
    add_node('$VAR'(Term), Id).
+add_term(Term, Id), is_dict(Term) ==>
+   {
+      dict_pairs(Term, Tag, Pairs),
+      pairs_keys_values(Pairs, Keys, Values)
+   },
+   foldl(add_term, Values, Ids),
+   {
+      pairs_keys_values(Data, Keys, Ids),
+      dict_create(Node, Tag, Data)
+   },
+   add_node(Node, Id).
 add_term(Term, Id), compound(Term) ==>
    { Term =.. [F | Args] },
    foldl(add_term, Args, Ids),
@@ -248,6 +259,14 @@ compute_class_cost(Id-Nodes, Id-NewNodes) :-
 compute_node_cost(node(Offset, Node), node(Cost, Node), Cost) :-
    (  Node = '$VAR'(_)
    -> Cost = Offset
+   ;  is_dict(Node)
+   -> dict_pairs(Node, _, Pairs),
+      pairs_keys_values(Pairs, _, Ids),
+      foldl([Id, In, Out]>>(
+         get_attr(Id, cost, IdCost),
+         {Out = In + IdCost}
+      ), Ids, 0, CCost),
+      { Cost = CCost + Offset }
    ;  compound(Node)
    -> Node =.. [_ | Ids],
       foldl([Id, In, Out]>>(

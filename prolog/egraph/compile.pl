@@ -143,6 +143,16 @@ term_nodes(T-Id, Nodes) :-
    phrase(term_nodes(T-Id), Nodes).
 term_nodes('$VAR'(Var)-Id) ==> !,
    ['$VAR'(Var)-node(Id, _Cost)].
+term_nodes(T-Id), is_dict(T) ==> !,
+   [Node-node(Id, _Cost)],
+   {
+      dict_pairs(T, Tag, Pairs),
+      pairs_keys_values(Pairs, Keys, Values),
+      pairs_keys_values(NodePairs, Keys, Ids),
+      dict_create(Node, Tag, NodePairs),
+      pairs_keys_values(SubPairs, Values, Ids)
+   },
+   sequence(term_nodes, SubPairs).
 term_nodes(T-Id), compound(T) ==>
    [Node-node(Id, _Cost)],
    { pairs_args(T, Node, Pairs) },
@@ -155,6 +165,16 @@ right_nodes(T-Id, Nodes, LeftNodes) :-
    phrase(right_nodes(LeftNodes, T-Id), Nodes).
 right_nodes(LeftNodes, '$VAR'(Var)-Id) ==> !,
    add_right_node('$VAR'(Var), Id, LeftNodes).
+right_nodes(LeftNodes, T-Id), is_dict(T) ==> !,
+   {
+      dict_pairs(T, Tag, Pairs),
+      pairs_keys_values(Pairs, Keys, Values),
+      pairs_keys_values(NodePairs, Keys, Ids),
+      dict_create(Node, Tag, NodePairs),
+      pairs_keys_values(SubPairs, Values, Ids)
+   },
+   sequence(right_nodes(LeftNodes), SubPairs),
+   add_right_node(Node, Id, LeftNodes).
 right_nodes(LeftNodes, T-Id), compound(T) ==>
    { pairs_args(T, Node, Pairs) },
    sequence(right_nodes(LeftNodes), Pairs),
