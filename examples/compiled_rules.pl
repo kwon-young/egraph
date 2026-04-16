@@ -33,25 +33,25 @@ example2(N, Expr) :-
 
 :- begin_tests(rules).
 
-rule_test(X+Y, comm_add, [X+Y, Y+X]).
-rule_test(a+b, comm_add, [a+b, b+a]).
-rule_test(a*b, comm_mul, [a*b, b*a]).
-rule_test(a+(b+c), assoc_add, [(a+b)+c, a+(b+c)]).
-rule_test(a*(b*c), assoc_mul, [(a*b)*c, a*(b*c)]).
-rule_test(a+0, reduce_add0, [a]).
-rule_test(a*1, reduce_mul1, [a]).
-rule_test(a*0, reduce_mul0, [0]).
-rule_test(a+a, factorize_aa, [a+a, 2*a]).
-rule_test(a+b*a, factorize_aba, [a+b*a, a*(b+1)]).
-rule_test(2+3, constant_folding, [5, 2+3]).
-rule_test(array{op: array{op: 1+2}+3}, operator_fusion, [array{op: 1+2+3}, array{op: array{op: 1+2}+3}]).
-rule_test(f(X), var_match, [f(X), g(X)]).
+rule_test(X+Y, [comm_add], [X+Y, Y+X]).
+rule_test(a+b, [comm_add], [a+b, b+a]).
+rule_test(a*b, [comm_mul], [a*b, b*a]).
+rule_test(a+(b+c), [assoc_add], [(a+b)+c, a+(b+c)]).
+rule_test(a*(b*c), [assoc_mul], [(a*b)*c, a*(b*c)]).
+rule_test(a+0, [reduce_add0], [a]).
+rule_test(a*1, [reduce_mul1], [a]).
+rule_test(a*0, [reduce_mul0], [0]).
+rule_test(a+a, [factorize_aa], [a+a, 2*a]).
+rule_test(a+b*a, [factorize_aba], [a+b*a, a*(b+1)]).
+rule_test(2+3, [constant_folding], [5, 2+3]).
+rule_test(array{op: array{op: 1+2}+3}, [operator_fusion], [array{op: 1+2+3}, array{op: array{op: 1+2}+3}]).
+rule_test(f(X), [var_match], [f(X), g(X)]).
 
-test(rewrite, [forall(rule_test(Term, Rule, Expected))]) :-
+test(rewrite, [forall(rule_test(Term, Rules, Expected))]) :-
    findall(T-Term,
       phrase((
          add_term(Term, T),
-         saturate([Rule]),
+         saturate(Rules),
          extract), [], _),
       Pairs),
    pairs_keys_values(Pairs, Terms, Copies),
