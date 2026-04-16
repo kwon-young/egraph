@@ -62,4 +62,12 @@ test(rewrite, [forall(rule_test(Term, Rule, Expected))]) :-
    sort(Expected, SortedExpected),
    Sorted =@= SortedExpected.
 
+test(dict) :-
+   once(phrase((
+      add_term(array{op: a+b}, T),
+      saturate([comm_add]),
+      extract
+   ), [], _)),
+   T.op == (a+b).
+
 :- end_tests(rules).
