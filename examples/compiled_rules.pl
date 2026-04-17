@@ -2,7 +2,8 @@
                            reduce_add0//5, reduce_mul1//5, reduce_mul0//5,
                            factorize_aa//5, factorize_aba//5,
                            constant_folding//5, operator_fusion//5,
-                           var_match//5]).
+                           var_match//5,
+                           distribute//5, cancel_add_sub//5]).
 :- use_module('../prolog/egraph.pl').
 
 egraph:rewrite(comm_add, A+B, B+A).
@@ -19,6 +20,8 @@ egraph:rewrite(constant_folding, A+B, [const(A, VA), const(B, VB)],
    VC is VA+VB.
 egraph:rewrite(operator_fusion, array{op: array{op: A+B}+C}, array{op: A+B+C}).
 egraph:rewrite(var_match, f('$VAR'(X)), g('$VAR'(X))).
+egraph:rewrite(distribute, A*(B+C), A*B+A*C).
+egraph:rewrite(cancel_add_sub, A+B-A, B).
 
 add_expr(N, Add) :-
    numlist(1, N, L), L = [H|T], foldl([B, A, A+B]>>true, T, H, Add).
@@ -46,6 +49,10 @@ rule_test(a+b*a, [factorize_aba], [a+b*a, a*(b+1)]).
 rule_test(2+3, [constant_folding], [5, 2+3]).
 rule_test(array{op: array{op: 1+2}+3}, [operator_fusion], [array{op: 1+2+3}, array{op: array{op: 1+2}+3}]).
 rule_test(f(X), [var_match], [f(X), g(X)]).
+% Case 1: Symbolic Factorization
+rule_test(x+y*x, [factorize_aba], [x+y*x, x*(y+1)]).
+% Case 2: Non-Greedy Rewriting (The Valley Problem)
+rule_test(a*(x+y) - a*x, [distribute, cancel_add_sub], [a*(x+y) - a*x, a*y]).
 
 test(rewrite, [forall(rule_test(Term, Rules, Expected))]) :-
    findall(T-Term,
