@@ -55,11 +55,11 @@ rule_test(x+y*x, [factorize_aba], [x+y*x, x*(y+1)]).
 rule_test(a*(x+y) - a*x, [distribute, cancel_add_sub], [a*(x+y) - a*x, a*y]).
 
 test(rewrite, [forall(rule_test(Term, Rules, Expected))]) :-
-   findall(T-Term,
+   findall(Extracted-Term,
       phrase((
          add_term(Term, T),
          saturate(Rules),
-         extract), [], _),
+         extract(T, Extracted)), [], _),
       Pairs),
    pairs_keys_values(Pairs, Terms, Copies),
    maplist(=(Term), Copies),
@@ -70,11 +70,11 @@ test(rewrite, [forall(rule_test(Term, Rules, Expected))]) :-
    Sorted =@= SortedExpected.
 
 test(dict) :-
-   once(phrase((
+   phrase((
       add_term(array{op: a+b}, T),
       saturate([comm_add]),
-      extract
-   ), [], _)),
-   T.op == (a+b).
+      extract(T, Extracted)
+   ), [], _),
+   Extracted.op == (a+b).
 
 :- end_tests(rules).

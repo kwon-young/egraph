@@ -1,5 +1,5 @@
 :- module(egraph, [add_term//2, union//2, saturate//1, saturate//2,
-                   extract/1, extract//0, lookup/2]).
+                   extract//2, lookup/2]).
 
 /** <module> E-graph implementation for term rewriting and saturation
 
@@ -20,14 +20,14 @@ Main predicates:
   * add_term//2: Adds a term to the E-graph, returning its e-class ID.
   * union//2: Merges two e-classes.
   * saturate//1, saturate//2: Applies compiled rewrite rules to the E-graph until saturation or an iteration limit is reached.
-  * extract/1, extract//0: Extracts the optimal term(s) from the E-graph based on term costs.
+  * extract//2: Extracts the optimal term from the E-graph based on term costs.
   * lookup/2: Retrieves an e-class node from a sorted list of E-graph nodes.
 */
 
 :- use_module(library(dcg/high_order)).
 :- use_module(library(ordsets)).
 :- use_module(library(rbtrees)).
-:- use_module(library(clpr)).
+:- use_module(library(heaps)).
 
 :- use_module(egraph/compile).
 
@@ -92,6 +92,7 @@ lookup(Item-V, [X1-V1]) :-
 add_term(Term, Id), var(Term) ==>
    add_node('$VAR'(Term), Id).
 add_term(Term, Id), is_dict(Term) ==>
+   % rework this with dict_same_keys
    {
       dict_pairs(Term, Tag, Pairs),
       pairs_keys_values(Pairs, Keys, Values)
@@ -219,60 +220,118 @@ saturate(Rules, N, In, Out) :-
    ;  Out = In
    ).
 
-%!  extract(+Nodes) is det.
-%!  extract// is det.
+%!  extract(Id, Extracted)// is det.
 %
-%   Extracts the optimal term(s) from the E-graph based on term costs.
+%   Extracts the optimal term from the E-graph based on term costs.
 %
-%   @arg Nodes A list of E-graph nodes representing the state.
+%   @arg Id The eclass Id to be extracted as returned by add_term
+%   @arg Extracted the extracted term
 
-extract(Nodes) :-
-   extract(Nodes, Nodes).
-extract(Nodes, Nodes) :-
-   transpose_pairs(Nodes, Pairs),
-   maplist([node(Id, Cost)-Node, Id-node(Cost, Node)]>>true, Pairs, IdPairs),
-   group_pairs_by_key(IdPairs, ClassNodes),
-   maplist([Id-_Node]>>({Cost >= 0}, put_attr(Id, cost, Cost)), ClassNodes),
-   maplist(compute_class_cost, ClassNodes, NewClassNodes),
-   maplist(extract_class, NewClassNodes).
+extract(Target, Extracted, EGraph, EGraph) :-
+   current_prolog_flag(float_overflow, Flag),
+   setup_call_cleanup(
+      set_prolog_flag(float_overflow, infinity),
+      (  dijkstra(Target, EGraph, Costs),
+         extract_class(Costs, Target, Extracted)
+      ),
+      set_prolog_flag(float_overflow, Flag)
+   ).
+extract_class(Costs, Target, Extracted) :-
+   rb_lookup(Target, _-Node, Costs),
+   extract_node(Costs, Node, Extracted).
+extract_node(_, '$VAR'(Var), R) =>
+   R = Var.
+extract_node(Costs, Dict, R), is_dict(Dict) =>
+   dict_pairs(Dict, Tag, Pairs),
+   pairs_keys_values(Pairs, Keys, Classes),
+   pairs_keys_values(NewPairs, Keys, Values),
+   dict_pairs(R, Tag, NewPairs),
+   maplist(extract_class(Costs), Classes, Values).
+extract_node(Costs, Compound, R), compound(Compound) =>
+   compound_name_arguments(Compound, Name, Classes),
+   same_length(Classes, Values),
+   compound_name_arguments(R, Name, Values),
+   maplist(extract_class(Costs), Classes, Values).
+extract_node(_, Atomic, R) =>
+   R = Atomic.
 
-extract_class(Id-Nodes) :-
-   % make sure that costs are instantiated
-   sort(Nodes, SortedNodes),
-   member(node(_Cost, Node), SortedNodes),
-   (  Node = '$VAR'(Var)
-   -> Id = Var
-   ;  Id = Node
+dijkstra(Target, EGraph, CostsOut) :-
+   empty_heap(HeapIn),
+   rb_new(EmptyCosts),
+   setup(EGraph, ParentPairs, EmptyCosts, CostsIn, HeapIn, HeapOut),
+   keysort(ParentPairs, SortedParentPairs),
+   group_pairs_by_key(SortedParentPairs, GroupedParentPairs),
+   ord_list_to_rbtree(GroupedParentPairs, Parents),
+   dijkstra(Target, Parents, HeapOut, CostsIn, CostsOut).
+dijkstra(Target, Parents, HeapIn, CostsIn, CostsOut) :-
+   (  get_from_heap(HeapIn, CurrentCost, Class, HeapTmp)
+   -> (  Class == Target
+      -> CostsOut = CostsIn
+      ;  rb_lookup(Class, ClassCost-_, CostsIn),
+         (  CurrentCost > ClassCost
+         -> dijkstra(Target, Parents, HeapTmp, CostsIn, CostsOut)
+         ;  (  rb_lookup(Class, ClassParents, Parents)
+            -> true
+            ;  ClassParents = []
+            ),
+            update_parents(ClassParents, CostsIn, CostsTmp, HeapTmp, HeapOut),
+            dijkstra(Target, Parents, HeapOut, CostsTmp, CostsOut)
+         )
+      )
+   ;  CostsOut = CostsIn
+   ).
+update_parents([], Costs, Costs, Heap, Heap).
+update_parents([ParentNode-node(ParentClass, ParentCost) | Parents], CostsIn, CostsOut, HeapIn, HeapOut) :-
+   (  is_dict(ParentNode)
+   -> dict_pairs(ParentNode, _, KeysValues),
+      pairs_values(KeysValues, ChildClasses)
+   ;  compound(ParentNode), ParentNode \= '$VAR'(_)
+   -> compound_name_arguments(ParentNode, _, ChildClasses)
+   ;  ChildClasses = []
    ),
-   (  var(Id)
-   -> del_attr(Id, cost)
-   ;  true
-   ).
+   compute_cost(ChildClasses, CostsIn, ParentCost, Cost),
+   (  rb_lookup(ParentClass, CurrentCost-_, CostsIn)
+   -> true
+   ;  CurrentCost = inf
+   ),
+   (  Cost < CurrentCost
+   -> rb_insert(CostsIn, ParentClass, Cost-ParentNode, CostsTmp),
+      add_to_heap(HeapIn, Cost, ParentClass, HeapTmp)
+   ;  CostsTmp = CostsIn, HeapTmp = HeapIn
+   ),
+   update_parents(Parents, CostsTmp, CostsOut, HeapTmp, HeapOut).
 
-compute_class_cost(Id-Nodes, Id-NewNodes) :-
-   maplist(compute_node_cost, Nodes, NewNodes, NodeCosts),
-   NodeCosts = [FirstCost | RestCosts],
-   foldl([NodeCost, Cost, MinCost]>>
-         {MinCost = min(NodeCost, Cost)},
-         RestCosts, FirstCost, ClassCost),
-   get_attr(Id, cost, ClassCost).
-compute_node_cost(node(Offset, Node), node(Cost, Node), Cost) :-
-   (  Node = '$VAR'(_)
-   -> Cost = Offset
-   ;  is_dict(Node)
-   -> dict_pairs(Node, _, Pairs),
-      pairs_keys_values(Pairs, _, Ids),
-      foldl([Id, In, Out]>>(
-         get_attr(Id, cost, IdCost),
-         {Out = In + IdCost}
-      ), Ids, 0, CCost),
-      { Cost = CCost + Offset }
-   ;  compound(Node)
-   -> Node =.. [_ | Ids],
-      foldl([Id, In, Out]>>(
-         get_attr(Id, cost, IdCost),
-         {Out = In + IdCost}
-      ), Ids, 0, CCost),
-      { Cost = CCost + Offset }
-   ;  Cost = Offset
-   ).
+   
+compute_cost([], _, Cost, Cost).
+compute_cost([Child | Childs], Costs, CostIn, CostOut) :-
+   (  rb_lookup(Child, ChildCost-_, Costs)
+   -> true
+   ;  ChildCost = inf
+   ),
+   CostTmp is CostIn + ChildCost,
+   compute_cost(Childs, Costs, CostTmp, CostOut).
+
+setup([], [], Cost, Cost, Heap, Heap).
+setup([Node-node(ClassId, NodeCost) | Nodes], ParentsIn, CostIn, CostOut, HeapIn, HeapOut) :-
+   (  is_dict(Node)
+   -> dict_pairs(Node, _, KeysValues),
+      pairs_values(KeysValues, ChildClasses)
+   ;  compound(Node), Node \= '$VAR'(_)
+   -> compound_name_arguments(Node, _, ChildClasses)
+   ;  ChildClasses = []
+   ),
+   (  ChildClasses == []
+   -> ParentsOut = ParentsIn,
+      (  (rb_lookup(ClassId, CurCost-_, CostIn) ; CurCost = inf), NodeCost < CurCost
+      -> rb_insert(CostIn, ClassId, NodeCost-Node, CostTmp),
+         add_to_heap(HeapIn, NodeCost, ClassId, HeapTmp)
+      ;  CostTmp = CostIn, HeapTmp = HeapIn
+      )
+   ;  insert_parent(ChildClasses, Node-node(ClassId, NodeCost), ParentsIn, ParentsOut),
+      CostTmp = CostIn, HeapTmp = HeapIn
+   ),
+   setup(Nodes, ParentsOut, CostTmp, CostOut, HeapTmp, HeapOut).
+
+insert_parent([], _, Parents, Parents).
+insert_parent([ChildClass | ChildClasses], Node, [ChildClass-Node | ParentsTmp], ParentsOut) :-
+   insert_parent(ChildClasses, Node, ParentsTmp, ParentsOut).

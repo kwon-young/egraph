@@ -90,9 +90,9 @@ example2(N, Expr) :-
    print_term(N1-Num, []), nl.
 
 example3(N, Expr, R) :-
-   distinct(R, phrase((
-      add_term(Expr, R),
+   phrase((
+      add_term(Expr, Id),
       saturate([comm, assoc, factorize1, factorize2, constant_folding], N),
       saturate([reduce], N), % reduce with comm+assoc+factorize explodes
-      extract
-   ), [], _)).
+      extract(Id, R)
+   ), [], _).
