@@ -10,7 +10,7 @@ This package relies on the following SWI-Prolog standard libraries:
 * `library(dcg/high_order)`
 * `library(ordsets)`
 * `library(rbtrees)`
-* `library(clpr)`
+* `library(heaps)`
 
 ## Installation
 
@@ -69,8 +69,10 @@ The interface uses Prolog's DCGs to thread the E-graph state. The E-graph itself
   Merges two equivalence classes by their IDs.
 * **`saturate(+Rules)//`** / **`saturate(+Rules, +MaxIterations)//`** 
   Applies a list of compiled rewrite rule names iteratively until the E-graph is saturated or the iteration limit is reached.
-* **`extract//0`** / **`extract(+Nodes)`** 
-  Traverses the E-graph and extracts the lowest-cost representation(s) of the terms.
+* **`extract(+Id, -Extracted)//`** 
+  Extracts the optimal term from the E-graph based on term costs.
+* **`lookup(+Pair, +SortedPairs)`**
+  Retrieves an e-class node from a sorted list of E-graph nodes.
 
 ### Example Workflow
 
@@ -79,9 +81,9 @@ The interface uses Prolog's DCGs to thread the E-graph state. The E-graph itself
 true.
 
 ?- phrase((
-       add_term(a+0, Optimized),
+       add_term(a+0, Id),
        saturate([reduce_add0]),
-       extract
+       extract(Id, Optimized)
    ), [], _Graph).
 Optimized = a,
 ...
