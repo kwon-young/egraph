@@ -123,10 +123,35 @@ add_node(Node, Id, In, Out) :-
       )
    ).
 
-rules([Rule | Rules], Index, Pat-node(Id, Cost), UnifsIn, UnifsOut) -->
-   call(Rule, Pat, Id, Index, UnifsIn, UnifsTmp),
-   rules(Rules, Index, Pat-node(Id, Cost), UnifsTmp, UnifsOut).
-rules([], _, _, Unifs, Unifs) --> [].
+% rules([Rule | Rules], Index, Pat-node(Id, Cost), UnifsIn, UnifsOut) -->
+%    call(Rule, Pat, Id, Index, UnifsIn, UnifsTmp),
+%    rules(Rules, Index, Pat-node(Id, Cost), UnifsTmp, UnifsOut).
+% rules([], _, _, Unifs, Unifs) --> [].
+
+:- dynamic rules//5.
+:- non_terminal(user:egraph:rules/7).
+
+chain_rule(M, Pat, Id, Index, Rule, Mod:Call, UnifsIn, UnifsOut) :-
+   strip_module(M:Rule, Mod, Name),
+   Call =.. [Name, Pat, Id, Index, UnifsIn, UnifsOut].
+
+:- meta_predicate compile_rules(:, -).
+
+compile_rules(M:Rules, RulesId) :-
+   term_hash(M:Rules, RulesId),
+   (  clause(rules(RulesId, _, _, _, _, _, _), _)
+   -> true
+   ;  (  Rules = [_ | _]
+      -> foldl(chain_rule(M, Pat, Id, Index), Rules, Calls, UnifsIn, UnifsOut),
+         comma_list(Body, Calls)
+      ;  Body = true, UnifsOut = UnifsIn
+      ),
+      Head = egraph:rules(RulesId, Index, Pat-node(Id, _), UnifsIn, UnifsOut),
+      Clause = (Head --> Body),
+      expand_term(Clause, Term),
+      asserta(Term)
+   ).
+
 
 make_index(In, Index) :-
    index_pairs(In, UnsortedPairs),
@@ -183,7 +208,10 @@ apply_unifs([A=A | L]) :-
 rebuild(Matches, Unifs, Out) :-
    apply_unifs(Unifs),
    merge_nodes(Matches, Out).
-              
+
+:- meta_predicate saturate(:, ?, ?).
+:- meta_predicate saturate(:, +, ?, ?).
+
 %!  saturate(+Rules)// is det.
 %
 %   Applies a list of compiled rewrite rules to the E-graph until saturation
@@ -191,8 +219,8 @@ rebuild(Matches, Unifs, Out) :-
 %
 %   @arg Rules A list of compiled rewrite rule names to apply.
 
-saturate(Rules) -->
-   saturate(Rules, inf).
+saturate(M:Rules) -->
+   saturate(M:Rules, inf).
 
 %!  saturate(+Rules, +N)// is det.
 %
@@ -202,7 +230,11 @@ saturate(Rules) -->
 %   @arg Rules A list of compiled rewrite rule names to apply.
 %   @arg N     The maximum number of iterations (or `inf` for no limit).
 
-saturate(Rules, N, In, Out) :-
+saturate(M:Rules, N) -->
+   { compile_rules(M:Rules, RulesId) },
+   saturate_(RulesId, N).
+
+saturate_(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
       match(In, Rules, Index, Unifs, [], Matches, In),
@@ -214,7 +246,7 @@ saturate(Rules, N, In, Out) :-
          -> N1 = N
          ;  N1 is N - 1
          ),
-         saturate(Rules, N1, Tmp, Out)
+         saturate_(Rules, N1, Tmp, Out)
       ;  Out = Tmp
       )
    ;  Out = In
