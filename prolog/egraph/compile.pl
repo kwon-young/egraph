@@ -86,7 +86,9 @@ compile_nodes([], Name, Pat, Pats, Id, LeftOptions, RightNodes, RightOptions, Ri
       ;  RightRest = RightOptions
       ),
       convlist([_-node(_, 1), _]>>true, RightNodes, _),
-      maplist(collect_const_attrs(RightNodes), RightRest, ConstAttrs),
+      convlist([Num-_, const(Num)]>>number(Num), RightNodes, AutoConsts),
+      append(RightRest, AutoConsts, AllRightOptions),
+      maplist(collect_const_attrs(RightNodes), AllRightOptions, ConstAttrs),
       
       (  comma_list(RightBody, ConstAttrs)
       -> true
