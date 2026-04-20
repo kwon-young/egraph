@@ -1,5 +1,5 @@
 :- module(egraph, [add_term//2, union//2, saturate//1, saturate//2,
-                   extract//2, lookup/2]).
+                   extract//2, extract_all//2, lookup/2]).
 
 /** <module> E-graph implementation for term rewriting and saturation
 
@@ -21,6 +21,7 @@ Main predicates:
   * union//2: Merges two e-classes.
   * saturate//1, saturate//2: Applies compiled rewrite rules to the E-graph until saturation or an iteration limit is reached.
   * extract//2: Extracts the optimal term from the E-graph based on term costs.
+  * extract_all//2: Extracts all optimal terms from the E-graph based on term costs.
   * lookup/2: Retrieves an e-class node from a sorted list of E-graph nodes.
 */
 
@@ -367,3 +368,95 @@ setup([Node-node(ClassId, NodeCost) | Nodes], ParentsIn, CostIn, CostOut, HeapIn
 insert_parent([], _, Parents, Parents).
 insert_parent([ChildClass | ChildClasses], Node, [ChildClass-Node | ParentsTmp], ParentsOut) :-
    insert_parent(ChildClasses, Node, ParentsTmp, ParentsOut).
+
+extract_all(Target, Extracted, EGraph, EGraph) :-
+   current_prolog_flag(float_overflow, Flag),
+   setup_call_cleanup(
+      set_prolog_flag(float_overflow, infinity),
+      (  dijkstra(Target, EGraph, Costs),
+         extract_all_(EGraph, Costs, Target, Extracted)
+      ),
+      set_prolog_flag(float_overflow, Flag)
+   ).
+
+extract_all_index(EGraph, Index) :-
+   extract_pairs(EGraph, UnsortedPairs),
+   keysort(UnsortedPairs, IdPairs),
+   group_pairs_by_key(IdPairs, Groups),
+   ord_list_to_rbtree(Groups, Index).
+
+extract_pairs([], []).
+extract_pairs([Node-node(Id, Cost)|T0], [Id-(Node-Cost)|T1]) :-
+   extract_pairs(T0, T1).
+
+extract_all_(Egraph, Costs, Target, Extracted) :-
+   empty_heap(HeapIn),
+   rb_lookup(Target, H-_, Costs),
+   State = state(0, [], [Target]),
+   add_to_heap(HeapIn, H, State, HeapOut),
+   extract_all_index(Egraph, Index),
+   extract_all__(Index, Costs, HeapOut, Unifs),
+   reverse(Unifs, PreOrder),
+   build_term(PreOrder, [], Extracted).
+
+build_term([_-Value | UnifsIn], UnifsOut, Term) :-
+   (  var(Value)
+   -> Term = Value,
+      UnifsOut = UnifsIn
+   ;  is_dict(Value)
+   -> dict_pairs(Value, Tag, Pairs),
+      pairs_keys_values(Pairs, Keys, ChildClasses),
+      build_terms(ChildClasses, UnifsIn, UnifsOut, Values),
+      pairs_keys_values(NewPairs, Keys, Values),
+      dict_pairs(Term, Tag, NewPairs)
+   ;  compound(Value)
+   -> compound_name_arguments(Value, Name, ChildClasses),
+      build_terms(ChildClasses, UnifsIn, UnifsOut, Values),
+      compound_name_arguments(Term, Name, Values)
+   ;  Term = Value,
+      UnifsOut = UnifsIn
+   ).
+
+build_terms([], Unifs, Unifs, []).
+build_terms([_|Cs], UnifsIn, UnifsOut, [V|Vs]) :-
+   build_term(UnifsIn, UnifsTmp, V),
+   build_terms(Cs, UnifsTmp, UnifsOut, Vs).
+
+extract_all__(Index, Costs, HeapIn, Unifs) :-
+   (  get_from_heap(HeapIn, _, state(G, PartialTerm, PendingHoles), HeapTmp)
+   -> (  PendingHoles == []
+      -> (  Unifs = PartialTerm
+         ;  extract_all__(Index, Costs, HeapTmp, Unifs)
+         )
+      ;  [Hole | RestHoles] = PendingHoles,
+         rb_lookup(Hole, Nodes, Index),
+         extract_all_childs(Nodes, Costs, G, PartialTerm, Hole, RestHoles, HeapTmp, HeapOut),
+         extract_all__(Index, Costs, HeapOut, Unifs)
+      )
+   ).
+
+extract_all_childs([], _, _, _, _, _, Heap, Heap).
+extract_all_childs([Node-NodeCost | Nodes], Costs, G, PartialTerm, Hole, RestHoles, HeapIn, HeapOut) :-
+   (  is_dict(Node)
+   -> dict_pairs(Node, _, KeysValues),
+      pairs_values(KeysValues, ChildClasses)
+   ;  compound(Node), Node \= '$VAR'(_)
+   -> compound_name_arguments(Node, _, ChildClasses)
+   ;  ChildClasses = []
+   ),
+   (  Node = '$VAR'(Value)
+   -> true
+   ;  Node = Value
+   ),
+   NewPartialTerm = [Hole-Value | PartialTerm],
+   append(ChildClasses, RestHoles, NewHoles),
+
+   NewG is G + NodeCost,
+   foldl(sum_costs(Costs), NewHoles, 0, H),
+   F is NewG + H,
+   add_to_heap(HeapIn, F, state(G, NewPartialTerm, NewHoles), HeapTmp),
+   extract_all_childs(Nodes, Costs, G, PartialTerm, Hole, RestHoles, HeapTmp, HeapOut).
+
+sum_costs(Costs, Hole, In, Out) :-
+   rb_lookup(Hole, Cost-_, Costs),
+   Out is In + Cost.

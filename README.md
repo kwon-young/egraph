@@ -71,6 +71,8 @@ The interface uses Prolog's DCGs to thread the E-graph state. The E-graph itself
   Applies a list of compiled rewrite rule names iteratively until the E-graph is saturated or the iteration limit is reached.
 * **`extract(+Id, -Extracted)//`** 
   Extracts the optimal term from the E-graph based on term costs.
+* **`extract_all(+Id, -Extracted)//`** 
+  Extracts all optimal terms from the E-graph based on term costs.
 * **`lookup(+Pair, +SortedPairs)`**
   Retrieves an e-class node from a sorted list of E-graph nodes.
 
