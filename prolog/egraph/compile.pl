@@ -35,6 +35,7 @@ Patterns are written exactly as standard Prolog terms, mirroring how terms are a
 */
 
 :- use_module(library(dcg/high_order)).
+:- use_module(library(debug)).
 :- use_module('../egraph.pl', [lookup/2]).
 
 compile(rewrite(Name, Left, LeftOptions, Right, RightOptions) :- Body) -->
@@ -201,11 +202,22 @@ collect_const_attrs(RightNodes, const(Value), put_attr(Id, const, Value)) :-
    ;  existence_error(rhs_node, Value)
    ).
 
+debug_clauses(Clauses) :-
+   (  debugging(egraph_compile)
+   -> maplist(portray_clause(user_error), Clauses),
+      nl(user_error)
+   ;  true
+   ).
+
 user:term_expansion(egraph:rewrite(Name, A, B), Clauses) :-
-   phrase(compile(rewrite(Name, A, [], B, []) :- true), Clauses).
+   phrase(compile(rewrite(Name, A, [], B, []) :- true), Clauses),
+   debug_clauses(Clauses).
 user:term_expansion(egraph:rewrite(Name, A, B, BOpt), Clauses) :-
-   phrase(compile(rewrite(Name, A, [], B, BOpt) :- true), Clauses).
+   phrase(compile(rewrite(Name, A, [], B, BOpt) :- true), Clauses),
+   debug_clauses(Clauses).
 user:term_expansion(egraph:rewrite(Name, A, AOpt, B, BOpt), Clauses) :-
-   phrase(compile(rewrite(Name, A, AOpt, B, BOpt) :- true), Clauses).
+   phrase(compile(rewrite(Name, A, AOpt, B, BOpt) :- true), Clauses),
+   debug_clauses(Clauses).
 user:term_expansion((egraph:rewrite(Name, A, AOpt, B, BOpt) :- Body), Clauses) :-
-   phrase(compile(rewrite(Name, A, AOpt, B, BOpt) :- Body), Clauses).
+   phrase(compile(rewrite(Name, A, AOpt, B, BOpt) :- Body), Clauses),
+   debug_clauses(Clauses).
