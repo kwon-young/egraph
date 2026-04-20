@@ -36,38 +36,44 @@ example2(N, Expr) :-
 
 :- begin_tests(rules).
 
-rule_test(X+Y, [comm_add], [X+Y, Y+X]).
-rule_test(a+b, [comm_add], [a+b, b+a]).
-rule_test(a*b, [comm_mul], [a*b, b*a]).
-rule_test(a+(b+c), [assoc_add], [(a+b)+c, a+(b+c)]).
-rule_test(a*(b*c), [assoc_mul], [(a*b)*c, a*(b*c)]).
-rule_test(a+0, [reduce_add0], [a]).
-rule_test(a*1, [reduce_mul1], [a]).
-rule_test(a*0, [reduce_mul0], [0]).
-rule_test(a+a, [factorize_aa], [a+a, 2*a]).
-rule_test(a+b*a, [factorize_aba], [a+b*a, a*(b+1)]).
-rule_test(2+3, [constant_folding], [5, 2+3]).
-rule_test(array{op: array{op: 1+2}+3}, [operator_fusion], [array{op: 1+2+3}, array{op: array{op: 1+2}+3}]).
-rule_test(f(X), [var_match], [f(X), g(X)]).
+rule_test(X+Y, [comm_add], X+Y, [Y+X, X+Y]).
+rule_test(a+b, [comm_add], a+b, [b+a, a+b]).
+rule_test(a*b, [comm_mul], a*b, [b*a, a*b]).
+rule_test(a+(b+c), [assoc_add], a+(b+c), [a+b+c, a+(b+c)]).
+rule_test(a*(b*c), [assoc_mul], a*(b*c), [a*b*c, a*(b*c)]).
+rule_test(a+0, [reduce_add0], a, [a, a+0]).
+rule_test(a*1, [reduce_mul1], a, [a, a*1]).
+rule_test(a*0, [reduce_mul0], 0, [0, a*0]).
+rule_test(a+a, [factorize_aa], 2*a, [2*a, a+a]).
+rule_test(a+b*a, [factorize_aba], a*(b+1), [a*(b+1), a+b*a]).
+rule_test(2+3, [constant_folding], 5, [5, 2+3]).
+rule_test(array{op: array{op: 1+2}+3}, [operator_fusion], array{op: 1+2+3}, [array{op: 1+2+3}, array{op: array{op: 1+2}+3}]).
+rule_test(f(X), [var_match], f(X), [g(X), f(X)]).
 % Case 1: Symbolic Factorization
-rule_test(x+y*x, [factorize_aba], [x+y*x, x*(y+1)]).
+rule_test(x+y*x, [factorize_aba], x*(y+1), [x*(y+1), x+y*x]).
 % Case 2: Non-Greedy Rewriting (The Valley Problem)
-rule_test(a*(x+y) - a*x, [distribute, cancel_add_sub], [a*(x+y) - a*x, a*y]).
+rule_test(a*(x+y) - a*x, [distribute, cancel_add_sub], a*y, [a*y, a*(x+y) - a*x]).
 
-test(rewrite, [forall(rule_test(Term, Rules, Expected))]) :-
+test(rewrite, [forall(rule_test(Term, Rules, Expected, _ExpectedAll))]) :-
+   phrase((
+      add_term(Term, T),
+      saturate(Rules),
+      extract(T, Extracted)), [], _),
+   print_term(Extracted =@= Expected, []), nl,
+   Extracted =@= Expected.
+test(rewrite_all, [forall(rule_test(Term, Rules, _, Expected))]) :-
    findall(Extracted-Term,
-      phrase((
-         add_term(Term, T),
-         saturate(Rules),
-         extract(T, Extracted)), [], _),
-      Pairs),
+      limit(2, 
+         phrase((
+            add_term(Term, T),
+            saturate(Rules),
+            extract_all(T, Extracted)), [], _)
+      ), Pairs),
    pairs_keys_values(Pairs, Terms, Copies),
    maplist(=(Term), Copies),
-   print_term(Terms, []), nl,
-   exclude(cyclic_term, Terms, AcyclicTerms),
-   sort(AcyclicTerms, Sorted),
-   sort(Expected, SortedExpected),
-   Sorted =@= SortedExpected.
+   print_term(Terms =@= Expected, []), nl,
+   % exclude(cyclic_term, Terms, AcyclicTerms),
+   Terms =@= Expected.
 
 test(dict) :-
    phrase((
