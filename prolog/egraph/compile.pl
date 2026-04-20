@@ -58,20 +58,21 @@ common_variables(A, B) :-
 
 compile_nodes([NextPat-node(NextId, _) | Nodes], Name, Pat, Pats, Id, LeftOptions, Right, RightOptions, RightId, SubBody) ==>
    {
-      append(Pats, [_UnifsIn, _UnifsOut], Args),
+      append(Pats, [UnifsIn, UnifsOut], Args),
       Head =.. [Name, Pat, Id, Index | Args],
       atom_concat(Name, '_', NewName),
-      SubCall =.. [NewName, NextIdNodes, Id, Index | [Pat | Args]],
+      partition(common_variables(Pat), LeftOptions, GuardList, LeftRest),
+      append([Pat | GuardList], Pats, AllPats),
+      append(AllPats, [UnifsIn, UnifsOut], SubCallArgs),
+      SubCall =.. [NewName, NextIdNodes, Id, Index | SubCallArgs],
       Body = (
          {rb_lookup(NextId, NextIdNodes, Index)},
          SubCall
       ),
-      partition(common_variables(Pat), LeftOptions, GuardList, LeftRest),
       (  comma_list(Guard, GuardList)
       -> HeadGuard = (Head, Guard)
       ;  HeadGuard = Head
-      ),
-      append([Pat | GuardList], Pats, AllPats)
+      )
    },
    assert_rule(HeadGuard ==> Body),
    default_clause(Head),
