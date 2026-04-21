@@ -7,26 +7,20 @@
 egraph:rewrite(comm_add, A+B, B+A).
 egraph:rewrite(assoc_add, A+(B+C), (A+B)+C).
 
+% Factoring identical terms
+egraph:rewrite(factorize_add, A+A, 2*A, [cost(9r10)]).
+
 % Zero reduction
 egraph:rewrite(reduce_add0, A+B, [const(B, 0)], A, []).
 
-% Factoring identical terms
-egraph:rewrite(factorize_aa, A+A, 2*A, [cost(9r10)]).
-
 % Factoring terms with constant multipliers
-egraph:rewrite(factorize_naa, N*A+A, [const(N, VN)], M*A, [const(M)]) :- 
-    M is VN + 1.
-
-egraph:rewrite(factorize_ana, A+N*A, [const(N, VN)], M*A, [const(M)]) :- 
-    M is VN + 1.
+egraph:rewrite(factor_add1, N*A+A, (N+1)*A, [cost(9r10)]).
 
 % Factoring two multiplier terms
-egraph:rewrite(factorize_nma, N*A+M*A, [const(N, VN), const(M, VM)], K*A, [const(K)]) :- 
-    K is VN + VM.
+egraph:rewrite(factor_add, N1*A+N2*A, (N1+N2)*A).
 
-% Factoring identical multipliers over addition
-egraph:rewrite(factorize_dist, N*A+N*B, [], N*(A+B), []).
-
+egraph:rewrite(constant_folding_add, A+B, [const(A, VA), const(B, VB)], VC, [const(VC)]) :-
+   VC is VA + VB.
 
 :- begin_tests(clpbnr_simplify).
 
@@ -40,10 +34,7 @@ rule_test(A+B+A, B+2*A).
 rule_test(A+B+A+B, 2*(A+B)).
 
 test(simplify, [forall(rule_test(Term, Expected))]) :-
-   Rules = [
-      comm_add, assoc_add, factorize_aa,
-      factorize_naa, factorize_ana, factorize_nma, factorize_dist
-   ],
+   Rules = [ comm_add, assoc_add, factorize_add, factor_add1, factor_add, constant_folding_add ],
    phrase((
       add_term(Term, T),
       saturate(Rules),
