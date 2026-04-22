@@ -19,7 +19,7 @@ egraph:rewrite(constant_folding, A+B, [const(A, VA), const(B, VB)],
                VC, [const(VC)]) :-
    VC is VA+VB.
 egraph:rewrite(operator_fusion, array{op: array{op: A+B}+C}, array{op: A+B+C}).
-egraph:rewrite(var_match, f('$VAR'(X)), g('$VAR'(X))).
+egraph:rewrite(var_match, f('$NODE'(X)), g(X)) :- var(X).
 egraph:rewrite(distribute, A*(B+C), A*B+A*C).
 egraph:rewrite(cancel_add_sub, A+B-A, B).
 
@@ -41,12 +41,12 @@ rule_test(a+b, [comm_add], a+b, [b+a, a+b]).
 rule_test(a*b, [comm_mul], a*b, [b*a, a*b]).
 rule_test(a+(b+c), [assoc_add], a+(b+c), [a+b+c, a+(b+c)]).
 rule_test(a*(b*c), [assoc_mul], a*(b*c), [a*b*c, a*(b*c)]).
-rule_test(a+0, [reduce_add0], a, [a, a+0]).
-rule_test(a*1, [reduce_mul1], a, [a, a*1]).
-rule_test(a*0, [reduce_mul0], 0, [0, a*0]).
+rule_test(a+0, [is_const, reduce_add0], a, [a, a+0]).
+rule_test(a*1, [is_const, reduce_mul1], a, [a, a*1]).
+rule_test(a*0, [is_const, reduce_mul0], 0, [0, a*0]).
 rule_test(a+a, [factorize_aa], 2*a, [2*a, a+a]).
 rule_test(a+b*a, [factorize_aba], a*(b+1), [a*(b+1), a+b*a]).
-rule_test(2+3, [constant_folding], 5, [5, 2+3]).
+rule_test(2+3, [is_const, constant_folding], 5, [5, 2+3]).
 rule_test(array{op: array{op: 1+2}+3}, [operator_fusion], array{op: 1+2+3}, [array{op: 1+2+3}, array{op: array{op: 1+2}+3}]).
 rule_test(f(X), [var_match], f(X), [g(X), f(X)]).
 % Case 1: Symbolic Factorization

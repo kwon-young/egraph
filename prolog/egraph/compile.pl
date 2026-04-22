@@ -31,13 +31,30 @@ Patterns are written exactly as standard Prolog terms, mirroring how terms are a
   * Literals (atoms, numbers, strings) match exact atomic values (e.g., `0` in `A + 0`, or `"foo"` in `g("foo")`).
   * Compound terms match the exact structural shape of complex terms in the E-graph (e.g., `A * (B + C)` or `f(X, Y)`).
   * Prolog variables act as wildcards matching any arbitrary subterm (e.g., `A` in `A + B`).
-  * To match actual Prolog variables, use the `'$VAR'(X)` wrapper (e.g., `f('$VAR'(X))`).
 */
 
 :- use_module(library(dcg/high_order)).
 :- use_module(library(debug)).
 :- use_module('../egraph.pl', [lookup/2]).
 
+compile(merge_property(Name, V1, V2, Merged) :- Body) -->
+   [(
+      Name:attr_unify_hook(V1, Y) :-
+         (  get_attr(Y, Name, V2)
+         -> Body,
+            (  Merged \== V2
+            -> put_attr(Y, Name, Merged),
+               b_setval(egraph_changed, true)
+            ;  Merged \== V1
+            -> b_setval(egraph_changed, true)
+            ;  true
+            )
+         ;  var(Y)
+         -> put_attr(Y, Name, V1),
+            b_setval(egraph_changed, true)
+         ;  true
+         )
+   )].
 compile(rewrite(Name, Left, LeftOptions, Right, RightOptions) :- Body) -->
    {  term_nodes(Left-Id, LeftNodes),
       LeftNodes = [Pat-_ | T],
@@ -46,8 +63,8 @@ compile(rewrite(Name, Left, LeftOptions, Right, RightOptions) :- Body) -->
    },
    compile_nodes(T, Name, Pat, [], Id, LeftExpanded, RightNodes, RightOptions, RightId, Body).
 
-expand_prop(const(Id, Value), Expanded) =>
-   Expanded = get_attr(Id, const, Value).
+expand_prop(Prop, Expanded), Prop =.. [Name, Id, Value] =>
+   Expanded = get_attr(Id, Name, Value).
 
 common_variables(A, B) :-
    term_variables(A, VAs),
@@ -86,23 +103,24 @@ compile_nodes([], Name, Pat, Pats, Id, LeftOptions, RightNodes, RightOptions, Ri
       ;  RightRest = RightOptions
       ),
       convlist([_-node(_, 1), _]>>true, RightNodes, _),
-      convlist([Num-_, const(Num)]>>number(Num), RightNodes, AutoConsts),
-      append(RightRest, AutoConsts, AllRightOptions),
-      maplist(collect_const_attrs(RightNodes), AllRightOptions, ConstAttrs),
+      maplist(collect_attrs(RightNodes), RightRest, ConstAttrs),
       
       (  comma_list(RightBody, ConstAttrs)
       -> true
       ;  RightBody = true
       ),
-      foldl(mkconj, [SubBody, RightBody, UnifsIn = [Id=RightId | UnifsOut]],
-            true, PrologBody),
+      mkconj(RightBody, UnifsIn = [Id=RightId | UnifsOut], PrologBody),
       Body = (
          { PrologBody },
          RightNodes
       ),
-      (  comma_list(Guard, LeftOptions)
-      -> HeadGuard = (Head, Guard)
-      ;  HeadGuard = Head
+      (  comma_list(GuardOpts, LeftOptions)
+      -> mkconj(GuardOpts, SubBody, Guard)
+      ;  Guard = SubBody
+      ),
+      (  Guard == true
+      -> HeadGuard = Head
+      ;  HeadGuard = (Head, Guard)
       )
    },
    assert_rule(HeadGuard ==> Body),
@@ -145,9 +163,9 @@ assert_rule(Rule) -->
 
 term_nodes(T-Id, Nodes) :-
    phrase(term_nodes(T-Id), Nodes).
-term_nodes('$VAR'(Var)-Id) ==> !,
-   ['$VAR'(Var)-node(Id, _Cost)].
-term_nodes(T-Id), is_dict(T) ==> !,
+term_nodes('$NODE'(Node)-Id) ==>
+   [Node-node(Id, _Cost)].
+term_nodes(T-Id), is_dict(T) ==>
    [Node-node(Id, _Cost)],
    {
       dict_pairs(T, Tag, Pairs),
@@ -165,11 +183,12 @@ term_nodes(T-Id), var(T) ==> {T = Id}.
 term_nodes(T-Id) ==>
    [T-node(Id, _Cost)].
 
-right_nodes(T-Id, Nodes, LeftNodes) :-
-   phrase(right_nodes(LeftNodes, T-Id), Nodes).
-right_nodes(LeftNodes, '$VAR'(Var)-Id) ==> !,
-   add_right_node('$VAR'(Var), Id, LeftNodes).
-right_nodes(LeftNodes, T-Id), is_dict(T) ==> !,
+right_nodes(T-Id, Nodes, Left-LeftNodes) :-
+   keysort(LeftNodes, SortedLeftNodes),
+   phrase(right_nodes(Left-SortedLeftNodes, T-Id), Nodes).
+right_nodes(LeftNodes, '$NODE'(Node)-Id) ==>
+   add_right_node(Node, Id, LeftNodes).
+right_nodes(LeftNodes, T-Id), is_dict(T) ==>
    {
       dict_pairs(T, Tag, Pairs),
       pairs_keys_values(Pairs, Keys, Values),
@@ -187,8 +206,8 @@ right_nodes(LeftNodes, T-Id) ==>
    add_right_node(T, Id, LeftNodes).
 
 add_right_node(Node, Id, Left-LeftNodes) -->
-   (  { lookup(Node-node(Id, _), LeftNodes) }
-   -> []
+   (  { lookup(Node-node(_, _), LeftNodes) }
+   -> [Node-node(Id, _Cost)]
    ;  { var(Node), contains_var(Node, Left) }
    -> { Node = Id }
    ;  [Node-node(Id, _Cost)]
@@ -199,11 +218,13 @@ pairs_args(T1, T2, Pairs) :-
    pairs_keys_values(Pairs, Args, Ids),
    T2 =.. [F | Ids].
 
-collect_const_attrs(RightNodes, const(Value), put_attr(Id, const, Value)) :-
+collect_attrs(RightNodes, Prop, R), Prop =.. [Name, Value] =>
    (  lookup(Value-node(Id, _), RightNodes)
-   -> true
+   -> R = put_attr(Id, Name, Value)
    ;  existence_error(rhs_node, Value)
    ).
+collect_attrs(_, Prop, R), Prop =.. [Name, Id, Value] =>
+   R = put_attr(Id, Name, Value).
 
 debug_clauses(Clauses) :-
    (  debugging(egraph_compile)
@@ -212,8 +233,31 @@ debug_clauses(Clauses) :-
    ;  true
    ).
 
+user:term_expansion(egraph:merge_property(Name, V1, V2, Merged), Clauses) :-
+   phrase(compile(merge_property(Name, V1, V2, Merged) :- true), Clauses),
+   debug_clauses(Clauses).
+user:term_expansion((egraph:merge_property(Name, V1, V2, Merged) :- Body), Clauses) :-
+   phrase(compile(merge_property(Name, V1, V2, Merged) :- Body), Clauses),
+   debug_clauses(Clauses).
+
+user:term_expansion(egraph:analyze(Name, A, BOpt), Clauses) :-
+   phrase(compile(rewrite(Name, A, [], A, BOpt) :- true), Clauses),
+   debug_clauses(Clauses).
+user:term_expansion((egraph:analyze(Name, A, BOpt) :- Body), Clauses) :-
+   phrase(compile(rewrite(Name, A, [], A, BOpt) :- Body), Clauses),
+   debug_clauses(Clauses).
+user:term_expansion(egraph:analyze(Name, A, AOpt, BOpt), Clauses) :-
+   phrase(compile(rewrite(Name, A, AOpt, A, BOpt) :- true), Clauses),
+   debug_clauses(Clauses).
+user:term_expansion((egraph:analyze(Name, A, AOpt, BOpt) :- Body), Clauses) :-
+   phrase(compile(rewrite(Name, A, AOpt, A, BOpt) :- Body), Clauses),
+   debug_clauses(Clauses).
+
 user:term_expansion(egraph:rewrite(Name, A, B), Clauses) :-
    phrase(compile(rewrite(Name, A, [], B, []) :- true), Clauses),
+   debug_clauses(Clauses).
+user:term_expansion((egraph:rewrite(Name, A, B) :- Body), Clauses) :-
+   phrase(compile(rewrite(Name, A, [], B, []) :- Body), Clauses),
    debug_clauses(Clauses).
 user:term_expansion(egraph:rewrite(Name, A, B, BOpt), Clauses) :-
    phrase(compile(rewrite(Name, A, [], B, BOpt) :- true), Clauses),

@@ -1,5 +1,5 @@
 :- module(egraph, [add_term//2, union//2, saturate//1, saturate//2,
-                   extract//2, extract_all//2, lookup/2]).
+                   extract//2, extract_all//2, lookup/2, is_const//5]).
 
 /** <module> E-graph implementation for term rewriting and saturation
 
@@ -31,19 +31,6 @@ Main predicates:
 :- use_module(library(heaps)).
 
 :- use_module(egraph/compile).
-
-cost:attr_unify_hook(_, _) :-
-   true.
-const:attr_unify_hook(XConst, Y) :-
-   (  get_attr(Y, const, YConst)
-   -> (  XConst =:= YConst
-      -> true
-      ;  domain_error(XConst, YConst)
-      )
-   ;  var(Y)
-   -> put_attr(Y, const, XConst)
-   ;  true
-   ).
 
 %!  lookup(+Pair, +SortedPairs) is semidet.
 %
@@ -80,18 +67,24 @@ lookup(Item-V, [X1-V1, X2-V2|Xs]) :-
 lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
 
+egraph:merge_property(const, V1, V2, Merged) :-
+   (  V1 =:= V2
+   -> Merged = V1
+   ;  domain_error(V1, V2)
+   ).
+
+egraph:analyze(is_const, '$NODE'(A), [const(A)]) :-
+   number(A).
+
 %!  add_term(+Term, -Id)// is det.
 %
 %   Adds a term to the E-graph, returning its e-class ID.
 %   Compound terms are recursively traversed and their arguments 
-%   are added to the E-graph first. Variables are represented using 
-%   '$VAR'/1 wrappers.
+%   are added to the E-graph first.
 %
 %   @arg Term The term to be added.
 %   @arg Id   The e-class ID representing the added term.
 
-add_term(Term, Id), var(Term) ==>
-   add_node('$VAR'(Term), Id).
 add_term(Term, Id), is_dict(Term) ==>
    % rework this with dict_same_keys
    {
@@ -117,11 +110,7 @@ add_node(Node-Id, In, Out) :-
 add_node(Node, Id, In, Out) :-
    (  lookup(Node-node(Id, _Cost), In)
    -> Out = In
-   ;  ord_add_element(In, Node-node(Id, 1), Out),
-      (  number(Node)
-      -> put_attr(Id, const, Node)
-      ;  true
-      )
+   ;  ord_add_element(In, Node-node(Id, 1), Out)
    ).
 
 % rules([Rule | Rules], Index, Pat-node(Id, Cost), UnifsIn, UnifsOut) -->
@@ -200,10 +189,25 @@ merge_groups([], [], In, In).
 merge_group([], Node, Node).
 merge_group([node(Id, Cost) | T], node(Id, PrevCost), Out) :-
    MinCost is min(Cost, PrevCost),
+   (  MinCost < PrevCost
+   -> b_setval(egraph_changed, true)
+   ;  true
+   ),
    merge_group(T, node(Id, MinCost), Out).
 
 apply_unifs([]).
-apply_unifs([A=A | L]) :-
+apply_unifs([A=B | L]) :-
+   (  attvar(A)
+   -> (  attvar(B)
+      -> true
+      ;  b_setval(egraph_changed, true)
+      )
+   ;  (  attvar(B)
+      -> b_setval(egraph_changed, true)
+      ;  true
+      )
+   ),
+   A = B,
    apply_unifs(L).
 
 rebuild(Matches, Unifs, Out) :-
@@ -238,11 +242,13 @@ saturate(M:Rules, N) -->
 saturate_(Rules, N, In, Out) :-
    (  N > 0
    -> make_index(In, Index),
+      b_setval(egraph_changed, false),
       match(In, Rules, Index, Unifs, [], Matches, In),
       rebuild(Matches, Unifs, Tmp),
       length(In, Len1),
       length(Tmp, Len2),
-      (  Len1 \== Len2
+      b_getval(egraph_changed, Changed),
+      (  (Len1 \== Len2 ; Changed == true)
       -> (  N == inf
          -> N1 = N
          ;  N1 is N - 1
@@ -272,8 +278,6 @@ extract(Target, Extracted, EGraph, EGraph) :-
 extract_class(Costs, Target, Extracted) :-
    rb_lookup(Target, _-Node, Costs),
    extract_node(Costs, Node, Extracted).
-extract_node(_, '$VAR'(Var), R) =>
-   R = Var.
 extract_node(Costs, Dict, R), is_dict(Dict) =>
    dict_pairs(Dict, Tag, Pairs),
    pairs_keys_values(Pairs, Keys, Classes),
@@ -318,7 +322,7 @@ update_parents([ParentNode-node(ParentClass, ParentCost) | Parents], CostsIn, Co
    (  is_dict(ParentNode)
    -> dict_pairs(ParentNode, _, KeysValues),
       pairs_values(KeysValues, ChildClasses)
-   ;  compound(ParentNode), ParentNode \= '$VAR'(_)
+   ;  compound(ParentNode)
    -> compound_name_arguments(ParentNode, _, ChildClasses)
    ;  ChildClasses = []
    ),
@@ -349,7 +353,7 @@ setup([Node-node(ClassId, NodeCost) | Nodes], ParentsIn, CostIn, CostOut, HeapIn
    (  is_dict(Node)
    -> dict_pairs(Node, _, KeysValues),
       pairs_values(KeysValues, ChildClasses)
-   ;  compound(Node), Node \= '$VAR'(_)
+   ;  compound(Node)
    -> compound_name_arguments(Node, _, ChildClasses)
    ;  ChildClasses = []
    ),
@@ -440,15 +444,11 @@ extract_all_childs([Node-NodeCost | Nodes], Costs, G, PartialTerm, Hole, RestHol
    (  is_dict(Node)
    -> dict_pairs(Node, _, KeysValues),
       pairs_values(KeysValues, ChildClasses)
-   ;  compound(Node), Node \= '$VAR'(_)
+   ;  compound(Node)
    -> compound_name_arguments(Node, _, ChildClasses)
    ;  ChildClasses = []
    ),
-   (  Node = '$VAR'(Value)
-   -> true
-   ;  Node = Value
-   ),
-   NewPartialTerm = [Hole-Value | PartialTerm],
+   NewPartialTerm = [Hole-Node | PartialTerm],
    append(ChildClasses, RestHoles, NewHoles),
 
    NewG is G + NodeCost,
