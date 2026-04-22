@@ -14,6 +14,11 @@ compiled via term expansion:
   * `egraph:rewrite(Name, Lhs, Rhs, RhsOptions)`
   * `egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions)`
   * `egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions) :- Body`
+  * `egraph:analyze(Name, Lhs, RhsOptions)`
+  * `egraph:analyze(Name, Lhs, LhsOptions, RhsOptions)`
+  * `egraph:analyze(Name, Lhs, LhsOptions, RhsOptions) :- Body`
+  * `egraph:merge_property(Name, V1, V2, Merged)`
+  * `egraph:merge_property(Name, V1, V2, Merged) :- Body`
 
 Arguments:
   * `Name`: The atom used to identify and apply the rule. This name should be unique across all rules.

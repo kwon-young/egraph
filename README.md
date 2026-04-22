@@ -30,6 +30,11 @@ Rules are defined via the `egraph:rewrite` multifile predicate. During compilati
 * `egraph:rewrite(Name, Lhs, Rhs, RhsOptions)`
 * `egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions)`
 * `egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions) :- Body`
+* `egraph:analyze(Name, Lhs, RhsOptions)`
+* `egraph:analyze(Name, Lhs, LhsOptions, RhsOptions)`
+* `egraph:analyze(Name, Lhs, LhsOptions, RhsOptions) :- Body`
+* `egraph:merge_property(Name, V1, V2, Merged)`
+* `egraph:merge_property(Name, V1, V2, Merged) :- Body`
 
 ### Examples
 
@@ -50,6 +55,17 @@ egraph:rewrite(reduce_add0, A+B, [const(B, 0)], A, []).
 egraph:rewrite(constant_folding, A+B, [const(A, VA), const(B, VB)], VC, [const(VC)]) :-
    VC is VA + VB.
 
+% Node Analysis (e.g., constant detection)
+egraph:analyze(is_const, '$NODE'(A), [const(A)]) :-
+   number(A).
+
+% Property merging when e-classes are unioned
+egraph:merge_property(const, V1, V2, Merged) :-
+   (  V1 =:= V2
+   -> Merged = V1
+   ;  domain_error(V1, V2)
+   ).
+
 % Dict support
 egraph:rewrite(operator_fusion, array{op: array{op: A+B}+C}, array{op: A+B+C}).
 ```
@@ -57,7 +73,7 @@ egraph:rewrite(operator_fusion, array{op: array{op: A+B}+C}, array{op: A+B+C}).
 ## Usage
 
 The interface uses Prolog's DCGs to thread the E-graph state. The E-graph itself is represented as a sorted list of pairs with the specific shape `Node-node(Id, Cost)`:
-* `Node`: The structural term, literal value, or variable representation (e.g., `A+B`, `1`, `'$VAR'(X)`).
+* `Node`: The structural term, literal value, or variable representation (e.g., `A+B`, `1`, `'$NODE'(X)`).
 * `Id`: The equivalence class identifier (typically a Prolog variable).
 * `Cost`: The structural cost of this specific node.
 
@@ -84,7 +100,7 @@ true.
 
 ?- phrase((
        add_term(a+0, Id),
-       saturate([reduce_add0]),
+       saturate([is_const, reduce_add0]),
        extract(Id, Optimized)
    ), [], _Graph).
 Optimized = a,

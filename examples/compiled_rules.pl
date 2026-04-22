@@ -2,10 +2,17 @@
                            reduce_add0//5, reduce_mul1//5, reduce_mul0//5,
                            factorize_aa//5, factorize_aba//5,
                            constant_folding//5, operator_fusion//5,
-                           var_match//5,
-                           distribute//5, cancel_add_sub//5]).
+                           var_match//5, distribute//5, cancel_add_sub//5,
+                           is_const//5]).
 :- use_module('../prolog/egraph.pl').
 
+egraph:merge_property(const, V1, V2, Merged) :-
+   (  V1 =:= V2
+   -> Merged = V1
+   ;  domain_error(V1, V2)
+   ).
+
+egraph:analyze(is_const, '$NODE'(A), [const(A)]) :- number(A).
 egraph:rewrite(comm_add, A+B, B+A).
 egraph:rewrite(comm_mul, A*B, B*A).
 egraph:rewrite(assoc_add, A+(B+C), (A+B)+C).

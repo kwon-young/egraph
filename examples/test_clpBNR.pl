@@ -3,6 +3,14 @@
 
 :- debug(egraph_compile).
 
+egraph:merge_property(const, V1, V2, Merged) :-
+   (  V1 =:= V2
+   -> Merged = V1
+   ;  domain_error(V1, V2)
+   ).
+
+egraph:analyze(is_const, '$NODE'(A), [const(A)]) :- number(A), \+ float(A).
+
 % Commutativity and Associativity for addition
 egraph:rewrite(comm_add, A+B, B+A).
 egraph:rewrite(assoc_add, A+(B+C), (A+B)+C).
@@ -33,13 +41,14 @@ rule_test(A+0+A, 2*A).
 rule_test(A+B+A, B+2*A).
 rule_test(A+B+A+B, 2*(A+B)).
 rule_test(A+0+1, A+1).
+rule_test(0.1+0.2, 0.1+0.2).
 
 test(simplify, [forall(rule_test(Term, Expected))]) :-
-   Rules = [ comm_add, assoc_add, factorize_add, factor_add1, factor_add ],
+   Rules = [is_const, comm_add, assoc_add, factorize_add, factor_add1, factor_add],
    phrase((
       add_term(Term, T),
       saturate(Rules),
-      saturate([reduce_add0, constant_folding_add]),
+      saturate([is_const, reduce_add0, constant_folding_add]),
       extract(T, Extracted)
    ), [], _),
    print_term((Term, Extracted =@= Expected), []), nl,

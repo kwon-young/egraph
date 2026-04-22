@@ -1,5 +1,5 @@
 :- module(egraph, [add_term//2, union//2, saturate//1, saturate//2,
-                   extract//2, extract_all//2, lookup/2, is_const//5]).
+                   extract//2, extract_all//2, lookup/2]).
 
 /** <module> E-graph implementation for term rewriting and saturation
 
@@ -15,6 +15,11 @@ The supported rule declarations are:
   * egraph:rewrite(Name, Lhs, Rhs, RhsOptions)
   * egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions)
   * egraph:rewrite(Name, Lhs, LhsOptions, Rhs, RhsOptions) :- Body
+  * egraph:analyze(Name, Lhs, RhsOptions)
+  * egraph:analyze(Name, Lhs, LhsOptions, RhsOptions)
+  * egraph:analyze(Name, Lhs, LhsOptions, RhsOptions) :- Body
+  * egraph:merge_property(Name, V1, V2, Merged)
+  * egraph:merge_property(Name, V1, V2, Merged) :- Body
 
 Main predicates:
   * add_term//2: Adds a term to the E-graph, returning its e-class ID.
@@ -66,15 +71,6 @@ lookup(Item-V, [X1-V1, X2-V2|Xs]) :-
    ).
 lookup(Item-V, [X1-V1]) :-
    Item==X1, V = V1.
-
-egraph:merge_property(const, V1, V2, Merged) :-
-   (  V1 =:= V2
-   -> Merged = V1
-   ;  domain_error(V1, V2)
-   ).
-
-egraph:analyze(is_const, '$NODE'(A), [const(A)]) :-
-   number(A).
 
 %!  add_term(+Term, -Id)// is det.
 %
