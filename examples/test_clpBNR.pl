@@ -32,13 +32,14 @@ rule_test(A+A+A+A, 4*A).
 rule_test(A+0+A, 2*A).
 rule_test(A+B+A, B+2*A).
 rule_test(A+B+A+B, 2*(A+B)).
+rule_test(A+0+1, A+1).
 
 test(simplify, [forall(rule_test(Term, Expected))]) :-
-   Rules = [ comm_add, assoc_add, factorize_add, factor_add1, factor_add, constant_folding_add ],
+   Rules = [ comm_add, assoc_add, factorize_add, factor_add1, factor_add ],
    phrase((
       add_term(Term, T),
       saturate(Rules),
-      saturate([reduce_add0]),
+      saturate([reduce_add0, constant_folding_add]),
       extract(T, Extracted)
    ), [], _),
    print_term((Term, Extracted =@= Expected), []), nl,
