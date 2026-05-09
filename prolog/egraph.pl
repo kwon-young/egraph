@@ -373,7 +373,7 @@ extract_all(Target, Extracted, EGraph, EGraph) :-
    current_prolog_flag(float_overflow, Flag),
    setup_call_cleanup(
       set_prolog_flag(float_overflow, infinity),
-      (  dijkstra(Target, EGraph, Costs),
+      (  dijkstra(_, EGraph, Costs),
          extract_all_(EGraph, Costs, Target, Extracted)
       ),
       set_prolog_flag(float_overflow, Flag)
