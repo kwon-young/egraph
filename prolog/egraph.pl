@@ -193,16 +193,6 @@ merge_group([node(Id, Cost) | T], node(Id, PrevCost), Out) :-
 
 apply_unifs([]).
 apply_unifs([A=B | L]) :-
-   (  attvar(A)
-   -> (  attvar(B)
-      -> true
-      ;  b_setval(egraph_changed, true)
-      )
-   ;  (  attvar(B)
-      -> b_setval(egraph_changed, true)
-      ;  true
-      )
-   ),
    A = B,
    apply_unifs(L).
 
