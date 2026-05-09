@@ -1,6 +1,6 @@
 name(egraph).
 title('E-Graphs and Equality Saturation for SWI-Prolog').
-version('0.5.0').
+version('0.6.0').
 author('Kwon-Young Choi', 'kwon-young.choi@hotmail.fr').
 maintainer('Kwon-Young Choi', 'kwon-young.choi@hotmail.fr').
 packager('Kwon-Young Choi', 'kwon-young.choi@hotmail.fr').
