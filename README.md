@@ -35,6 +35,20 @@ Rules are defined via the `egraph:rewrite` multifile predicate. During compilati
 * `egraph:analyze(Name, Lhs, LhsOptions, RhsOptions) :- Body`
 * `egraph:merge_property(Name, V1, V2, Merged)`
 * `egraph:merge_property(Name, V1, V2, Merged) :- Body`
+* `egraph:rule(Name, LhsPatterns, RhsPatterns)`
+* `egraph:rule(Name, LhsPatterns, RhsPatterns) :- Body`
+* `egraph:rule(Name, LhsPatterns, RhsPatterns, RhsOptions)`
+* `egraph:rule(Name, LhsPatterns, RhsPatterns, RhsOptions) :- Body`
+* `egraph:rule(Name, LhsPatterns, LhsOptions, RhsPatterns, RhsOptions)`
+* `egraph:rule(Name, LhsPatterns, LhsOptions, RhsPatterns, RhsOptions) :- Body`
+
+**Note on Signatures:**
+* For `egraph:rewrite` and `egraph:analyze`, `Lhs` and `Rhs` are single structural terms.
+* For `egraph:rule`, `LhsPatterns` and `RhsPatterns` must be a list of `Pattern-Id` pairs (e.g., `[f(A)-Id1, g(B)-Id2]`). Shared class Ids between left and right patterns are automatically unified.
+* `Options` (both Lhs and Rhs) are a list of property compounds in the form `Name(Key, Value)`. For `egraph:rewrite` and `egraph:analyze` rules, a shorthand `Name(Value)` can be used, which implicitly uses the pattern's class Id as the `Key`.
+  * Lhs options will "get" the property and can be prefixed by `\+` to negate the lookup.
+  * Rhs options will "set" the property.
+  * `cost(Cost)` is a special option that sets the structural cost of the node.
 
 ### Examples
 

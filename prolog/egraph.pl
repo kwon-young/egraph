@@ -1,5 +1,5 @@
-:- module(egraph, [add_term//2, union//2, saturate//1, saturate//2,
-                   extract//2, extract_all//2, lookup/2]).
+:- module(egraph, [add_term//2, add_terms//2, union//2, saturate//1,
+                   saturate//2, extract//2, extract_all//2, lookup/2]).
 
 /** <module> E-graph implementation for term rewriting and saturation
 
@@ -20,6 +20,12 @@ The supported rule declarations are:
   * egraph:analyze(Name, Lhs, LhsOptions, RhsOptions) :- Body
   * egraph:merge_property(Name, V1, V2, Merged)
   * egraph:merge_property(Name, V1, V2, Merged) :- Body
+  * egraph:rule(Name, Lhs, Rhs)
+  * egraph:rule(Name, Lhs, Rhs) :- Body
+  * egraph:rule(Name, Lhs, Rhs, RhsOptions)
+  * egraph:rule(Name, Lhs, Rhs, RhsOptions) :- Body
+  * egraph:rule(Name, Lhs, LhsOptions, Rhs, RhsOptions)
+  * egraph:rule(Name, Lhs, LhsOptions, Rhs, RhsOptions) :- Body
 
 Main predicates:
   * add_term//2: Adds a term to the E-graph, returning its e-class ID.
@@ -81,78 +87,104 @@ lookup(Item-V, [X1-V1]) :-
 %   @arg Term The term to be added.
 %   @arg Id   The e-class ID representing the added term.
 
-add_term(Term, Id), is_dict(Term) ==>
-   % rework this with dict_same_keys
+add_term(Term, Node) -->
+   add_term(Term, Node, [cost(1)]).
+add_term(Var, Id, Opt), var(Var) ==>
+   { option(var(What), Opt, node) },
+   (  { What == node }
+   -> add_node(Var, Id, Opt)
+   ;  { What == class }
+   -> { Var=Id }
+   ;  { domain_error(node-class, What) }
+   ).
+add_term('$NODE'(Node), Id, Opt) ==>
+   add_node(Node, Id, Opt).
+add_term(Term, Id, Opt), is_dict(Term, Tag) ==>
    {
       dict_pairs(Term, Tag, Pairs),
-      pairs_keys_values(Pairs, Keys, Values)
-   },
-   foldl(add_term, Values, Ids),
-   {
+      pairs_keys_values(Pairs, Keys, Values),
       pairs_keys_values(Data, Keys, Ids),
       dict_create(Node, Tag, Data)
    },
-   add_node(Node, Id).
-add_term(Term, Id), compound(Term) ==>
+   add_terms(Values, Ids, Opt),
+   add_node(Node, Id, Opt).
+add_term(Term, Id, Opt), compound(Term) ==>
    { Term =.. [F | Args] },
-   foldl(add_term, Args, Ids),
+   add_terms(Args, Ids, Opt),
    { Node =.. [F | Ids] },
-   add_node(Node, Id).
-add_term(Term, Id) ==>
-   add_node(Term, Id).
+   add_node(Node, Id, Opt).
+add_term(Term, Id, Opt) ==>
+   add_node(Term, Id, Opt).
 
-add_node(Node-Id, In, Out) :-
-   add_node(Node, Id, In, Out).
-add_node(Node, Id, In, Out) :-
+add_terms([], [], _Opt) --> [].
+add_terms([Term | Terms], [Id | Ids], Opt) -->
+   add_term(Term, Id, Opt),
+   add_terms(Terms, Ids, Opt).
+
+add_terms([], _Opt) --> [].
+add_terms([Term-Id | Terms], Opt) -->
+   add_term(Term, Id, Opt),
+   add_terms(Terms, Opt).
+
+add_node(Node-Id, Opt, In, Out) :-
+   add_node(Node, Id, Opt, In, Out).
+add_node(Node, Id, Opt, In, Out) :-
    (  lookup(Node-node(Id, _Cost), In)
    -> Out = In
-   ;  ord_add_element(In, Node-node(Id, 1), Out)
-   ).
-
-% rules([Rule | Rules], Index, Pat-node(Id, Cost), UnifsIn, UnifsOut) -->
-%    call(Rule, Pat, Id, Index, UnifsIn, UnifsTmp),
-%    rules(Rules, Index, Pat-node(Id, Cost), UnifsTmp, UnifsOut).
-% rules([], _, _, Unifs, Unifs) --> [].
-
-:- dynamic rules//5.
-:- non_terminal(user:egraph:rules/7).
-
-chain_rule(M, Pat, Id, Index, Rule, Mod:Call, UnifsIn, UnifsOut) :-
-   strip_module(M:Rule, Mod, Name),
-   Call =.. [Name, Pat, Id, Index, UnifsIn, UnifsOut].
-
-:- meta_predicate compile_rules(:, -).
-
-compile_rules(M:Rules, RulesId) :-
-   term_hash(M:Rules, RulesId),
-   (  clause(rules(RulesId, _, _, _, _, _, _), _)
-   -> true
-   ;  (  Rules = [_ | _]
-      -> foldl(chain_rule(M, Pat, Id, Index), Rules, Calls, UnifsIn, UnifsOut),
-         comma_list(Body, Calls)
-      ;  Body = true, UnifsOut = UnifsIn
+   ;  option(nodes(Nodes), Opt), lookup(Node-node(Id, _Cost), Nodes)
+   -> Out = In
+   ;  (  member(cost(N, Cost), Opt), N == Node
+      ;  option(cost(Cost), Opt, 1)
       ),
-      Head = egraph:rules(RulesId, Index, Pat-node(Id, _), UnifsIn, UnifsOut),
-      Clause = (Head --> Body),
-      expand_term(Clause, Term),
-      asserta(Term)
+      !,
+      must_be(number, Cost),
+      ord_add_element(In, Node-node(Id, Cost), Out)
    ).
 
+rules([Rule | Rules], M, EGraph, Index, Parents, MinId, UnifsIn, UnifsOut) -->
+   { strip_module(M:Rule, Mod, Name) },
+   call(Mod:Name, '$empty'-node(_, 0), state([], EGraph, Index, Parents, MinId), UnifsIn, UnifsTmp),
+   rules(Rules, M, EGraph, Index, Parents, MinId, UnifsTmp, UnifsOut).
+rules([], _, _, _, _, _, Unifs, Unifs) --> [].
 
 make_index(In, Index) :-
    index_pairs(In, UnsortedPairs),
-   keysort(UnsortedPairs, IdPairs),
+   sort(UnsortedPairs, IdPairs),
    group_pairs_by_key(IdPairs, Groups),
    ord_list_to_rbtree(Groups, Index).
 
 index_pairs([], []).
-index_pairs([Node-node(Id, _Cost)|T0], [Id-Node|T1]) :-
+index_pairs([Node-node(Id, Cost)|T0], [Id-(Node-node(Id, Cost))|T1]) :-
    index_pairs(T0, T1).
 
-match([], _, _, Unifs, Unifs) --> [].
-match([Node | Rest], Rules, Index, UnifsIn, UnifsOut) -->
-   rules(Rules, Index, Node, UnifsIn, UnifsTmp),
-   match(Rest, Rules, Index, UnifsTmp, UnifsOut).
+make_parents(In, Parents) :-
+   phrase(parent_pairs(In), UnsortedPairs),
+   sort(UnsortedPairs, IdPairs),
+   group_pairs_by_key(IdPairs, Groups),
+   ord_list_to_rbtree(Groups, Parents).
+
+parent_pairs([]) ==> [].
+parent_pairs([Node-node(Id, Cost) | L]), is_dict(Node) ==>
+   { dict_pairs(Node, Tag, Pairs) },
+   dict_pairs(Pairs, Node-node(Id, Cost), Tag),
+   parent_pairs(L).
+parent_pairs([Node-node(Id, Cost) | L]), compound(Node) ==>
+   { compound_name_arguments(Node, Name, Args) },
+   arg_pairs(Args, Node-node(Id, Cost), Name, _Arity, 0),
+   parent_pairs(L).
+parent_pairs([_ | L]) ==>
+   parent_pairs(L).
+
+dict_pairs([], _, _) --> [].
+dict_pairs([_Key-Value | Pairs], Node, Tag) -->
+   [Value-Node],
+   dict_pairs(Pairs, Node, Tag).
+
+arg_pairs([], _Node, _Name, Arity, Arity) --> [].
+arg_pairs([Arg | Args], Node, Name, Arity, I) -->
+   [Arg-Node],
+   { I1 is I+1 },
+   arg_pairs(Args, Node, Name, Arity, I1).
 
 %!  union(+Id1, +Id2)// is det.
 %
@@ -210,9 +242,6 @@ rebuild(Matches, Unifs, Out) :-
 %
 %   @arg Rules A list of compiled rewrite rule names to apply.
 
-saturate(M:Rules) -->
-   saturate(M:Rules, inf).
-
 %!  saturate(+Rules, +N)// is det.
 %
 %   Applies a list of compiled rewrite rules to the E-graph up to N times
@@ -221,29 +250,33 @@ saturate(M:Rules) -->
 %   @arg Rules A list of compiled rewrite rule names to apply.
 %   @arg N     The maximum number of iterations (or `inf` for no limit).
 
-saturate(M:Rules, N) -->
-   { compile_rules(M:Rules, RulesId) },
-   saturate_(RulesId, N).
-
-saturate_(Rules, N, In, Out) :-
+saturate(M:Rules) -->
+   saturate(M:Rules, inf).
+saturate(M:Rules, N, In, Out) :-
    (  N > 0
-   -> make_index(In, Index),
-      b_setval(egraph_changed, false),
-      match(In, Rules, Index, Unifs, [], Matches, In),
+   -> b_setval(egraph_changed, false),
+      run_rules(Rules, M, In, Matches, In, Unifs),
       rebuild(Matches, Unifs, Tmp),
       length(In, Len1),
       length(Tmp, Len2),
       b_getval(egraph_changed, Changed),
+      debug(saturate, "~p", [Len1-Len2-Changed]),
       (  (Len1 \== Len2 ; Changed == true)
       -> (  N == inf
          -> N1 = N
          ;  N1 is N - 1
          ),
-         saturate_(Rules, N1, Tmp, Out)
+         saturate(M:Rules, N1, Tmp, Out)
       ;  Out = Tmp
       )
    ;  Out = In
    ).
+
+run_rules(Rules, M, In, Matches, Tail, Unifs) :-
+   make_index(In, Index),
+   make_parents(In, Parents),
+   (  rb_min(Index, MinId, _) -> true ; MinId = 0 ),
+   phrase(rules(Rules, M, In, Index, Parents, MinId, Unifs, []), Matches, Tail).
 
 %!  extract(Id, Extracted)// is det.
 %
@@ -446,3 +479,16 @@ extract_all_childs([Node-NodeCost | Nodes], Costs, G, PartialTerm, Hole, RestHol
 sum_costs(Costs, Hole, In, Out) :-
    rb_lookup(Hole, Cost-_, Costs),
    Out is In + Cost.
+
+:- begin_tests(egraph_add_terms).
+
+test_term(Var, [Var-node(_, 1)]).
+test_term('$NODE'(Var), [Var-node(_, 1)]).
+test_term(tag{k1: v1, k2: v2}, [v1-node(I1, 1), v2-node(I2, 1), tag{k1: I1, k2: I2}-node(_, 1)]).
+test_term(f(arg1, arg2), [arg1-node(I1, 1), arg2-node(I2, 1), f(I1, I2)-node(_, 1)]).
+test_term(simple_atom, [simple_atom-node(_, 1)]).
+
+test(add_term, [forall(test_term(Term, Expected)), OutNodes =@= Expected]) :-
+   phrase(add_term(Term, _Id, [var(node)]), [], OutNodes).
+
+:- end_tests(egraph_add_terms).
