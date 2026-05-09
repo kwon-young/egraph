@@ -1,5 +1,5 @@
 :- module(egraph, [add_term//2, add_terms//2, union//2, saturate//1,
-                   saturate//2, extract//2, extract_all//2, lookup/2]).
+                   saturate//2, extract//2, extract_all//2, lookup/2, query//1]).
 
 /** <module> E-graph implementation for term rewriting and saturation
 
@@ -34,6 +34,7 @@ Main predicates:
   * extract//2: Extracts the optimal term from the E-graph based on term costs.
   * extract_all//2: Extracts all optimal terms from the E-graph based on term costs.
   * lookup/2: Retrieves an e-class node from a sorted list of E-graph nodes.
+  * query//1: Queries the E-graph and dynamically binds pattern variables.
 */
 
 :- use_module(library(dcg/high_order)).
@@ -277,6 +278,52 @@ run_rules(Rules, M, In, Matches, Tail, Unifs) :-
    make_parents(In, Parents),
    (  rb_min(Index, MinId, _) -> true ; MinId = 0 ),
    phrase(rules(Rules, M, In, Index, Parents, MinId, Unifs, []), Matches, Tail).
+
+%!  query(?Pattern)// is multi.
+%
+%   Queries the E-graph and dynamically binds pattern variables.
+%   Upon success, the variables in the query are bound and the `Pattern`
+%   is unified with the complete extracted matching term from the E-graph.
+%   On backtracking, `Pattern` will be bound to all possible representations
+%   of the matched equivalence class in increasing order of cost.
+%
+%   @arg Pattern The term pattern to search for, which is unified with the fully extracted match.
+
+query(Pattern, In, Out) :-
+   copy_term(Pattern, PatternCopy),
+   variant_sha1(PatternCopy, Sha),
+   atom_concat('query_', Sha, RuleName),
+   (  current_predicate(RuleName/_)
+   -> true
+   ;  quote_vars(PatternCopy, QuotedPat),
+      Rule = rule(RuleName, [QuotedPat-Id], [], [query(Id)-_], []),
+      phrase(egraph_compile:compile(Rule :- true), Clauses),
+      maplist(maplist(assert_ssu), Clauses)
+   ),
+   run_rules([RuleName], egraph, In, Matches, [], _Unifs),
+   pairs_keys(Matches, Queries),
+   sort(Queries, SortedQueries),
+   member(query(MatchId), SortedQueries),
+   extract_all(MatchId, Pattern, In, Out).
+
+assert_ssu((Head, Guard) => Body) =>
+   assertz(?=>(Head, (Guard, !, Body))).
+assert_ssu(Head => Body) =>
+   assertz(Head => Body).
+assert_ssu(_) => true.
+
+quote_vars(Var, '$NODE'(Var)) :- var(Var), !.
+quote_vars(Dict, Quoted) :- is_dict(Dict), !,
+   dict_pairs(Dict, Tag, Pairs),
+   maplist(quote_pair, Pairs, QuotedPairs),
+   dict_pairs(Quoted, Tag, QuotedPairs).
+quote_vars(Compound, Quoted) :- compound(Compound), !,
+   compound_name_arguments(Compound, Name, Args),
+   maplist(quote_vars, Args, QuotedArgs),
+   compound_name_arguments(Quoted, Name, QuotedArgs).
+quote_vars(Atomic, Atomic).
+
+quote_pair(K-V, K-QV) :- quote_vars(V, QV).
 
 %!  extract(Id, Extracted)// is det.
 %

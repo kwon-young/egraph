@@ -105,6 +105,8 @@ The interface uses Prolog's DCGs to thread the E-graph state. The E-graph itself
   Extracts all optimal terms from the E-graph based on term costs.
 * **`lookup(+Pair, +SortedPairs)`**
   Retrieves an e-class node from a sorted list of E-graph nodes.
+* **`query(?Pattern)//`**
+  Queries the E-graph and dynamically binds pattern variables. On backtracking, yields all representations in increasing order of cost.
 
 ### Example Workflow
 
