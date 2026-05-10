@@ -95,7 +95,12 @@ add_term(Var, Id, Opt), var(Var) ==>
    (  { What == node }
    -> add_node(Var, Id, Opt)
    ;  { What == class }
-   -> { Var=Id }
+   -> {  (  option(mark(true), Opt)
+         -> put_attr(Id, egraph, true)
+         ;  true
+         ),
+         Var=Id
+      }
    ;  { domain_error(node-class, What) }
    ).
 add_term('$NODE'(Node), Id, Opt) ==>
@@ -139,6 +144,10 @@ add_node(Node, Id, Opt, In, Out) :-
       ),
       !,
       must_be(number, Cost),
+      (  option(mark(true), Opt)
+      -> put_attr(Id, egraph, true)
+      ;  true
+      ),
       ord_add_element(In, Node-node(Id, Cost), Out)
    ).
 
