@@ -9,13 +9,23 @@ egraph:rewrite(lex_man, man, n(man)).
 egraph:rewrite(lex_with, with, p(with)).
 egraph:rewrite(lex_tel, telescope, n(telescope)).
 
+% Lexicon/Grammar Tags:
+% s   - Sentence
+% np  - Noun Phrase
+% vp  - Verb Phrase
+% det - Determiner
+% n   - Noun
+% v   - Verb
+% pp  - Prepositional Phrase
+% p   - Preposition
+
 % 2. Grammar Rules
 egraph:rewrite(s_np_vp, np(A)-vp(B), s(np(A), vp(B))).
-egraph:rewrite(np_det_n, det(A)-n(B), np(det(A), n(B))).
-egraph:rewrite(np_np_pp, np(A)-pp(B), np(np(A), pp(B))).
-egraph:rewrite(vp_v_np, v(A)-np(B), vp(v(A), np(B))).
-egraph:rewrite(vp_vp_pp, vp(A)-pp(B), vp(vp(A), pp(B))).
-egraph:rewrite(pp_p_np, p(A)-np(B), pp(p(A), np(B))).
+egraph:rewrite(np_det_n, det(A)-n(B), np(det(A)-n(B))).
+egraph:rewrite(np_np_pp, np(A)-pp(B), np(np(A)-pp(B))).
+egraph:rewrite(vp_v_np, v(A)-np(B), vp(v(A)-np(B))).
+egraph:rewrite(vp_vp_pp, vp(A)-pp(B), vp(vp(A)-pp(B))).
+egraph:rewrite(pp_p_np, p(A)-np(B), pp(p(A)-np(B))).
 
 % 3. Structural Rules
 egraph:rewrite(seq_assoc_l, A-(B-C), (A-B)-C).
@@ -31,5 +41,5 @@ parse(Input, Parse) :-
    Input #= i-(saw-(the-(man-(with-(the-telescope))))),
    grammar_rules(Rules),
    saturate(Rules),
-   Input ?#= s(_, _),
-   true.
+   Input ?#= s(A, B),
+   Parse = s(A, B).
