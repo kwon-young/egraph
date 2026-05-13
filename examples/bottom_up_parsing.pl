@@ -41,5 +41,4 @@ parse(Input, Parse) :-
    Input #= i-(saw-(the-(man-(with-(the-telescope))))),
    grammar_rules(Rules),
    saturate(Rules),
-   Input ?#= s(A, B),
-   Parse = s(A, B).
+   extract_all(Input, Parse).
