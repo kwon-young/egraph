@@ -1,4 +1,4 @@
-:- module(bottom_up_parsing, [parse/2]).
+:- module(bottom_up_parsing, [parse/1]).
 :- use_module(clpegraph).
 
 % 1. Lexicon Rules
@@ -37,8 +37,8 @@ grammar_rules([
    seq_assoc_l, seq_assoc_r
 ]).
 
-parse(Input, Parse) :-
+parse(Input) :-
    Input #= i-(saw-(the-(man-(with-(the-telescope))))),
    grammar_rules(Rules),
    saturate(Rules),
-   extract_all(Input, Parse).
+   Input ?#= s(_, _).
