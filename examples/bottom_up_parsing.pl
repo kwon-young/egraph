@@ -1,5 +1,5 @@
-:- module(bottom_up_parsing, [parse/1]).
-:- use_module('../prolog/egraph.pl').
+:- module(bottom_up_parsing, [parse/2]).
+:- use_module(clpegraph).
 
 % 1. Lexicon Rules
 egraph:rewrite(lex_i, i, np(i)).
@@ -27,13 +27,9 @@ grammar_rules([
    seq_assoc_l, seq_assoc_r
 ]).
 
-parse(Parses) :-
-   Input = i-(saw-(the-(man-(with-(the-telescope))))),
+parse(Input, Parse) :-
+   Input #= i-(saw-(the-(man-(with-(the-telescope))))),
    grammar_rules(Rules),
-   
-   phrase((
-      egraph:add_term(Input, Id),
-      egraph:saturate(Rules, 6)
-   ), [], Graph),
-
-   findall(s(A, B), egraph:query(s(A, B)-Id, Graph, _), Parses).
+   saturate(Rules),
+   Input ?#= s(_, _),
+   true.
