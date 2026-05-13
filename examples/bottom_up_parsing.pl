@@ -41,4 +41,8 @@ parse(Input) :-
    Input #= i-(saw-(the-(man-(with-(the-telescope))))),
    grammar_rules(Rules),
    saturate(Rules),
-   Input ?#= s(_, _).
+   (  % PP attached to the Noun Phrase (the man has the telescope)
+      Input ?#= s(np(i), vp(v(saw)-np(np(det(the)-n(man))-pp(p(with)-np(det(the)-n(telescope))))))
+   ;  % PP attached to the Verb Phrase (seeing was done with the telescope)
+      Input ?#= s(np(i), vp(vp(v(saw)-np(det(the)-n(man)))-pp(p(with)-np(det(the)-n(telescope)))))
+   ).
