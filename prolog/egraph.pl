@@ -89,8 +89,11 @@ lookup(Item-V, [X1-V1]) :-
 %   @arg Id   The e-class ID representing the added term.
 
 add_term(Term, Node) -->
-   add_term(Term, Node, [cost(1)]).
-add_term(Var, Id, Opt), var(Var) ==>
+   add_term(Term, Node, [cost(1)], []).
+add_term(Term, Node, Options) -->
+   add_term(Term, Node, Options, []).
+
+add_term(Var, Id, Opt, _Seen), var(Var) ==>
    { option(var(What), Opt, node) },
    (  { What == node }
    -> add_node(Var, Id, Opt)
@@ -103,33 +106,37 @@ add_term(Var, Id, Opt), var(Var) ==>
       }
    ;  { domain_error(node-class, What) }
    ).
-add_term('$NODE'(Node), Id, Opt) ==>
+add_term('$NODE'(Node), Id, Opt, _Seen) ==>
    add_node(Node, Id, Opt).
-add_term(Term, Id, Opt), is_dict(Term, Tag) ==>
+add_term(Term, Id, _Opt, Seen), lookup(Term-SeenId, Seen) ==>
+   { Id = SeenId }.
+add_term(Term, Id, Opt, Seen), is_dict(Term, Tag) ==>
    {
+      ord_add_element(Seen, Term-Id, Seen1),
       dict_pairs(Term, Tag, Pairs),
       pairs_keys_values(Pairs, Keys, Values),
       pairs_keys_values(Data, Keys, Ids),
       dict_create(Node, Tag, Data)
    },
-   add_terms(Values, Ids, Opt),
+   add_terms(Values, Ids, Opt, Seen1),
    add_node(Node, Id, Opt).
-add_term(Term, Id, Opt), compound(Term) ==>
-   { Term =.. [F | Args] },
-   add_terms(Args, Ids, Opt),
+add_term(Term, Id, Opt, Seen), compound(Term) ==>
+   { ord_add_element(Seen, Term-Id, Seen1),
+     Term =.. [F | Args] },
+   add_terms(Args, Ids, Opt, Seen1),
    { Node =.. [F | Ids] },
    add_node(Node, Id, Opt).
-add_term(Term, Id, Opt) ==>
+add_term(Term, Id, Opt, _Seen) ==>
    add_node(Term, Id, Opt).
 
-add_terms([], [], _Opt) --> [].
-add_terms([Term | Terms], [Id | Ids], Opt) -->
-   add_term(Term, Id, Opt),
-   add_terms(Terms, Ids, Opt).
+add_terms([], [], _Opt, _Seen) --> [].
+add_terms([Term | Terms], [Id | Ids], Opt, Seen) -->
+   add_term(Term, Id, Opt, Seen),
+   add_terms(Terms, Ids, Opt, Seen).
 
 add_terms([], _Opt) --> [].
 add_terms([Term-Id | Terms], Opt) -->
-   add_term(Term, Id, Opt),
+   add_term(Term, Id, Opt, []),
    add_terms(Terms, Opt).
 
 add_node(Node-Id, Opt, In, Out) :-
