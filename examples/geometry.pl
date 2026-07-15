@@ -1,3 +1,10 @@
+:- module(geometry, [
+   rhombus//4,
+   point_atom//4,
+   seg_dist//4,
+   dist_sym//4,
+   intersect_cc//4
+]).
 :- use_module(library(dcg/high_order)).
 :- use_module('../prolog/egraph.pl').
 
